@@ -59,8 +59,8 @@
   hosts: core_node
   roles:
     - role: 5g/core/core_open5gs
-      vars:
-        version: "srsRAN"
+#      vars:
+#        version: "srsRAN"
 
 - name: Setup iperf3 on UPFs
   hosts: core_node
