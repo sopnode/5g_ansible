@@ -35,9 +35,9 @@
 - name: Init UE "{{ item }}" via jump host
   shell: >
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
-    -o ConnectTimeout=5 -n root@{{ item }}
-    qhat-init --mode="{{ hostvars[item].mode }}"
-              --dnn="{{ hostvars[item].dnn }}"
+    -o ConnectTimeout=5 -n root@{{ item }} \
+    qhat-init --mode="{{ hostvars[item].mode }}" \
+              --dnn="{{ hostvars[item].dnn }}" \
               --nssai="{{ hostvars[item].nssai }}"
   delegate_to: faraday.inria.fr
   async: 1800
