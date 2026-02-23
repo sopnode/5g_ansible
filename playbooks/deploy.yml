@@ -1,6 +1,7 @@
 ---
 - hosts: webshell
   gather_facts: false
+
   vars:
     original_inventory: "{{ inventory_file }}"
 
@@ -10,7 +11,7 @@
       debug:
         msg: "Used inventory for run_pos playbook : {{ original_inventory }}"
 
-    - name: Launch run_pos asynchronously for each node
+    - name: Launch run_pos asynchronously
       ansible.builtin.command: >
         ansible-playbook
         -i {{ inventory_file }}
@@ -20,35 +21,29 @@
       args:
         chdir: "{{ playbook_dir | dirname }}"
       async: 1800
-      poll: 0                  # Lancement async, ne bloque pas
+      poll: 0   # <- non bloquant
       loop: "{{ groups['sopnodes'] }}"
       loop_control:
         label: "{{ item }}"
-      register: prepare_jobs
+      register: async_jobs
 
-    - name: Wait for async jobs with live status
+    - name: Wait for async jobs to finish
       async_status:
         jid: "{{ item.ansible_job_id }}"
-      register: job_result
-      until: job_result.finished
+      register: job_status
+      until: job_status.finished
       retries: 180
       delay: 10
-      loop: "{{ prepare_jobs.results }}"
+      loop: "{{ async_jobs.results }}"
       loop_control:
         label: "{{ item.item }}"
-      failed_when: false       # Ne pas failer, on gère après
-      # Affiche l'état à chaque retry
-      vars:
-        current_node: "{{ item.item }}"
 
     - name: Show live job status for each node
       debug:
-        msg: "Node {{ current_node }} status: finished={{ job_result.finished }}, rc={{ job_result.rc | default('N/A') }}"
-      loop: "{{ prepare_jobs.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+        msg: "Node {{ item.item }} status: finished={{ item.finished }}, rc={{ item.rc | default('N/A') }}"
+      loop: "{{ job_status.results }}"
 
-    - name: Fail if one job failed
+    - name: Fail if any job failed
       fail:
         msg: |
           Job failed for {{ item.item }}
@@ -58,8 +53,7 @@
           STDERR:
           {{ item.stderr }}
       when: item.rc != 0
-      loop: "{{ prepare_jobs.results }}"
-
+      loop: "{{ job_status.results }}"
 
 # The following task requires all nodes be ssh-reachable
 # so it can't be the first task of the playbook
