@@ -192,16 +192,12 @@
     creates: /opt/ansible-venv/bin/activate
   become: true
 
-- name: Upgrade pip and setuptools in venv (required for Ansible k8s modules)
+- name: Upgrade ensurepip in venv
   ansible.builtin.command: /opt/ansible-venv/bin/python -m ensurepip --upgrade
   become: true
 
-- name: Bootstrap pip and setuptools in venv
-  ansible.builtin.command: /opt/ansible-venv/bin/python -m ensurepip --upgrade
-  become: true
-
-- name: Upgrade pip and setuptools in venv (robust)
-  ansible.builtin.command: /opt/ansible-venv/bin/pip install --upgrade pip setuptools
+- name: Bootstrap pip, setuptools and wheel in venv
+  ansible.builtin.command: /opt/ansible-venv/bin/pip install --upgrade pip setuptools wheel
   become: true
 
 - name: Install kubernetes Python module in venv
