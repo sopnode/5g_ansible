@@ -1,7 +1,6 @@
 ---
 - hosts: webshell
   gather_facts: false
-
   vars:
     original_inventory: "{{ inventory_file }}"
 
@@ -11,7 +10,7 @@
       debug:
         msg: "Used inventory for run_pos playbook : {{ original_inventory }}"
 
-    - name: Launch run_pos asynchronously
+    - name: Launch run_pos asynchronously for each node
       ansible.builtin.command: >
         ansible-playbook
         -i {{ inventory_file }}
@@ -21,13 +20,13 @@
       args:
         chdir: "{{ playbook_dir | dirname }}"
       async: 1800
-      poll: 0
+      poll: 0                  # Lancement async, ne bloque pas
       loop: "{{ groups['sopnodes'] }}"
       loop_control:
         label: "{{ item }}"
       register: prepare_jobs
 
-    - name: Wait for jobs to finish
+    - name: Wait for async jobs with live status
       async_status:
         jid: "{{ item.ansible_job_id }}"
       register: job_result
@@ -37,7 +36,17 @@
       loop: "{{ prepare_jobs.results }}"
       loop_control:
         label: "{{ item.item }}"
-      failed_when: false           
+      failed_when: false       # Ne pas failer, on gère après
+      # Affiche l'état à chaque retry
+      vars:
+        current_node: "{{ item.item }}"
+
+    - name: Show live job status for each node
+      debug:
+        msg: "Node {{ current_node }} status: finished={{ job_result.finished }}, rc={{ job_result.rc | default('N/A') }}"
+      loop: "{{ prepare_jobs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: Fail if one job failed
       fail:
@@ -49,7 +58,7 @@
           STDERR:
           {{ item.stderr }}
       when: item.rc != 0
-      loop: "{{ job_result.results }}"
+      loop: "{{ prepare_jobs.results }}"
 
 
 # The following task requires all nodes be ssh-reachable
