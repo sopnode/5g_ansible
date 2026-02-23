@@ -263,11 +263,11 @@
       }
   become: true
 
-- name: Download CNI plugins tarball
-  ansible.builtin.get_url:
-    url: "https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz"
-    dest: /tmp/cni-plugins.tgz
-    mode: '0644'
+- name: Download CNI plugins tarball via curl (for any Ubuntu 22.04+)
+  ansible.builtin.shell: |
+    curl -fsSL -o /tmp/cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz
+  args:
+    creates: /tmp/cni-plugins.tgz
   become: true
 
 - name: Extract CNI plugins
