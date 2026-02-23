@@ -178,16 +178,27 @@
 - name: Ensure Helm and Python tooling are available
   ansible.builtin.apt:
     name:
-      - python3-pip
+      - python3-venv
       - curl
     state: present
     update_cache: yes
   become: true
 
-- name: Install kubernetes Python module
+- name: Create Ansible virtualenv for k8s modules (idempotent)
+  ansible.builtin.command: python3 -m venv /opt/ansible-venv
+  args:
+    creates: /opt/ansible-venv/bin/activate
+  become: true
+
+- name: Install kubernetes Python module in venv
   ansible.builtin.pip:
     name: kubernetes
+    virtualenv: /opt/ansible-venv
   become: true
+
+- name: Force Ansible to use virtualenv Python
+  ansible.builtin.set_fact:
+    ansible_python_interpreter: /opt/ansible-venv/bin/python
 
 - name: Install Helm if missing
   ansible.builtin.shell: |
