@@ -175,16 +175,17 @@
   become: true
 
 # === TOOLING =======================================
-- name: Ensure Helm and Python tooling are available
+- name: Ensure Python tooling is available
   ansible.builtin.apt:
     name:
       - python3-venv
+      - python3-pip
+      - python3-setuptools
       - curl
     state: present
     update_cache: yes
   become: true
 
-# --- VIRTUALENV POUR K8S MODULES ---------------------------------------------
 - name: Create Python venv for Kubernetes tasks (idempotent)
   ansible.builtin.command: python3 -m venv /opt/ansible-venv
   args:
@@ -195,22 +196,16 @@
   ansible.builtin.command: /opt/ansible-venv/bin/python -m ensurepip --upgrade
   become: true
 
-- name: Install pip and setuptools explicitly in venv
-  ansible.builtin.pip:
-    name:
-      - pip
-      - setuptools
-    virtualenv: /opt/ansible-venv
-    virtualenv_site_packages: false
-    state: latest
+- name: Bootstrap pip and setuptools in venv
+  ansible.builtin.command: /opt/ansible-venv/bin/python -m ensurepip --upgrade
+  become: true
+
+- name: Upgrade pip and setuptools in venv (robust)
+  ansible.builtin.command: /opt/ansible-venv/bin/pip install --upgrade pip setuptools
   become: true
 
 - name: Install kubernetes Python module in venv
-  ansible.builtin.pip:
-    name: kubernetes
-    virtualenv: /opt/ansible-venv
-    virtualenv_site_packages: false
-    state: latest
+  ansible.builtin.command: /opt/ansible-venv/bin/pip install --upgrade kubernetes
   become: true
 
 - name: Force Ansible to use venv Python
