@@ -184,19 +184,23 @@
     update_cache: yes
   become: true
 
-# --- VIRTUALENV FOR K8S MODULES ---------------------
-- name: Create Python venv for Kubernetes tasks
+# --- VIRTUALENV POUR K8S MODULES ---------------------------------------------
+- name: Create Python venv for Kubernetes tasks (idempotent)
   ansible.builtin.command: python3 -m venv /opt/ansible-venv
   args:
     creates: /opt/ansible-venv/bin/activate
   become: true
 
-- name: Upgrade pip and setuptools in venv
+- name: Upgrade pip and setuptools in venv (required for Ansible k8s modules)
+  ansible.builtin.command: /opt/ansible-venv/bin/python -m ensurepip --upgrade
+  become: true
+
+- name: Install pip and setuptools explicitly in venv
   ansible.builtin.pip:
     name:
       - pip
       - setuptools
-    virtualenv: /opt/ansible-k8s-venv
+    virtualenv: /opt/ansible-venv
     virtualenv_site_packages: false
     state: latest
   become: true
@@ -209,7 +213,7 @@
     state: latest
   become: true
 
-- name: Force Ansible to use virtualenv Python
+- name: Force Ansible to use venv Python
   ansible.builtin.set_fact:
     ansible_python_interpreter: /opt/ansible-venv/bin/python
 
