@@ -199,21 +199,6 @@
         target_node: "{{ monitor_node_name }}"
       when: monitoring_enabled and core_node_name != ran_node_name
 
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
-
-
-
 - name: SRIOV setup
   hosts: ran_node
   become: true
@@ -235,6 +220,20 @@
   roles:
     - role: setup/gre_tunnel
       when: bridge_enabled
+
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
+
 
 - name: Deploy Open5GS CN
   hosts: core_node

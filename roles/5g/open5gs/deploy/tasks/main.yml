@@ -207,22 +207,35 @@
   loop_control:
     label: "{{ item }}"
 
-- name: Install python3-venv
+- name: Install python3-venv, python3-pip, setuptools and wheel
   ansible.builtin.apt:
-    name: python3-venv
+    name:
+      - python3-venv
+      - python3-pip
+      - python3-setuptools   # nécessaire pour pkg_resources
+      - python3-wheel        # nécessaire pour pip installer correctement dans le venv
     state: present
   become: yes
 
-- name: Create Python virtual environment
+- name: Create Python virtual environment (idempotent)
   ansible.builtin.command:
     cmd: python3 -m venv "{{ repo_dest }}/venv"
     creates: "{{ repo_dest }}/venv/bin/activate"
   become: yes
 
-- name: Upgrade pip in virtualenv
+- name: Bootstrap pip, setuptools and wheel in venv
+  ansible.builtin.command:
+    cmd: "{{ repo_dest }}/venv/bin/python -m ensurepip --upgrade"
+  become: yes
+
+- name: Upgrade pip, setuptools and wheel explicitly in venv
+  ansible.builtin.command:
+    cmd: "{{ repo_dest }}/venv/bin/pip install --upgrade pip setuptools wheel"
+  become: yes
+
+- name: Install Python requirements
   ansible.builtin.pip:
-    name: pip
-    state: latest
+    requirements: "{{ repo_dest }}/requirements.txt"
     executable: "{{ repo_dest }}/venv/bin/pip"
   become: yes
 
