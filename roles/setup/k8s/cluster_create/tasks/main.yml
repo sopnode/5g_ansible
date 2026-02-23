@@ -174,7 +174,7 @@
     mode: '0600'
   become: true
 
-# === TOOLING ==================================================================
+# === TOOLING =======================================
 - name: Ensure Helm and Python tooling are available
   ansible.builtin.apt:
     name:
@@ -184,7 +184,8 @@
     update_cache: yes
   become: true
 
-- name: Create Ansible virtualenv for k8s modules (idempotent)
+# --- VIRTUALENV FOR K8S MODULES ---------------------
+- name: Create Python venv for Kubernetes tasks
   ansible.builtin.command: python3 -m venv /opt/ansible-venv
   args:
     creates: /opt/ansible-venv/bin/activate
@@ -192,8 +193,12 @@
 
 - name: Install kubernetes Python module in venv
   ansible.builtin.pip:
-    name: kubernetes
+    name:
+      - pip
+      - kubernetes
     virtualenv: /opt/ansible-venv
+    virtualenv_site_packages: false
+    state: latest
   become: true
 
 - name: Force Ansible to use virtualenv Python
