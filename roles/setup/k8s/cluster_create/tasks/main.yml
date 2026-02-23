@@ -71,7 +71,7 @@
   register: kubeadm_init
   become: true
 
-# === KUBE-PROXY ROBUSTE FINAL ================================================
+# === KUBE-PROXY ================================================
 - name: Wait until at least one kube-proxy pod exists
   ansible.builtin.shell: |
     until kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get pod -l k8s-app=kube-proxy --no-headers 2>/dev/null | grep .; do
@@ -191,11 +191,19 @@
     creates: /opt/ansible-venv/bin/activate
   become: true
 
-- name: Install kubernetes Python module in venv
+- name: Upgrade pip and setuptools in venv
   ansible.builtin.pip:
     name:
       - pip
-      - kubernetes
+      - setuptools
+    virtualenv: /opt/ansible-k8s-venv
+    virtualenv_site_packages: false
+    state: latest
+  become: true
+
+- name: Install kubernetes Python module in venv
+  ansible.builtin.pip:
+    name: kubernetes
     virtualenv: /opt/ansible-venv
     virtualenv_site_packages: false
     state: latest
