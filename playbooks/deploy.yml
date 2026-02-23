@@ -1,14 +1,24 @@
 ---
+---
 - hosts: webshell
   gather_facts: false
+
   vars:
     original_inventory: "{{ inventory_file }}"
+
   tasks:
-    - debug:
+
+    - name: Show used inventory
+      debug:
         msg: "Used inventory for run_pos playbook : {{ original_inventory }}"
 
-    - ansible.builtin.command: >
-        ansible-playbook -i {{ inventory_file }} playbooks/run_pos.yml --extra-vars "node={{ item }} no_boot={{ no_boot | default(false) }}" -c local
+    - name: Launch run_pos asynchronously
+      ansible.builtin.command: >
+        ansible-playbook
+        -i {{ inventory_file }}
+        playbooks/run_pos.yml
+        --extra-vars "node={{ item }} no_boot={{ no_boot | default(false) }}"
+        -c local
       args:
         chdir: "{{ playbook_dir | dirname }}"
       async: 1800
@@ -18,15 +28,29 @@
         label: "{{ item }}"
       register: prepare_jobs
 
-    - async_status:
+    - name: Wait for jobs to finish
+      async_status:
         jid: "{{ item.ansible_job_id }}"
       register: job_result
       until: job_result.finished
-      retries: 100
+      retries: 180
       delay: 10
       loop: "{{ prepare_jobs.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    - name: Fail if one job failed
+      fail:
+        msg: |
+          Job failed for {{ item.item }}
+          RC={{ item.rc }}
+          STDOUT:
+          {{ item.stdout }}
+          STDERR:
+          {{ item.stderr }}
+      when: item.rc != 0
+      loop: "{{ job_result.results }}"
+
 
 # The following task requires all nodes be ssh-reachable
 # so it can't be the first task of the playbook
