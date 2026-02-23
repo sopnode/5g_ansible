@@ -212,8 +212,8 @@
     name:
       - python3-venv
       - python3-pip
-      - python3-setuptools   # nécessaire pour pkg_resources
-      - python3-wheel        # nécessaire pour pip installer correctement dans le venv
+      - python3-setuptools # required for pkg_resources
+      - python3-wheel      # required for pip 
     state: present
   become: yes
 
@@ -233,16 +233,9 @@
     cmd: "{{ repo_dest }}/venv/bin/pip install --upgrade pip setuptools wheel"
   become: yes
 
-- name: Install Python requirements
-  ansible.builtin.pip:
-    requirements: "{{ repo_dest }}/requirements.txt"
-    executable: "{{ repo_dest }}/venv/bin/pip"
-  become: yes
-
-- name: Install Python requirements
-  ansible.builtin.pip:
-    requirements: "{{ repo_dest }}/requirements.txt"
-    executable: "{{ repo_dest }}/venv/bin/pip"
+- name: Install Python requirements in venv
+  ansible.builtin.command:
+    cmd: "{{ repo_dest }}/venv/bin/pip install -r {{ repo_dest }}/requirements.txt"
   become: yes
 
 - name: Deploy Open5GS Web UI
