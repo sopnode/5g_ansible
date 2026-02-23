@@ -21,11 +21,23 @@
       args:
         chdir: "{{ playbook_dir | dirname }}"
       async: 1800
-      poll: 1800
+      poll: 0
       loop: "{{ groups['sopnodes'] }}"
       loop_control:
         label: "{{ item }}"
       register: prepare_jobs
+
+    - name: Wait for jobs to finish
+      async_status:
+        jid: "{{ item.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 180
+      delay: 10
+      loop: "{{ prepare_jobs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      failed_when: false           
 
     - name: Fail if one job failed
       fail:
