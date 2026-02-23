@@ -11,7 +11,7 @@
       debug:
         msg: "Used inventory for run_pos playbook : {{ original_inventory }}"
 
-    - name: Launch run_pos asynchronously
+    - name: Launch run_pos asynchronously for each node
       ansible.builtin.command: >
         ansible-playbook
         -i {{ inventory_file }}
@@ -21,26 +21,49 @@
       args:
         chdir: "{{ playbook_dir | dirname }}"
       async: 1800
-      poll: 0   # <- non bloquant
+      poll: 0
       loop: "{{ groups['sopnodes'] }}"
       loop_control:
         label: "{{ item }}"
       register: async_jobs
 
-    - name: Wait for async jobs to finish
-      async_status:
-        jid: "{{ item.ansible_job_id }}"
-      register: job_status
-      until: job_status.finished
-      retries: 180
-      delay: 10
-      loop: "{{ async_jobs.results }}"
-      loop_control:
-        label: "{{ item.item }}"
+    - name: Wait for async jobs with live status
+      block:
+        - name: Check job status
+          async_status:
+            jid: "{{ item.ansible_job_id }}"
+          register: job_status
+          until: job_status.finished
+          retries: 180
+          delay: 10
+          loop: "{{ async_jobs.results }}"
+          loop_control:
+            label: "{{ item.item }}"
 
-    - name: Show live job status for each node
+        - name: Show live job status
+          debug:
+            msg: |
+              Node {{ item.item }}
+              Started: {{ item.started }}
+              Finished: {{ item.finished }}
+              RC: {{ item.rc | default('N/A') }}
+          loop: "{{ job_status.results }}"
+      rescue:
+        - name: Show failed async job if any exception
+          debug:
+            msg: "Error while waiting for job {{ item.item }}"
+          loop: "{{ async_jobs.results }}"
+
+    - name: Show final job output (head only)
       debug:
-        msg: "Node {{ item.item }} status: finished={{ item.finished }}, rc={{ item.rc | default('N/A') }}"
+        msg: |
+          Node {{ item.item }}
+          Finished: {{ item.finished }}
+          RC: {{ item.rc | default('N/A') }}
+          STDOUT (first 10 lines):
+          {{ item.stdout.split('\n')[:10] | join('\n') }}
+          STDERR (first 10 lines):
+          {{ item.stderr.split('\n')[:10] | join('\n') }}
       loop: "{{ job_status.results }}"
 
     - name: Fail if any job failed
@@ -54,6 +77,7 @@
           {{ item.stderr }}
       when: item.rc != 0
       loop: "{{ job_status.results }}"
+
 
 # The following task requires all nodes be ssh-reachable
 # so it can't be the first task of the playbook
