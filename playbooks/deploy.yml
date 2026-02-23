@@ -152,7 +152,7 @@
   become: true
   roles:
     - role: setup/k8s/remove_cp_taint
-      when: core_node_name != ran_node_name and not fhi72
+      when: not (core_node_name != ran_node_name and fhi72)
 
 - name: Join Kubernetes Cluster on Workers
   hosts: k8s_workers
