@@ -14,7 +14,7 @@
     - name: Fix space after addr= in device_args
       ansible.builtin.replace:
         path: "{{ values_file }}"
-        regexp: 'addr=([0-9.]+)\s+'
+        regexp: "addr=([0-9.]+)\\s+"
         replace: "addr=\\1"
 	
     - name: Deploy srsRAN gNB using Helm
