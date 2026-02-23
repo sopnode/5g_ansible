@@ -16,7 +16,7 @@
         path: "{{ values_file }}"
         regexp: '(?<=addr=[0-9.]+)\s+'
         replace: ''
-
+	
     - name: Deploy srsRAN gNB using Helm
       kubernetes.core.helm:
         name: srsran-gnb
