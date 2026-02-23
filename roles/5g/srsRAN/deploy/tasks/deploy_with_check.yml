@@ -11,11 +11,11 @@
             kubernetes.io/hostname: "{{ ran_node_name }}"
           nodeName: {{ ran_node_name }}
 
-    - name: Fix space before comma in device_args
+    - name: Fix space after addr= in device_args
       ansible.builtin.replace:
         path: "{{ values_file }}"
-        regexp: '(addr=[0-9.]+)\s+'
-        replace: '\1'
+        regexp: 'addr=([0-9.]+)\s+'
+        replace: 'addr=\1'
 	
     - name: Deploy srsRAN gNB using Helm
       kubernetes.core.helm:
