@@ -14,8 +14,8 @@
     - name: Fix space before comma in device_args
       ansible.builtin.replace:
         path: "{{ values_file }}"
-        regexp: '(?<=addr=[0-9.]+)\s+'
-        replace: ''
+        regexp: '(addr=[0-9.]+)\s+'
+        replace: '\1'
 	
     - name: Deploy srsRAN gNB using Helm
       kubernetes.core.helm:
