@@ -51,8 +51,8 @@
         name:
           - python3-venv
           - python3-pip
-          - python3-setuptools   # ajouté pour pkg_resources
-          - python3-wheel        # ajouté pour wheel support
+          - python3-setuptools
+          - python3-wheel
         state: present
       become: yes
 
@@ -62,21 +62,25 @@
         creates: /opt/ansible-k8s-venv/bin/activate
       become: yes
 
-    - name: Bootstrap pip, setuptools and wheel in venv
+    - name: Ensure pip, setuptools and wheel are upgraded in venv
       ansible.builtin.command:
         cmd: /opt/ansible-k8s-venv/bin/python -m ensurepip --upgrade
       become: yes
 
+    - name: Upgrade pip, setuptools and wheel explicitly in venv
+      ansible.builtin.command:
+        cmd: /opt/ansible-k8s-venv/bin/pip install --upgrade pip setuptools wheel
+      become: yes
+
     - name: Install kubernetes Python module in venv
       ansible.builtin.command:
-        cmd: /opt/ansible-k8s-venv/bin/pip install --upgrade kubernetes
+        cmd: /opt/ansible-venv/bin/pip install --upgrade kubernetes
       become: yes
 
     - name: Set ansible_python_interpreter to use venv
       ansible.builtin.set_fact:
         ansible_python_interpreter: /opt/ansible-k8s-venv/bin/python
 
-    # Deploy
     - name: Create namespace sriov-network-operator
       kubernetes.core.k8s:
         api_version: v1
