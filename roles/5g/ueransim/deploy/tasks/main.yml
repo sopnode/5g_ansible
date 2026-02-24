@@ -1,4 +1,3 @@
-# roles/5g/ueransim/deploy/tasks/main.yml
 ---
 - name: Deploy UERANSIM gNodeB
   kubernetes.core.k8s:
@@ -6,8 +5,9 @@
     src: "{{ ueransim_root }}/ueransim-gnb"
     namespace: "{{ ran_ns | default('open5gs') }}"
     apply: true
+    kustomize: true
   environment:
-    KUSTOMIZE_PLUGIN_HOME: "/tmp"  # facultatif, si kustomize utilise des plugins
+    KUSTOMIZE_PLUGIN_HOME: "/tmp"
   ignore_errors: false
 
 - name: Wait for UERANSIM gNB pod to be ready
@@ -27,6 +27,7 @@
     src: "{{ ueransim_root }}/ueransim-ue"
     namespace: "{{ ran_ns | default('open5gs') }}"
     apply: true
+    kustomize: true
   environment:
     KUSTOMIZE_PLUGIN_HOME: "/tmp"
   ignore_errors: false
