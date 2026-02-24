@@ -1,5 +1,9 @@
 ---
 
+- name: Load defaults
+  include_vars:
+    file: "{{ role_path }}/defaults/main.yml"
+    
 - name: Deploy UERANSIM gNodeB using Kustomize
   kubernetes.core.k8s:
     state: present
