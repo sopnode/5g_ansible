@@ -33,9 +33,10 @@
   retries: 40
   delay: 5
 
-- name: Check gNB endpoints exist
+- name: Verify gNB service has endpoints before deploying UEs
   ansible.builtin.shell: |
-    endpoints=$(kubectl get endpoints gnb-service -n {{ ran_ns | default('open5gs') }} -o jsonpath='{.subsets[0].addresses[*].ip}' 2>/dev/null)
+    endpoints=$(kubectl get endpoints gnb-service -n {{ ran_ns | default('open5gs') }} \
+      -o jsonpath='{.subsets[0].addresses[*].ip}' 2>/dev/null)
     if [ -z "$endpoints" ]; then
       echo "ERROR: gNB service has no ready endpoints"
       exit 1
