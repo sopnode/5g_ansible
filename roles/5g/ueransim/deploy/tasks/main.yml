@@ -1,92 +1,65 @@
 ---
+- name: Ensure gNB Deployment runs on ran_node
+  ansible.builtin.replace:
+    path: "{{ ueransim_root }}/ueransim-gnb/gnb-deployment.yaml"
+    regexp: '^( *)spec:$'
+    replace: '\1spec:\n\1  template:\n\1    spec:\n\1      nodeSelector:\n\1        kubernetes.io/hostname: "{{ ran_node_name }}"'
+
 - name: Deploy gNB using kustomize
   ansible.builtin.command: >
     kubectl apply -k {{ ueransim_root }}/ueransim-gnb
     -n {{ ran_ns | default('open5gs') }}
+  register: gnb_apply
+  changed_when: "'configured' in gnb_apply.stdout or 'created' in gnb_apply.stdout"
 
-- name: Patch gNB Deployment to run on ran_node
-  kubernetes.core.k8s:
-    state: patched
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: ueransim-gnb
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ran_node_name }}"
-
-- name: Wait for gNB Pod to be ready
-  kubernetes.core.k8s_info:
+- name: Wait for gNB pod to be ready
+  community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
     label_selectors:
       - "component=gnb"
   register: gnb_pods
-  until: gnb_pods.resources | selectattr('status.phase','equalto','Running') | list | length > 0
-  retries: 30
+
+- name: Ensure gNB pod is running
+  ansible.builtin.wait_for:
+    path: "/tmp/dummy"  # dummy path since we use pod check loop
+    state: present
+    timeout: 60
+  until: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
+  retries: 12
   delay: 5
+
+# --- UE Deployments ---
+- name: Ensure UE Deployments run on ran_node
+  ansible.builtin.replace:
+    path: "{{ item }}/ue-deployment.yaml"
+    regexp: '^( *)spec:$'
+    replace: '\1spec:\n\1  template:\n\1    spec:\n\1      nodeSelector:\n\1        kubernetes.io/hostname: "{{ ran_node_name }}"'
+  loop:
+    - "{{ ueransim_root }}/ueransim-ue/ue1"
+    - "{{ ueransim_root }}/ueransim-ue/ue2"
+    - "{{ ueransim_root }}/ueransim-ue/ue3"
 
 - name: Deploy UEs using kustomize
   ansible.builtin.command: >
     kubectl apply -k {{ ueransim_root }}/ueransim-ue
     -n {{ ran_ns | default('open5gs') }}
+  register: ue_apply
+  changed_when: "'configured' in ue_apply.stdout or 'created' in ue_apply.stdout"
 
-- name: Patch UE Deployments to run on ran_node
-  kubernetes.core.k8s:
-    state: patched
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: ueransim-ue1
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ran_node_name }}"
-
-- name: Patch UE2 Deployment
-  kubernetes.core.k8s:
-    state: patched
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: ueransim-ue2
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ran_node_name }}"
-
-- name: Patch UE3 Deployment
-  kubernetes.core.k8s:
-    state: patched
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: ueransim-ue3
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ran_node_name }}"
-
-- name: Wait for UE Pods to be running
-  kubernetes.core.k8s_info:
+- name: Wait for UE pods to be running
+  community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
     label_selectors:
       - "component=ue"
   register: ue_pods
-  until: ue_pods.resources | selectattr('status.phase','equalto','Running') | list | length == 3
-  retries: 30
+
+- name: Ensure all UE pods are running
+  ansible.builtin.wait_for:
+    path: "/tmp/dummy"
+    state: present
+    timeout: 60
+  until: ue_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length == 3
+  retries: 12
   delay: 5
