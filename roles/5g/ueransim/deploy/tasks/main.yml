@@ -1,25 +1,78 @@
 ---
-- name: Deploy UERANSIM gNB using local kustomization
-  ansible.builtin.shell: >
-    kubectl apply -k {{ ueransim_root }}/ueransim-gnb
-  args:
-    chdir: "{{ ueransim_root }}/ueransim-gnb"
-  register: gnb_apply
-  changed_when: "'configured' in gnb_apply.stdout or 'created' in gnb_apply.stdout"
+- name: Deploy UERANSIM gNodeB 
+  block:
+    - name: Patch gNB Deployment to run on ran_node
+      kubernetes.core.k8s:
+        state: patched
+        namespace: "{{ ran_ns | default('open5gs') }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ueransim-gnb
+          spec:
+            template:
+              spec:
+                nodeSelector:
+                  kubernetes.io/hostname: "{{ ran_node_name }}"
 
-- debug:
-    msg: "{{ gnb_apply.stdout }}"
+    - name: Deploy gNB using kustomize
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ ueransim_root }}/ueransim-gnb"
+        apply: true
+        namespace: "{{ ran_ns | default('open5gs') }}"
 
-- name: Deploy all UERANSIM UEs using local kustomizations
-  ansible.builtin.shell: >
-    kubectl apply -k {{ ueransim_root }}/ueransim-ue/ue{{ item }}
-  args:
-    chdir: "{{ ueransim_root }}/ueransim-ue/ue{{ item }}"
-  loop: "{{ range(1,4) | list }}"
-  loop_control:
-    label: "ue{{ item }}"
-  register: ue_apply
-  changed_when: "'configured' in ue_apply.stdout or 'created' in ue_apply.stdout"
+- name: Deploy UERANSIM UEs 
+  block:
+    - name: Patch UE Deployments to run on ran_node
+      kubernetes.core.k8s:
+        state: patched
+        namespace: "{{ ran_ns | default('open5gs') }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ueransim-ue1
+          spec:
+            template:
+              spec:
+                nodeSelector:
+                  kubernetes.io/hostname: "{{ ran_node_name }}"
 
-- debug:
-    msg: "{{ ue_apply.results | map(attribute='stdout') | list }}"
+    - name: Patch UE Deployments to run on ran_node
+      kubernetes.core.k8s:
+        state: patched
+        namespace: "{{ ran_ns | default('open5gs') }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ueransim-ue2
+          spec:
+            template:
+              spec:
+                nodeSelector:
+                  kubernetes.io/hostname: "{{ ran_node_name }}"
+
+    - name: Patch UE Deployments to run on ran_node
+      kubernetes.core.k8s:
+        state: patched
+        namespace: "{{ ran_ns | default('open5gs') }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: ueransim-ue3
+          spec:
+            template:
+              spec:
+                nodeSelector:
+                  kubernetes.io/hostname: "{{ ran_node_name }}"
+
+    - name: Deploy UEs using kustomize
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ ueransim_root }}/ueransim-ue"
+        apply: true
+        namespace: "{{ ran_ns | default('open5gs') }}"
