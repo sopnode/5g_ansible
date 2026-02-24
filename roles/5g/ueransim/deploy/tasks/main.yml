@@ -1,78 +1,92 @@
 ---
-- name: Deploy UERANSIM gNodeB 
-  block:
-    - name: Patch gNB Deployment to run on ran_node
-      kubernetes.core.k8s:
-        state: patched
-        namespace: "{{ ran_ns | default('open5gs') }}"
-        definition:
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: ueransim-gnb
+- name: Deploy gNB using kustomize
+  ansible.builtin.command: >
+    kubectl apply -k {{ ueransim_root }}/ueransim-gnb
+    -n {{ ran_ns | default('open5gs') }}
+
+- name: Patch gNB Deployment to run on ran_node
+  kubernetes.core.k8s:
+    state: patched
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ueransim-gnb
+      spec:
+        template:
           spec:
-            template:
-              spec:
-                nodeSelector:
-                  kubernetes.io/hostname: "{{ ran_node_name }}"
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ran_node_name }}"
 
-    - name: Deploy gNB using kustomize
-      kubernetes.core.k8s:
-        state: present
-        src: "{{ ueransim_root }}/ueransim-gnb"
-        apply: true
-        namespace: "{{ ran_ns | default('open5gs') }}"
+- name: Wait for gNB Pod to be ready
+  kubernetes.core.k8s_info:
+    kind: Pod
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    label_selectors:
+      - "component=gnb"
+  register: gnb_pods
+  until: gnb_pods.resources | selectattr('status.phase','equalto','Running') | list | length > 0
+  retries: 30
+  delay: 5
 
-- name: Deploy UERANSIM UEs 
-  block:
-    - name: Patch UE Deployments to run on ran_node
-      kubernetes.core.k8s:
-        state: patched
-        namespace: "{{ ran_ns | default('open5gs') }}"
-        definition:
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: ueransim-ue1
+- name: Deploy UEs using kustomize
+  ansible.builtin.command: >
+    kubectl apply -k {{ ueransim_root }}/ueransim-ue
+    -n {{ ran_ns | default('open5gs') }}
+
+- name: Patch UE Deployments to run on ran_node
+  kubernetes.core.k8s:
+    state: patched
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ueransim-ue1
+      spec:
+        template:
           spec:
-            template:
-              spec:
-                nodeSelector:
-                  kubernetes.io/hostname: "{{ ran_node_name }}"
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ran_node_name }}"
 
-    - name: Patch UE Deployments to run on ran_node
-      kubernetes.core.k8s:
-        state: patched
-        namespace: "{{ ran_ns | default('open5gs') }}"
-        definition:
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: ueransim-ue2
+- name: Patch UE2 Deployment
+  kubernetes.core.k8s:
+    state: patched
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ueransim-ue2
+      spec:
+        template:
           spec:
-            template:
-              spec:
-                nodeSelector:
-                  kubernetes.io/hostname: "{{ ran_node_name }}"
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ran_node_name }}"
 
-    - name: Patch UE Deployments to run on ran_node
-      kubernetes.core.k8s:
-        state: patched
-        namespace: "{{ ran_ns | default('open5gs') }}"
-        definition:
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: ueransim-ue3
+- name: Patch UE3 Deployment
+  kubernetes.core.k8s:
+    state: patched
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ueransim-ue3
+      spec:
+        template:
           spec:
-            template:
-              spec:
-                nodeSelector:
-                  kubernetes.io/hostname: "{{ ran_node_name }}"
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ran_node_name }}"
 
-    - name: Deploy UEs using kustomize
-      kubernetes.core.k8s:
-        state: present
-        src: "{{ ueransim_root }}/ueransim-ue"
-        apply: true
-        namespace: "{{ ran_ns | default('open5gs') }}"
+- name: Wait for UE Pods to be running
+  kubernetes.core.k8s_info:
+    kind: Pod
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    label_selectors:
+      - "component=ue"
+  register: ue_pods
+  until: ue_pods.resources | selectattr('status.phase','equalto','Running') | list | length == 3
+  retries: 30
+  delay: 5
