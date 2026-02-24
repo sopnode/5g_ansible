@@ -163,9 +163,3 @@
                   sst={{ s2_sst }} if ue_number == 7 else {{ s1_sst }},
                   sd="{{ s2_sd }}" if ue_number == 7 else "{{ s1_sd }}",
 
-- name: Deploy srsRAN UE using Helm
-  kubernetes.core.helm:
-    name: srsran-ue
-    chart_ref: "{{ [repo_dest_abs, 'charts', 'srsue'] | path_join }}"
-    release_namespace: "{{ ran_ns }}"
-    state: present
