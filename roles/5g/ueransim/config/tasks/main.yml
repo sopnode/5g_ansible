@@ -82,7 +82,7 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Fix UERANSIM (Global SD replace)
+- name: Fix UERANSIM (Brute Force SD)
   ansible.builtin.shell: |
     RAW_SD="{{ curr_slice.sd }}"
     if [ "$RAW_SD" == "EMPTY" ]; then
@@ -95,12 +95,11 @@
     
     FILE_PATH="{{ ueransim_root }}/ueransim-ue/ue{{ ue_num }}/ue{{ ue_num }}.yaml"
     
-    # Le /g à la fin du sed pour SD est CRUCIAL ici
-    sed -i "s/^supi: .*/supi: imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}/g" "$FILE_PATH"
-    sed -i "s/sd: .*/sd: $FINAL_SD/g" "$FILE_PATH"
-    sed -i "s/apn: .*/apn: '{{ curr_slice.dnn }}'/g" "$FILE_PATH"
+    sed -i "s/\(sd:\).*/\1 $FINAL_SD/g" "$FILE_PATH"
     
-    # Nettoyage et remise au propre des quotes APN
+    sed -i "s/\(supi:\).*/\1 imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}/g" "$FILE_PATH"
+    sed -i "s/\(apn:\).*/\1 '{{ curr_slice.dnn }}'/g" "$FILE_PATH"
+    
     sed -i "s/['\"]//g" "$FILE_PATH"
     sed -i "s/apn: \(.*\)/apn: '\1'/g" "$FILE_PATH"
   vars:
