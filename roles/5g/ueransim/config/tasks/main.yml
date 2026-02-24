@@ -82,34 +82,36 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: DEBUG - What is the value of SD for UE19?
-  ansible.builtin.debug:
-    msg: 
-      - "UE Key: {{ item.key }}"
-      - "Slice Name: {{ item.value.slice }}"
-      - "SD Value from template: {{ curr_sd }}"
+- name: Update UERANSIM (Safe Hex Conversion)
+  ansible.builtin.shell: |
+    # 1. On récupère la valeur brute (ex: 100000 ou EMPTY)
+    RAW_SD="{{ curr_slice.sd }}"
+    
+    # 2. Logique de conversion interne sans toucher au profil
+    if [ "$RAW_SD" == "EMPTY" ]; then
+      FINAL_SD="0xFFFFFF"
+    elif [[ "$RAW_SD" =~ ^[0-9A-Fa-f]+$ ]] && [[ "$RAW_SD" != 0x* ]]; then
+      FINAL_SD="0x$RAW_SD"
+    else
+      FINAL_SD="$RAW_SD"
+    fi
+
+    # 3. Injection dans le fichier
+    sed -i "s/sd: .*/sd: $FINAL_SD/g" "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+    sed -i 's/apn: .*/apn: "{{ curr_slice.dnn }}"/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
   vars:
     curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
-    curr_sd: "{{ lookup('template', 'slice_sd.j2', vars=dict(sl_item=curr_slice)) | trim }}"
-  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'equalto', 'UE19') | list }}"
+    loop_idx: "{{ loop_item_index }}"
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"
+  loop_control:
+    index_var: loop_item_index
 
-- name: Force Overwrite with SED (No more yq, no more magic)
-  ansible.builtin.shell: |
-    sed -i 's/sd: .*/sd: {{ curr_sd }}/g' "{{ ueransim_root }}/ueransim-ue/ue2/ue2.yaml"
-    sed -i 's/apn: .*/apn: "{{ curr_slice.dnn }}"/g' "{{ ueransim_root }}/ueransim-ue/ue2/ue2.yaml"
-  vars:
-    curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', 'slice2') | first }}"
-    curr_sd: "{{ lookup('template', 'slice_sd.j2', vars=dict(sl_item=curr_slice)) | trim }}"
-  when: item.key == 'UE19'
-  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'equalto', 'UE19') | list }}"
-
-- name: Final Formatting (Remove quotes)
+- name: Final Formatting (Cleanup)
   ansible.builtin.replace:
-    path: "{{ ueransim_root }}/ueransim-ue/ue2/ue2.yaml"
-    regexp: '{{ item.regexp }}'
-    replace: '{{ item.replace }}'
-  loop:
-    - { regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?', replace: 'sd: \1' }
+    path: "{{ ueransim_root }}/ueransim-ue/ue{{ item.0 }}/ue{{ item.0 }}.yaml"
+    regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?'
+    replace: 'sd: \1'
+  loop: [1, 2, 3]
 
 - name: Replicas to 0
   ansible.builtin.shell: >
