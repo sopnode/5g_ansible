@@ -30,10 +30,18 @@
       - "component=gnb"
   register: gnb_pods
   until: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
-  retries: 20
+  retries: 40
   delay: 5
 
-- name: Deploy UERANSIM UEs using kubectl Kustomize after gNB is ready
+- name: Ensure gNB endpoints are available before deploying UEs
+  ansible.builtin.wait_for:
+    host: "{{ gnb_service_ip | default('gnb-service.' ~ (ran_ns | default('open5gs')) ) }}"
+    port: 4997
+    state: started
+    timeout: 60
+  when: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
+
+- name: Deploy UERANSIM UEs using kubectl Kustomize
   ansible.builtin.shell: >
     kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}
   environment:
@@ -64,5 +72,5 @@
       - "component=ue"
   register: ue_pods
   until: ue_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length >= 3
-  retries: 30
+  retries: 60
   delay: 5
