@@ -286,14 +286,14 @@
 
 - name: Run Python scripts to generate and add subscribers
   ansible.builtin.shell: |
-    "{{ repo_dest }}/venv/bin/python" "{{ repo_dest }}/mongo-tools/generate-data-fiveg.py"
-    "{{ repo_dest }}/venv/bin/python" "{{ repo_dest }}/mongo-tools/add-subscribers.py"
+    {{ repo_dest }}/venv/bin/python {{ repo_dest }}/mongo-tools/generate-data-fiveg.py
+    {{ repo_dest }}/venv/bin/python {{ repo_dest }}/mongo-tools/add-subscribers.py
   args:
     chdir: "{{ repo_dest }}"
 
 - name: Run add-admin-account.py
   ansible.builtin.command: >
-    "{{ repo_dest }}/venv/bin/python" mongo-tools/add-admin-account.py
+    {{ repo_dest }}/venv/bin/python mongo-tools/add-admin-account.py
   args:
     chdir: "{{ repo_dest }}"
 
