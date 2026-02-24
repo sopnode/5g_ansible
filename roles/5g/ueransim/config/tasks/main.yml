@@ -88,10 +88,10 @@
       .mcc = "{{ fiveg.plmn.mcc }}" |
       .mnc = "{{ fiveg.plmn.mnc }}" |
       .supi = "imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}" |
-      .configured-nssai = {{ ueransim_slices | to_json }} |
-      .default-nssai = [{{ ueransim_slices[idx | int] | to_json }}]
+      .configured-nssai = [{{ ue_slice | to_json }}] |
+      .default-nssai = [{{ ue_slice | to_json }}] |
       .sessions[0].slice = {{ ue_slice | to_json }}
-    ' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+    ' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_item_index + 1 }}/ue{{ loop_item_index + 1 }}.yaml"
   vars:
     current_slice_profile: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
     ue_slice:
