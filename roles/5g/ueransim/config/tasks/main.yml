@@ -82,10 +82,10 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Update UERANSIM (Safe Hex Conversion)
+- name: Update UERANSIM (Fix SUPI, SD with 0x, and APN)
   ansible.builtin.shell: |
+    # 1. Préparation des valeurs
     RAW_SD="{{ curr_slice.sd }}"
-    
     if [ "$RAW_SD" == "EMPTY" ]; then
       FINAL_SD="0xFFFFFF"
     elif [[ "$RAW_SD" =~ ^[0-9A-Fa-f]+$ ]] && [[ "$RAW_SD" != 0x* ]]; then
@@ -94,6 +94,10 @@
       FINAL_SD="$RAW_SD"
     fi
 
+    # 2. Update SUPI (Pour remettre le 1122 correct du profil)
+    sed -i "s/^supi: .*/supi: imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}/g" "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+    
+    # 3. Update SD et APN
     sed -i "s/sd: .*/sd: $FINAL_SD/g" "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
     sed -i 's/apn: .*/apn: "{{ curr_slice.dnn }}"/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
   vars:
@@ -103,12 +107,21 @@
   loop_control:
     index_var: loop_item_index
 
-- name: Final Formatting (Cleanup)
+- name: Final Formatting (Remove quotes for SUPI and SD)
   ansible.builtin.replace:
     path: "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue{{ item }}.yaml"
-    regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?'
-    replace: 'sd: \1'
+    regexp: '{{ item_regex.regexp }}'
+    replace: '{{ item_regex.replace }}'
   loop: [1, 2, 3]
+  loop_control:
+    loop_var: item
+  vars:
+    regex_list:
+      - { regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?', replace: 'sd: \1' }
+      - { regexp: 'supi:\s*["'']?(imsi-[0-9]+)["'']?', replace: 'supi: \1' }
+  with_items: "{{ regex_list }}"
+  loop_control:
+    loop_var: item_regex
 
 - name: Replicas to 0
   ansible.builtin.shell: >
