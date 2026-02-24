@@ -82,9 +82,15 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Force update UERANSIM configurations (Full Reset)
+- name: Force Update UERANSIM (SUPI, SD, APN)
   ansible.builtin.shell: |
-    sed -i 's/sd: .*/sd: {{ curr_sd }}/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+    # 1. Update SUPI (IMSI) - On cible précisément le début de ligne
+    sed -i 's/^supi: .*/supi: imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+    
+    # 2. Update SD - On cible uniquement "sd:" avec des espaces devant
+    sed -i 's/\s*sd: .*/      sd: {{ curr_sd }}/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+    
+    # 3. Update APN - On cible le champ apn des sessions
     sed -i 's/apn: .*/apn: "{{ curr_slice.dnn }}"/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
   vars:
     curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
@@ -96,7 +102,7 @@
 
 - name: Set replicas to 0 in ue-deployment.yaml
   ansible.builtin.shell: >
-    {{ yq_bin_path }} eval -i '.spec.replicas = 0' 
+    {{ yq_bin_path }} eval -i '.spec.replicas = 0'
     "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue-deployment.yaml"
   loop: [1, 2, 3]
 
