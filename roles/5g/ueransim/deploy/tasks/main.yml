@@ -40,7 +40,6 @@
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
   register: ue_apply
   ignore_errors: false
-  # this ensures UEs are deployed only after gNB is up
   when: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
 
 - name: Patch UEs to run on ran_node
