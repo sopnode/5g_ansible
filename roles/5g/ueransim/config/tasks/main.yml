@@ -82,7 +82,6 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
----
 - name: Hard-fix UERANSIM configurations using sed (Dynamic)
   ansible.builtin.shell: |
     sed -i 's/sd: 0xFFFFFF/sd: {{ curr_sd }}/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
