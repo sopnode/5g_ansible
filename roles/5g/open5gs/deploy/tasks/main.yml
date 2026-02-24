@@ -170,10 +170,12 @@
   when: item not in (nad_info.resources | map(attribute='metadata.name') | list)
   loop: "{{ nad_list }}"
 
-- name: Bring OVS bridges up and clean stale ports
+- name: Bring OVS bridges up if single-node Open5GS
   ansible.builtin.shell: |
+    ip link set dev n2br up
+    ip link set dev n3br up
+    ip link set dev n4br up
     for br in n2br n3br n4br; do
-      ip link set dev $br up
       for port in $(ovs-vsctl list-ports $br | grep veth); do
          ovs-vsctl del-port $br $port || true
       done
@@ -181,7 +183,7 @@
   become: true
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
-- name: Assign Gateway IPs to OVS bridges
+- name: Assign Gateway IPs to OVS bridges for Single-Node SCTP bind
   ansible.builtin.shell: |
     ip addr add 10.10.2.254/24 dev n2br || true
     ip addr add 10.10.3.254/24 dev n3br || true
@@ -189,7 +191,6 @@
   become: true
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
-# --- NEW: Wait for the Operator to actually register the OVS capacity on the node ---
 - name: Wait for OVS resource registration on Node
   ansible.builtin.shell: |
     kubectl get node {{ inventory_hostname }} -o json | grep -q "ovs-cni.network.kubevirt.io/n3br"
@@ -199,6 +200,11 @@
   delay: 5
   changed_when: false
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+
+# --- CLEANUP PRE-DEPLOY TO ENSURE MULTUS RE-ATTACH ---
+- name: Force cleanup existing Open5GS pods
+  ansible.builtin.shell: kubectl delete pods -n {{ open5gs_ns }} -l app=open5gs --force --grace-period=0 || true
+  when: core_node_name == ran_node_name and core == "open5gs"
 
 - name: Apply Open5GS NFs with Kustomize
   ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/{{ deployment_option }}" -n {{ open5gs_ns }}
@@ -294,4 +300,3 @@
 - name: Check Open5GS deployment
   ansible.builtin.include_role:
     name: 5g/open5gs/check_all
- 
