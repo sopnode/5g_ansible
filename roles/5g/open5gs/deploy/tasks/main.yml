@@ -24,9 +24,9 @@
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   register: wait_coredns
+  until: wait_coredns.rc == 0
   retries: 3
   delay: 10
-  until: wait_coredns.rc == 0
   changed_when: false
 
 - name: Test CoreDNS resolution from core node
@@ -67,56 +67,15 @@
   retries: 40
   delay: 10
 
-- name: Apply NADs with Kustomize
-  ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/networks5g" -n {{ open5gs_ns }}
-
-- name: Wait for kube-apiserver to be responsive
-  shell: kubectl get --raw='/healthz'
-  register: api_health
-  retries: 30
-  delay: 10
-  until: api_health.rc == 0
-  changed_when: false
-
-- name: Wait for CRDs registration to be ready
-  shell: kubectl get crds
-  register: crd_list
-  retries: 20
-  delay: 5
-  until: "'network-attachment-definitions.k8s.cni.cncf.io' in crd_list.stdout"
-  changed_when: false
-
-- name: Install jq
-  ansible.builtin.apt:
-    name: jq
-    state: present
-    update_cache: yes
-  become: yes
-
-- name: Wait for Multus CRD
-  ansible.builtin.shell: kubectl get crd network-attachment-definitions.k8s.cni.cncf.io
-  register: multus_crd_check
-  retries: 60
-  delay: 5
-  until: multus_crd_check.rc == 0
-  changed_when: false
-  failed_when: false
-
-- name: Install OVS CNI via Cluster Network Addons Operator (single-node)
+- name: Install OVS CNI via Cluster Network Addons Operator
   block:
-    - name: Apply Cluster Network Addons Operator namespace
-      ansible.builtin.shell: |
-        kubectl apply -f https://github.com/kubevirt/cluster-network-addons-operator/releases/download/v0.98.1/namespace.yaml
-
-    - name: Apply Cluster Network Addons CRDs
-      ansible.builtin.shell: |
-        kubectl apply -f https://github.com/kubevirt/cluster-network-addons-operator/releases/download/v0.98.1/network-addons-config.crd.yaml
-
-    - name: Apply Cluster Network Addons Operator
-      ansible.builtin.shell: |
-        kubectl apply -f https://github.com/kubevirt/cluster-network-addons-operator/releases/download/v0.98.1/operator.yaml
-
-    - name: Create NetworkAddonsConfig for OVS
+    - name: Apply Operator namespace
+      ansible.builtin.shell: kubectl apply -f https://github.com/kubevirt/cluster-network-addons-operator/releases/download/v0.98.1/namespace.yaml
+    - name: Apply Operator CRDs
+      ansible.builtin.shell: kubectl apply -f https://github.com/kubevirt/cluster-network-addons-operator/releases/download/v0.98.1/network-addons-config.crd.yaml
+    - name: Apply Operator
+      ansible.builtin.shell: kubectl apply -f https://github.com/kubevirt/cluster-network-addons-operator/releases/download/v0.98.1/operator.yaml
+    - name: Create NetworkAddonsConfig
       ansible.builtin.copy:
         dest: /tmp/netaddonsconf.yaml
         content: |
@@ -126,16 +85,35 @@
             name: cluster
           spec:
             ovs: {}
-
     - name: Apply NetworkAddonsConfig
-      ansible.builtin.shell: |
-        kubectl apply -f /tmp/netaddonsconf.yaml
-
-    - name: Wait for NetworkAddonsConfig to become Available
-      ansible.builtin.shell: |
-        kubectl wait networkaddonsconfig cluster --for condition=Available --timeout=300s
+      ansible.builtin.shell: kubectl apply -f /tmp/netaddonsconf.yaml
+    - name: Wait for NetworkAddonsConfig to be Available
+      ansible.builtin.shell: kubectl wait networkaddonsconfig cluster --for condition=Available --timeout=300s
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
   become: yes
+
+# CRITICAL: Prepare host bridges BEFORE deploying NFs to ensure Multus finds them
+- name: Bring OVS bridges up and clean stale ports
+  ansible.builtin.shell: |
+    for br in n2br n3br n4br; do
+      ip link set dev $br up
+      for port in $(ovs-vsctl list-ports $br | grep veth); do
+         ovs-vsctl del-port $br $port || true
+      done
+    done
+  become: true
+  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+
+- name: Assign Gateway IPs to OVS bridges
+  ansible.builtin.shell: |
+    ip addr add 10.10.2.254/24 dev n2br || true
+    ip addr add 10.10.3.254/24 dev n3br || true
+    ip addr add 10.10.4.254/24 dev n4br || true
+  become: true
+  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+
+- name: Apply NADs with Kustomize
+  ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/networks5g" -n {{ open5gs_ns }}
 
 - name: Patch NADs to use unique interface names
   shell: |
@@ -146,51 +124,12 @@
         n3network) ifname=n3 ;;
         n4network) ifname=n4 ;;
       esac
-      if ! kubectl get networkattachmentdefinition "$nad" -n open5gs &>/dev/null; then
-        continue
-      fi
-      config=$(kubectl get networkattachmentdefinition "$nad" -n open5gs -o jsonpath='{.spec.config}')
+      if ! kubectl get networkattachmentdefinition "$nad" -n {{ open5gs_ns }} &>/dev/null; then continue; fi
+      config=$(kubectl get networkattachmentdefinition "$nad" -n {{ open5gs_ns }} -o jsonpath='{.spec.config}')
       newconfig=$(echo "$config" | jq --arg n "$ifname" '.ifname = $n')
-      kubectl patch networkattachmentdefinition "$nad" -n open5gs --type=merge -p "{\"spec\":{\"config\":$newconfig}}"
+      kubectl patch networkattachmentdefinition "$nad" -n {{ open5gs_ns }} --type=merge -p "{\"spec\":{\"config\":$newconfig}}"
     done
-  register: patch_nad
-  failed_when: false
   changed_when: false
-
-- name: Verify required NADs exist
-  kubernetes.core.k8s_info:
-    kind: NetworkAttachmentDefinition
-    namespace: "{{ open5gs_ns }}"
-  register: nad_info
-
-- name: Fail if a required NAD is missing
-  ansible.builtin.fail:
-    msg: "NAD {{ item }} is missing in {{ open5gs_ns }}"
-  when: item not in (nad_info.resources | map(attribute='metadata.name') | list)
-  loop: "{{ nad_list }}"
-
-# --- FIX: PREPARE BRIDGES BEFORE APPLYING NFS ---
-- name: Bring OVS bridges up and clean stale ports
-  ansible.builtin.shell: |
-    for br in n2br n3br n4br; do
-      # Ensure bridge is administratively UP
-      ip link set dev $br up
-      # Remove orphaned veth ports to avoid OVS resource exhaustion
-      for port in $(ovs-vsctl list-ports $br | grep veth); do
-         ovs-vsctl del-port $br $port || true
-      done
-    done
-  become: true
-  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
-
-- name: Assign Gateway IPs to OVS bridges for Single-Node SCTP bind
-  ansible.builtin.shell: |
-    # Assign IP .254 of each subnet to the bridge to simulate active link
-    ip addr add 10.10.2.254/24 dev n2br || true
-    ip addr add 10.10.3.254/24 dev n3br || true
-    ip addr add 10.10.4.254/24 dev n4br || true
-  become: true
-  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
 - name: Apply Open5GS NFs with Kustomize
   ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/{{ deployment_option }}" -n {{ open5gs_ns }}
@@ -212,79 +151,38 @@
   loop_control:
     label: "{{ item }}"
 
-# --- FIX: DEEP VERIFICATION OF MULTUS INTERFACE ---
-- name: Verify Multus N3 interface inside AMF pod
+# Final check to ensure Multus interface n3 actually exists in AMF
+- name: Verify N3 interface inside AMF pod
   ansible.builtin.shell: |
     AMF_POD=$(kubectl get pods -n {{ open5gs_ns }} -l nf=amf -o jsonpath='{.items[0].metadata.name}')
     kubectl exec -n {{ open5gs_ns }} $AMF_POD -- ip addr show n3 | grep "inet 10.10.3.200"
   register: amf_n3_check
   until: amf_n3_check.rc == 0
-  retries: 15
+  retries: 10
   delay: 5
   when: core == "open5gs"
   changed_when: false
 
-- name: Install python3-venv, python3-pip, setuptools and wheel
-  ansible.builtin.apt:
-    name:
-      - python3-venv
-      - python3-pip
-      - python3-setuptools
-      - python3-wheel
-    state: present
+- name: Install Python environment and WebUI
+  block:
+    - ansible.builtin.apt:
+        name: [python3-venv, python3-pip, python3-setuptools, python3-wheel]
+        state: present
+    - ansible.builtin.command:
+        cmd: python3 -m venv "{{ repo_dest }}/venv"
+        creates: "{{ repo_dest }}/venv/bin/activate"
+    - ansible.builtin.command: "{{ repo_dest }}/venv/bin/pip install -r {{ repo_dest }}/requirements.txt"
+    - ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/open5gs-webui" -n {{ open5gs_ns }}
   become: yes
 
-- name: Create Python virtual environment (idempotent)
-  ansible.builtin.command:
-    cmd: python3 -m venv "{{ repo_dest }}/venv"
-    creates: "{{ repo_dest }}/venv/bin/activate"
-  become: yes
-
-- name: Bootstrap pip, setuptools and wheel in venv
-  ansible.builtin.command:
-    cmd: "{{ repo_dest }}/venv/bin/python -m ensurepip --upgrade"
-  become: yes
-
-- name: Upgrade pip, setuptools and wheel explicitly in venv
-  ansible.builtin.command:
-    cmd: "{{ repo_dest }}/venv/bin/pip install --upgrade pip setuptools wheel"
-  become: yes
-
-- name: Install Python requirements in venv
-  ansible.builtin.command:
-    cmd: "{{ repo_dest }}/venv/bin/pip install -r {{ repo_dest }}/requirements.txt"
-  become: yes
-
-- name: Deploy Open5GS Web UI
-  ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/open5gs-webui" -n {{ open5gs_ns }}
-
-- name: Wait for WebUI pod Ready
-  kubernetes.core.k8s_info:
-    kind: Pod
-    namespace: "{{ open5gs_ns }}"
-    label_selectors:
-      - "nf=webui"
-  register: webui_pod
-  until: >
-    webui_pod.resources | length > 0 and
-    (webui_pod.resources[0].status.containerStatuses[0].ready | default(false))
-  retries: 40
-  delay: 5
-
-- name: Run Python scripts to generate and add subscribers
+- name: Run Subscriber and Admin scripts
   ansible.builtin.shell: |
     {{ repo_dest }}/venv/bin/python {{ repo_dest }}/mongo-tools/generate-data-fiveg.py
     {{ repo_dest }}/venv/bin/python {{ repo_dest }}/mongo-tools/add-subscribers.py
-  args:
-    chdir: "{{ repo_dest }}"
-
-- name: Run add-admin-account.py
-  ansible.builtin.command: >
-    {{ repo_dest }}/venv/bin/python mongo-tools/add-admin-account.py
+    {{ repo_dest }}/venv/bin/python {{ repo_dest }}/mongo-tools/add-admin-account.py
   args:
     chdir: "{{ repo_dest }}"
 
 - name: Check Open5GS deployment
   ansible.builtin.include_role:
     name: 5g/open5gs/check_all
-
