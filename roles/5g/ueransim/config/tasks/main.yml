@@ -82,32 +82,34 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Update UERANSIM UE configurations (Three-point injection)
-  ansible.builtin.shell: >
-    {{ yq_bin_path }} eval -i '
-      .sessions[0].slice.sd = "{{ curr_sd }}" |
-      .configured-nssai[0].sd = "{{ curr_sd }}" |
-      .default-nssai[0].sd = "{{ curr_sd }}" |
-      .sessions[0].apn = "{{ curr_slice.dnn }}"
-    ' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+- name: DEBUG - What is the value of SD for UE19?
+  ansible.builtin.debug:
+    msg: 
+      - "UE Key: {{ item.key }}"
+      - "Slice Name: {{ item.value.slice }}"
+      - "SD Value from template: {{ curr_sd }}"
   vars:
     curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
-    # On utilise ton template qui gère déjà le remplacement du vide par FFFFFF
     curr_sd: "{{ lookup('template', 'slice_sd.j2', vars=dict(sl_item=curr_slice)) | trim }}"
-    loop_idx: "{{ loop_item_index }}"
-  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"
-  loop_control:
-    index_var: loop_item_index
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'equalto', 'UE19') | list }}"
+
+- name: Force Overwrite with SED (No more yq, no more magic)
+  ansible.builtin.shell: |
+    sed -i 's/sd: .*/sd: {{ curr_sd }}/g' "{{ ueransim_root }}/ueransim-ue/ue2/ue2.yaml"
+    sed -i 's/apn: .*/apn: "{{ curr_slice.dnn }}"/g' "{{ ueransim_root }}/ueransim-ue/ue2/ue2.yaml"
+  vars:
+    curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', 'slice2') | first }}"
+    curr_sd: "{{ lookup('template', 'slice_sd.j2', vars=dict(sl_item=curr_slice)) | trim }}"
+  when: item.key == 'UE19'
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'equalto', 'UE19') | list }}"
 
 - name: Final Formatting (Remove quotes)
   ansible.builtin.replace:
-    path: "{{ ueransim_root }}/ueransim-ue/ue{{ item.0 }}/ue{{ item.0 }}.yaml"
-    regexp: '{{ item.1.regexp }}'
-    replace: '{{ item.1.replace }}'
-  with_nested:
-    - [1, 2, 3]
-    - - { regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?', replace: 'sd: \1' }
-      - { regexp: 'sst:\s*["'']?([0-9]+)["'']?', replace: 'sst: \1' }
+    path: "{{ ueransim_root }}/ueransim-ue/ue2/ue2.yaml"
+    regexp: '{{ item.regexp }}'
+    replace: '{{ item.replace }}'
+  loop:
+    - { regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?', replace: 'sd: \1' }
 
 - name: Replicas to 0
   ansible.builtin.shell: >
