@@ -1,12 +1,9 @@
 ---
-- name: Deploy UERANSIM gNodeB using Kustomize
-  community.kubernetes.k8s_kustomize:
-    state: present
-    src: "{{ ueransim_root }}/ueransim-gnb"
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    apply: true
+- name: Deploy UERANSIM gNodeB using kubectl Kustomize
+  ansible.builtin.shell: >
+    kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}
   environment:
-    KUSTOMIZE_PLUGIN_HOME: "/tmp"
+    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
   register: gnb_apply
   ignore_errors: false
 
@@ -36,14 +33,11 @@
   retries: 20
   delay: 5
 
-- name: Deploy UERANSIM UEs using Kustomize
-  community.kubernetes.k8s_kustomize:
-    state: present
-    src: "{{ ueransim_root }}/ueransim-ue"
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    apply: true
+- name: Deploy UERANSIM UEs using kubectl Kustomize
+  ansible.builtin.shell: >
+    kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}
   environment:
-    KUSTOMIZE_PLUGIN_HOME: "/tmp"
+    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
   register: ue_apply
   ignore_errors: false
 
@@ -71,3 +65,4 @@
   until: ue_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length >= 3
   retries: 30
   delay: 5
+
