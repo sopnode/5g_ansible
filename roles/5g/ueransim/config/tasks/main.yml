@@ -82,27 +82,26 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Update UERANSIM UEs configurations (UE18/19/20 -> ue1/2/3)
+- name: Update UERANSIM UEs configurations
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
       .mcc = "{{ fiveg.plmn.mcc }}" |
       .mnc = "{{ fiveg.plmn.mnc }}" |
       .supi = "imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}" |
-      .configured-nssai = [{{ ue_slice | to_json }}] |
-      .default-nssai = [{{ ue_slice | to_json }}] |
-      .sessions[0].slice = {{ ue_slice | to_json }}
-    ' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_item_index + 1 }}/ue{{ loop_item_index + 1 }}.yaml"
+      .configured-nssai = [{"sst": {{ curr_slice.sst | int }}, "sd": {{ curr_sd }} }] |
+      .default-nssai = [{"sst": {{ curr_slice.sst | int }}, "sd": {{ curr_sd }} }] |
+      .sessions[0].slice = {"sst": {{ curr_slice.sst | int }}, "sd": {{ curr_sd }} } |
+      .sessions[0].apn = "{{ curr_slice.dnn }}"
+    ' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
   vars:
-    current_slice_profile: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
-    ue_slice:
-      sst: "{{ current_slice_profile.sst | int }}"
-      sd: "{{ lookup('template', 'slice_sd.j2', vars=dict(sl_item=current_slice_profile)) | trim }}"
+    curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
+    curr_sd: "{{ lookup('template', 'slice_sd.j2', vars=dict(sl_item=curr_slice)) | trim }}"
     loop_idx: "{{ loop_item_index }}"
   loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"
   loop_control:
     index_var: loop_item_index
 
-- name: Remove ALL quotes for UERANSIM
+- name: Final YAML formatting (Remove quotes for UERANSIM compatibility)
   ansible.builtin.replace:
     path: "{{ item.0 }}"
     regexp: '{{ item.1.regexp }}'
@@ -112,9 +111,9 @@
       - "{{ ueransim_root }}/ueransim-ue/ue1/ue1.yaml"
       - "{{ ueransim_root }}/ueransim-ue/ue2/ue2.yaml"
       - "{{ ueransim_root }}/ueransim-ue/ue3/ue3.yaml"
-    - - { regexp: 'sd:\s*["+'']?([0-9A-Fa-fXx]+)["+'']?', replace: 'sd: \1' }
-      - { regexp: 'sst:\s*["+'']?([0-9]+)["+'']?', replace: 'sst: \1' }
-      - { regexp: 'supi:\s*["+'']?(imsi-[0-9]+)["+'']?', replace: 'supi: \1' }
+    - - { regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?', replace: 'sd: \1' }
+      - { regexp: 'sst:\s*["'']?([0-9]+)["'']?', replace: 'sst: \1' }
+      - { regexp: 'supi:\s*["'']?(imsi-[0-9]+)["'']?', replace: 'supi: \1' }
 
 - name: Final check of generated configs
   ansible.builtin.shell: "grep -E 'sst:|sd:|supi:' {{ ueransim_root }}/ueransim-ue/ue1/ue1.yaml"
