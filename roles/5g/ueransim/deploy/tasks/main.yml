@@ -6,16 +6,16 @@
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
-- name: Force all UEs to 0 replicas for sequential start
+- name: Force scale down UEs for sequential start
   ansible.builtin.shell: >
-    kubectl scale deployment -n {{ ran_ns | default('open5gs') }} -l app=ueransim-ue --replicas=0
+    kubectl scale deployment -n {{ ran_ns | default('open5gs') }} -l component=ue --replicas=0
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
-  failed_when: false # Ignore if no deployments match yet
+  failed_when: false
 
 - name: Wait for gNB pod to be ready
   ansible.builtin.shell: >
-    kubectl wait --for=condition=Ready pod -l app=ueransim-gnb -n {{ ran_ns | default('open5gs') }} --timeout=60s
+    kubectl wait --for=condition=Ready pod -l component=gnb -n {{ ran_ns | default('open5gs') }} --timeout=60s
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
@@ -29,3 +29,4 @@
   loop_control:
     loop_var: ue_item
     index_var: ue_idx
+    label: "Scaling up ueransim-ue{{ ue_idx + 1 }}"
