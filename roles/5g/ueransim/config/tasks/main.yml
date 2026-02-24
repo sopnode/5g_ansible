@@ -1,7 +1,4 @@
 ---
-- name: Load defaults
-  include_vars:
-    file: "{{ role_path }}/defaults/main.yml"
 
 - name: Check if yq is already installed
   ansible.builtin.stat:
