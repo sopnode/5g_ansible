@@ -126,6 +126,7 @@
             name: cluster
           spec:
             ovs: {}
+
     - name: Apply NetworkAddonsConfig
       ansible.builtin.shell: |
         kubectl apply -f /tmp/netaddonsconf.yaml
@@ -133,7 +134,6 @@
     - name: Wait for NetworkAddonsConfig to become Available
       ansible.builtin.shell: |
         kubectl wait networkaddonsconfig cluster --for condition=Available --timeout=300s
-
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
   become: yes
 
@@ -155,7 +155,7 @@
     done
   register: patch_nad
   failed_when: false
-  changed_when: "'Skipping' not in patch_nad.stdout"
+  changed_when: false
 
 - name: Verify required NADs exist
   kubernetes.core.k8s_info:
@@ -169,11 +169,17 @@
   when: item not in (nad_info.resources | map(attribute='metadata.name') | list)
   loop: "{{ nad_list }}"
 
-- name: Bring OVS bridges up if single-node Open5GS
+# --- FIX: PREPARE BRIDGES BEFORE APPLYING NFS ---
+- name: Bring OVS bridges up and clean stale ports
   ansible.builtin.shell: |
-    ip link set dev n2br up
-    ip link set dev n3br up
-    ip link set dev n4br up
+    for br in n2br n3br n4br; do
+      # Ensure bridge is administratively UP
+      ip link set dev $br up
+      # Remove orphaned veth ports to avoid OVS resource exhaustion
+      for port in $(ovs-vsctl list-ports $br | grep veth); do
+         ovs-vsctl del-port $br $port || true
+      done
+    done
   become: true
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
@@ -185,7 +191,6 @@
     ip addr add 10.10.4.254/24 dev n4br || true
   become: true
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
-
 
 - name: Apply Open5GS NFs with Kustomize
   ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/{{ deployment_option }}" -n {{ open5gs_ns }}
@@ -207,13 +212,25 @@
   loop_control:
     label: "{{ item }}"
 
+# --- FIX: DEEP VERIFICATION OF MULTUS INTERFACE ---
+- name: Verify Multus N3 interface inside AMF pod
+  ansible.builtin.shell: |
+    AMF_POD=$(kubectl get pods -n {{ open5gs_ns }} -l nf=amf -o jsonpath='{.items[0].metadata.name}')
+    kubectl exec -n {{ open5gs_ns }} $AMF_POD -- ip addr show n3 | grep "inet 10.10.3.200"
+  register: amf_n3_check
+  until: amf_n3_check.rc == 0
+  retries: 15
+  delay: 5
+  when: core == "open5gs"
+  changed_when: false
+
 - name: Install python3-venv, python3-pip, setuptools and wheel
   ansible.builtin.apt:
     name:
       - python3-venv
       - python3-pip
-      - python3-setuptools # required for pkg_resources
-      - python3-wheel      # required for pip 
+      - python3-setuptools
+      - python3-wheel
     state: present
   become: yes
 
@@ -270,3 +287,4 @@
 - name: Check Open5GS deployment
   ansible.builtin.include_role:
     name: 5g/open5gs/check_all
+
