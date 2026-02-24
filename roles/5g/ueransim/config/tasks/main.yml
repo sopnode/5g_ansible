@@ -124,5 +124,5 @@
 - name: Set default replicas to 0 in deployment files
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '.spec.replicas = 0' 
-    "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue{{ item }}-deployment.yaml"
+    "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue-deployment.yaml"
   loop: [1, 2, 3]
