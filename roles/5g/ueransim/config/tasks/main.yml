@@ -82,20 +82,23 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Generate UE configurations from template
-  ansible.builtin.template:
-    src: ue_config.yaml.j2
-    dest: "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+- name: Update UERANSIM UE configurations (Three-point injection)
+  ansible.builtin.shell: >
+    {{ yq_bin_path }} eval -i '
+      .sessions[0].slice.sd = {{ curr_sd }} |
+      .configured-nssai[0].sd = {{ curr_sd }} |
+      .default-nssai[0].sd = {{ curr_sd }} |
+      .sessions[0].apn = "{{ curr_slice.dnn }}"
+    ' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
   vars:
-    ue_data: "{{ item.value }}"
-    slice_data: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
-    curr_sd: "{{ lookup('template', 'slice_sd.j2', vars=dict(sl_item=slice_data)) | trim }}"
+    curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
+    curr_sd: "{{ curr_slice.sd }}"
     loop_idx: "{{ loop_item_index }}"
   loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"
   loop_control:
     index_var: loop_item_index
 
-- name: Final Formatting (Remove quotes for UERANSIM)
+- name: Final Formatting (Remove quotes)
   ansible.builtin.replace:
     path: "{{ ueransim_root }}/ueransim-ue/ue{{ item.0 }}/ue{{ item.0 }}.yaml"
     regexp: '{{ item.1.regexp }}'
@@ -104,7 +107,6 @@
     - [1, 2, 3]
     - - { regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?', replace: 'sd: \1' }
       - { regexp: 'sst:\s*["'']?([0-9]+)["'']?', replace: 'sst: \1' }
-      - { regexp: 'supi:\s*["'']?(imsi-[0-9]+)["'']?', replace: 'supi: \1' }
 
 - name: Replicas to 0
   ansible.builtin.shell: >
