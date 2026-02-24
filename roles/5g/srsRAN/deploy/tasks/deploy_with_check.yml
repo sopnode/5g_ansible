@@ -14,8 +14,8 @@
   - name: Fix space after addr= in device_args
     ansible.builtin.replace:
       path: "{{ values_file }}"
-      regexp: "addr=([0-9.]+)\\s*,"
-      replace: "addr=\\1,"
+      regexp: 'addr=\s*([0-9.]+)\s*,'
+      replace: 'addr=\1,'
 
   - name: Deploy srsRAN gNB using Helm
     kubernetes.core.helm:
@@ -82,11 +82,11 @@
     - name: Determine new IP
       ansible.builtin.set_fact:
         new_ip: >-
-          {% if current_ip_cmd.stdout == '192.168.235.105' %}192.168.235.106
-          {% elif current_ip_cmd.stdout == '192.168.235.106' %}192.168.235.105
-          {% elif current_ip_cmd.stdout == '192.168.235.103' %}192.168.235.104
-          {% elif current_ip_cmd.stdout == '192.168.235.104' %}192.168.235.103
-          {% else %}{{ current_ip_cmd.stdout }}{% endif %}
+          {%- if current_ip_cmd.stdout == '192.168.235.105' -%}192.168.235.106
+          {%- elif current_ip_cmd.stdout == '192.168.235.106' -%}192.168.235.105
+          {%- elif current_ip_cmd.stdout == '192.168.235.103' -%}192.168.235.104
+          {%- elif current_ip_cmd.stdout == '192.168.235.104' -%}192.168.235.103
+          {%- else -%}{{ current_ip_cmd.stdout }}{%- endif -%}
 
     - name: Apply IP swap
       ansible.builtin.replace:
