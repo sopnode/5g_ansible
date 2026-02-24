@@ -24,7 +24,7 @@ data:
         server:
           - dev: n3
       session:
-        - subnet: {{ upf_slice_data.ip_prefix }}.1/16
+        - subnet: {{ upf_slice_data.ip_prefix }}.1/24
           dnn: {{ upf_slice_data.dnn }}
       metrics:
         server:
@@ -41,7 +41,7 @@ data:
 
     # Create and configure the TUN device (ogstun)
     ip tuntap add name ogstun mode tun;
-    ip addr add {{ upf_slice_data.ip_prefix }}.1/16 dev ogstun;
+    ip addr add {{ upf_slice_data.ip_prefix }}.1/24 dev ogstun;
     
     # Disable IPv6 for the TUN interface
     sysctl -w net.ipv6.conf.all.disable_ipv6=1;
@@ -54,7 +54,7 @@ data:
     sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward";
     
     # Set up NAT Masquerade for the UE subnet
-    iptables -t nat -A POSTROUTING -s {{ upf_slice_data.ip_prefix }}.0/16 ! -o ogstun -j MASQUERADE;
+    iptables -t nat -A POSTROUTING -s {{ upf_slice_data.ip_prefix }}.0/24 ! -o ogstun -j MASQUERADE;
 
     # Final stabilization delay before starting the binary
     sleep 5;
