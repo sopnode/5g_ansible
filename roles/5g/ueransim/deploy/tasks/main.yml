@@ -1,7 +1,6 @@
 ---
-
 - name: Deploy UERANSIM gNodeB using Kustomize
-  kubernetes.core.k8s:
+  community.kubernetes.k8s_kustomize:
     state: present
     src: "{{ ueransim_root }}/ueransim-gnb"
     namespace: "{{ ran_ns | default('open5gs') }}"
@@ -10,15 +9,7 @@
     KUSTOMIZE_PLUGIN_HOME: "/tmp"
   register: gnb_apply
   ignore_errors: false
-  vars:
-    gnb_patch: |
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ran_node_name }}"
 
-# post-processing patch via kubernetes.core.k8s
 - name: Patch gNB Deployment to run on ran_node
   kubernetes.core.k8s:
     state: patched
@@ -46,7 +37,7 @@
   delay: 5
 
 - name: Deploy UERANSIM UEs using Kustomize
-  kubernetes.core.k8s:
+  community.kubernetes.k8s_kustomize:
     state: present
     src: "{{ ueransim_root }}/ueransim-ue"
     namespace: "{{ ran_ns | default('open5gs') }}"
