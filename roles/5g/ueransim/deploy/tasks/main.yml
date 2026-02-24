@@ -1,31 +1,15 @@
 ---
-# 1. PRE-CLEANUP: Force remove existing UEs to clear stale sessions
 - name: Remove existing UERANSIM UEs for session cleanup
   ansible.builtin.shell: >
     kubectl delete -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }} --ignore-not-found=true
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
-- name: Deploy UERANSIM gNodeB using kubectl Kustomize
+- name: Deploy UERANSIM gNodeB
   ansible.builtin.shell: >
     kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
-
-- name: Patch gNB Deployment to run on ran_node
-  kubernetes.core.k8s:
-    state: patched
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: ueransim-gnb
-        namespace: "{{ ran_ns | default('open5gs') }}"
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ran_node_name }}"
 
 - name: Wait for gNB pod to be Running
   community.kubernetes.k8s_info:
@@ -38,19 +22,14 @@
   retries: 20
   delay: 5
 
-# 2. DELAY: Wait 10s for gNB NGAP/SCTP stability with AMF
-- name: Wait 10 seconds for gNB stability
+- name: Delay for gNB stability (NGAP/SCTP)
   ansible.builtin.pause:
     seconds: 10
 
-# 3. SEQUENTIAL DEPLOYMENT: UEs with 5s delay between each
-- name: Deploy and Patch UEs sequentially
-  vars:
-    ue_list:
-      - { name: "ueransim-ue1", path: "ue1" }
-      - { name: "ueransim-ue2", path: "ue2" }
-      - { name: "ueransim-ue3", path: "ue3" }
+- name: Sequential deployment of UEs
+  # We use the list of UEs defined in your variables to be dynamic
   include_tasks: sequential_ue_deploy.yml
-  loop: "{{ ue_list }}"
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"
   loop_control:
     loop_var: ue_item
+    index_var: ue_idx
