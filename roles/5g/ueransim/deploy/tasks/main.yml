@@ -1,15 +1,41 @@
 ---
 
 - name: Deploy UERANSIM gNodeB using Kustomize
-  ansible.builtin.command:
-    cmd: "kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}"
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ ueransim_root }}/ueransim-gnb"
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    apply: true
   environment:
-    KUBECONFIG: "{{ kubeconfig | default(omit) }}"
+    KUSTOMIZE_PLUGIN_HOME: "/tmp"
   register: gnb_apply
-  changed_when: "'configured' in gnb_apply.stdout or 'created' in gnb_apply.stdout"
-  failed_when: gnb_apply.rc != 0 and "'configured' not in gnb_apply.stdout and 'created' not in gnb_apply.stdout"
+  ignore_errors: false
+  vars:
+    gnb_patch: |
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ran_node_name }}"
+  loop: []
 
-- name: Wait for UERANSIM gNB pod to be Running
+# post-processing patch via kubernetes.core.k8s
+- name: Patch gNB Deployment to run on ran_node
+  kubernetes.core.k8s:
+    state: patched
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ueransim-gnb
+        namespace: "{{ ran_ns | default('open5gs') }}"
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ran_node_name }}"
+
+- name: Wait for UERANSIM gNB pod to be ready
   community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
@@ -21,15 +47,31 @@
   delay: 5
 
 - name: Deploy UERANSIM UEs using Kustomize
-  ansible.builtin.command:
-    cmd: "kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}"
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ ueransim_root }}/ueransim-ue"
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    apply: true
   environment:
-    KUBECONFIG: "{{ kubeconfig | default(omit) }}"
+    KUSTOMIZE_PLUGIN_HOME: "/tmp"
   register: ue_apply
-  changed_when: "'configured' in ue_apply.stdout or 'created' in ue_apply.stdout"
-  failed_when: ue_apply.rc != 0 and "'configured' not in ue_apply.stdout and 'created' not in ue_apply.stdout"
+  ignore_errors: false
 
-- name: Wait for UERANSIM UE pods to be Running
+- name: Patch UEs to run on ran_node
+  kubernetes.core.k8s:
+    state: patched
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        namespace: "{{ ran_ns | default('open5gs') }}"
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ran_node_name }}"
+
+- name: Wait for UERANSIM UE pods to be running
   community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
