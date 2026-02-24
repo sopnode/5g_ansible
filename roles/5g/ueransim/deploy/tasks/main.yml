@@ -1,13 +1,13 @@
 ---
-- name: Remove existing UERANSIM UEs for session cleanup
+- name: Apply UERANSIM UE base configuration (Kustomize)
   ansible.builtin.shell: >
-    kubectl delete -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }} --ignore-not-found=true
+    kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
-- name: Deploy UERANSIM gNodeB
+- name: Ensure all UEs are scaled down for sequential start
   ansible.builtin.shell: >
-    kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}
+    kubectl scale deployment -l component=ue --replicas=0 -n {{ ran_ns | default('open5gs') }}
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
@@ -22,14 +22,14 @@
   retries: 20
   delay: 5
 
-- name: Delay for gNB stability (NGAP/SCTP)
+- name: Stability delay for gNB (10s)
   ansible.builtin.pause:
     seconds: 10
 
 - name: Sequential deployment of UEs
-  # We use the list of UEs defined in your variables to be dynamic
   include_tasks: sequential_ue_deploy.yml
   loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"
   loop_control:
     loop_var: ue_item
     index_var: ue_idx
+    label: "Activating {{ ue_item.key }} as ueransim-ue{{ ue_idx + 1 }}"
