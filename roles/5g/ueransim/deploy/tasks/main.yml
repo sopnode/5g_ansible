@@ -1,26 +1,23 @@
 ---
-- name: Apply UERANSIM UE base configuration (Kustomize)
-  ansible.builtin.shell: >
+- name: Apply UERANSIM gNB and UE base configurations
+  ansible.builtin.shell: |
+    kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}
     kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
-- name: Ensure all UEs are scaled down for sequential start
+- name: Force all UEs to 0 replicas for sequential start
   ansible.builtin.shell: >
-    kubectl scale deployment -l component=ue --replicas=0 -n {{ ran_ns | default('open5gs') }}
+    kubectl scale deployment -n {{ ran_ns | default('open5gs') }} -l app=ueransim-ue --replicas=0
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
+  failed_when: false # Ignore if no deployments match yet
 
-- name: Wait for gNB pod to be Running
-  community.kubernetes.k8s_info:
-    kind: Pod
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    label_selectors:
-      - "component=gnb"
-  register: gnb_pods
-  until: gnb_pods.resources | selectattr('status.phase','equalto','Running') | list | length > 0
-  retries: 20
-  delay: 5
+- name: Wait for gNB pod to be ready
+  ansible.builtin.shell: >
+    kubectl wait --for=condition=Ready pod -l app=ueransim-gnb -n {{ ran_ns | default('open5gs') }} --timeout=60s
+  environment:
+    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
 - name: Stability delay for gNB (10s)
   ansible.builtin.pause:
@@ -32,4 +29,3 @@
   loop_control:
     loop_var: ue_item
     index_var: ue_idx
-    label: "Activating {{ ue_item.key }} as ueransim-ue{{ ue_idx + 1 }}"

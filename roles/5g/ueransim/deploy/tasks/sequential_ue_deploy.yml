@@ -1,25 +1,11 @@
 ---
-- name: "Scale up Deployment ueransim-ue{{ ue_idx + 1 }}"
-  ansible.builtin.shell: >
+- name: "Activate ueransim-ue{{ ue_idx + 1 }}"
+  ansible.builtin.shell: |
     kubectl scale deployment "ueransim-ue{{ ue_idx + 1 }}" --replicas=1 -n {{ ran_ns | default('open5gs') }}
+    kubectl wait --for=condition=Ready pod -l app=ueransim-ue{{ ue_idx + 1 }} -n {{ ran_ns | default('open5gs') }} --timeout=30s
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
-- name: "Patch ueransim-ue{{ ue_idx + 1 }} to target node"
-  kubernetes.core.k8s:
-    state: patched
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: "ueransim-ue{{ ue_idx + 1 }}"
-        namespace: "{{ ran_ns | default('open5gs') }}"
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ran_node_name }}"
-
-- name: "Delay before next UE activation (5s)"
+- name: "Delay before next UE (5s)"
   ansible.builtin.pause:
     seconds: 5
