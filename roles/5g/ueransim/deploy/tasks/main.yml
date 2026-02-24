@@ -33,13 +33,15 @@
   retries: 20
   delay: 5
 
-- name: Deploy UERANSIM UEs using kubectl Kustomize
+- name: Deploy UERANSIM UEs using kubectl Kustomize after gNB is ready
   ansible.builtin.shell: >
     kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
   register: ue_apply
   ignore_errors: false
+  # this ensures UEs are deployed only after gNB is up
+  when: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
 
 - name: Patch UEs to run on ran_node
   kubernetes.core.k8s:
@@ -65,4 +67,3 @@
   until: ue_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length >= 3
   retries: 30
   delay: 5
-
