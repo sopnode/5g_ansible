@@ -82,9 +82,9 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Hard-fix UERANSIM configurations using sed (Dynamic)
+- name: Force update UERANSIM configurations (Full Reset)
   ansible.builtin.shell: |
-    sed -i 's/sd: 0xFFFFFF/sd: {{ curr_sd }}/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+    sed -i 's/sd: .*/sd: {{ curr_sd }}/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
     sed -i 's/apn: .*/apn: "{{ curr_slice.dnn }}"/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
   vars:
     curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
@@ -100,7 +100,7 @@
     "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue-deployment.yaml"
   loop: [1, 2, 3]
 
-- name: Final YAML formatting (Remove quotes for UERANSIM compatibility)
+- name: Final YAML formatting
   ansible.builtin.replace:
     path: "{{ item.0 }}"
     regexp: '{{ item.1.regexp }}'
@@ -113,10 +113,4 @@
     - - { regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?', replace: 'sd: \1' }
       - { regexp: 'sst:\s*["'']?([0-9]+)["'']?', replace: 'sst: \1' }
       - { regexp: 'supi:\s*["'']?(imsi-[0-9]+)["'']?', replace: 'supi: \1' }
-    
-# To prevent transcient UE pods start at beginning
-- name: Set default replicas to 0 in deployment files
-  ansible.builtin.shell: >
-    {{ yq_bin_path }} eval -i '.spec.replicas = 0' 
-    "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue-deployment.yaml"
-  loop: [1, 2, 3]
+
