@@ -49,6 +49,10 @@
           matchLabels:
             app: ueransim
             component: gnb
+          annotations:
+            k8s.v1.cni.cncf.io/networks: '[
+              { "name": "n3network", "interface": "n3", "ips": [ "10.10.3.231/24" ] }
+            ]'
         template:
           metadata:
             labels:
