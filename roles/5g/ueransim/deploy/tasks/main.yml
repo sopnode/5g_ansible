@@ -1,13 +1,11 @@
+# roles/5g/ueransim/deploy/tasks/main.yml
 ---
-- name: Deploy UERANSIM gNodeB
-  kubernetes.core.k8s:
-    state: present
-    src: "{{ ueransim_root }}/ueransim-gnb"
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    apply: true
-    kustomize: true
+- name: Deploy UERANSIM gNodeB using kustomize
+  ansible.builtin.command:
+    cmd: "kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}"
+  register: gnb_apply
   environment:
-    KUSTOMIZE_PLUGIN_HOME: "/tmp"
+    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
   ignore_errors: false
 
 - name: Wait for UERANSIM gNB pod to be ready
@@ -21,15 +19,12 @@
   retries: 20
   delay: 5
 
-- name: Deploy UERANSIM UEs
-  kubernetes.core.k8s:
-    state: present
-    src: "{{ ueransim_root }}/ueransim-ue"
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    apply: true
-    kustomize: true
+- name: Deploy UERANSIM UEs using kustomize
+  ansible.builtin.command:
+    cmd: "kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}"
+  register: ue_apply
   environment:
-    KUSTOMIZE_PLUGIN_HOME: "/tmp"
+    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
   ignore_errors: false
 
 - name: Wait for UERANSIM UE pods to be running
