@@ -84,10 +84,8 @@
 
 - name: Update UERANSIM (Safe Hex Conversion)
   ansible.builtin.shell: |
-    # 1. On récupère la valeur brute (ex: 100000 ou EMPTY)
     RAW_SD="{{ curr_slice.sd }}"
     
-    # 2. Logique de conversion interne sans toucher au profil
     if [ "$RAW_SD" == "EMPTY" ]; then
       FINAL_SD="0xFFFFFF"
     elif [[ "$RAW_SD" =~ ^[0-9A-Fa-f]+$ ]] && [[ "$RAW_SD" != 0x* ]]; then
@@ -96,7 +94,6 @@
       FINAL_SD="$RAW_SD"
     fi
 
-    # 3. Injection dans le fichier
     sed -i "s/sd: .*/sd: $FINAL_SD/g" "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
     sed -i 's/apn: .*/apn: "{{ curr_slice.dnn }}"/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
   vars:
@@ -108,7 +105,7 @@
 
 - name: Final Formatting (Cleanup)
   ansible.builtin.replace:
-    path: "{{ ueransim_root }}/ueransim-ue/ue{{ item.0 }}/ue{{ item.0 }}.yaml"
+    path: "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue{{ item }}.yaml"
     regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?'
     replace: 'sd: \1'
   loop: [1, 2, 3]
