@@ -82,7 +82,7 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Update UERANSIM (Fix SUPI, SD with 0x, and APN)
+- name: Fix UERANSIM (Global SD replace)
   ansible.builtin.shell: |
     RAW_SD="{{ curr_slice.sd }}"
     if [ "$RAW_SD" == "EMPTY" ]; then
@@ -92,30 +92,21 @@
     else
       FINAL_SD="$RAW_SD"
     fi
-
-    sed -i "s/^supi: .*/supi: imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}/g" "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
-    sed -i "s/sd: .*/sd: $FINAL_SD/g" "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
-    sed -i 's/apn: .*/apn: "{{ curr_slice.dnn }}"/g' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
+    
+    FILE_PATH="{{ ueransim_root }}/ueransim-ue/ue{{ ue_num }}/ue{{ ue_num }}.yaml"
+    
+    # Le /g à la fin du sed pour SD est CRUCIAL ici
+    sed -i "s/^supi: .*/supi: imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}/g" "$FILE_PATH"
+    sed -i "s/sd: .*/sd: $FINAL_SD/g" "$FILE_PATH"
+    sed -i "s/apn: .*/apn: '{{ curr_slice.dnn }}'/g" "$FILE_PATH"
+    
+    # Nettoyage et remise au propre des quotes APN
+    sed -i "s/['\"]//g" "$FILE_PATH"
+    sed -i "s/apn: \(.*\)/apn: '\1'/g" "$FILE_PATH"
   vars:
     curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
-    loop_idx: "{{ loop_item_index }}"
+    ue_num: "{{ '1' if item.key == 'UE18' else '2' if item.key == 'UE19' else '3' }}"
   loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"
-  loop_control:
-    index_var: loop_item_index
-
-- name: Cleanup SD quotes
-  ansible.builtin.replace:
-    path: "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue{{ item }}.yaml"
-    regexp: 'sd:\s*["'']?([0-9A-Fa-fXx]+)["'']?'
-    replace: 'sd: \1'
-  loop: [1, 2, 3]
-
-- name: Cleanup SUPI quotes
-  ansible.builtin.replace:
-    path: "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue{{ item }}.yaml"
-    regexp: 'supi:\s*["'']?(imsi-[0-9]+)["'']?'
-    replace: 'supi: \1'
-  loop: [1, 2, 3]
 
 - name: Replicas to 0
   ansible.builtin.shell: >
