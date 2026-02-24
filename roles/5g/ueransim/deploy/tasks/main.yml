@@ -22,26 +22,23 @@
             nodeSelector:
               kubernetes.io/hostname: "{{ ran_node_name }}"
 
-- name: Wait for UERANSIM gNB pod to be ready
+- name: Wait for gNB pod to be Running
   community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
     label_selectors:
       - "component=gnb"
   register: gnb_pods
-  until: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
+  until: gnb_pods.resources | selectattr('status.phase','equalto','Running') | list | length > 0
   retries: 40
   delay: 5
 
-- name: Verify that gNB service has active endpoints before deploying UEs
+- name: Check gNB endpoints exist
   ansible.builtin.shell: |
-    endpoints=$(kubectl get endpoints gnb-service -n {{ ran_ns | default('open5gs') }} \
-      -o jsonpath='{.subsets[0].addresses[*].ip}' 2>/dev/null)
+    endpoints=$(kubectl get endpoints gnb-service -n {{ ran_ns | default('open5gs') }} -o jsonpath='{.subsets[0].addresses[*].ip}' 2>/dev/null)
     if [ -z "$endpoints" ]; then
       echo "ERROR: gNB service has no ready endpoints"
       exit 1
-    else
-      echo "gNB endpoints ready: $endpoints"
     fi
   register: gnb_check
   changed_when: false
@@ -68,13 +65,13 @@
             nodeSelector:
               kubernetes.io/hostname: "{{ ran_node_name }}"
 
-- name: Wait for UERANSIM UE pods to be running
+- name: Wait for UE pods to be Running
   community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
     label_selectors:
       - "component=ue"
   register: ue_pods
-  until: ue_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length >= 3
+  until: ue_pods.resources | selectattr('status.phase','equalto','Running') | list | length >= 3
   retries: 60
   delay: 5
