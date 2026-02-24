@@ -1,40 +1,44 @@
 ---
-- name: Deploy gNB using kustomize on ran_node
-  ansible.builtin.command: >
-    kubectl apply -k {{ ueransim_root }}/ueransim-gnb
-    -n {{ ran_ns | default('open5gs') }}
-  environment:
-    KUBE_NODE_SELECTOR: "kubernetes.io/hostname={{ ran_node_name }}"
-  register: gnb_apply
-  changed_when: "'configured' in gnb_apply.stdout or 'created' in gnb_apply.stdout"
+# roles/5g/ueransim/deploy/tasks/main.yml
 
-- name: Wait for gNB pod to be ready
+- name: Deploy UERANSIM gNodeB
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ ueransim_root }}/ueransim-gnb"
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    apply: true
+  environment:
+    KUSTOMIZE_PLUGIN_HOME: "/tmp"  # facultatif, si kustomize utilise des plugins
+  register: gnb_apply
+  ignore_errors: false
+
+- name: Wait for UERANSIM gNB pod to be ready
   community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
     label_selectors:
       - "component=gnb"
   register: gnb_pods
-  retries: 12
-  delay: 5
   until: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
+  retries: 20
+  delay: 5
 
-- name: Deploy UEs using kustomize on ran_node
-  ansible.builtin.command: >
-    kubectl apply -k {{ ueransim_root }}/ueransim-ue
-    -n {{ ran_ns | default('open5gs') }}
-  environment:
-    KUBE_NODE_SELECTOR: "kubernetes.io/hostname={{ ran_node_name }}"
+- name: Deploy UERANSIM UEs
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ ueransim_root }}/ueransim-ue"
+    namespace: "{{ ran_ns | default('open5gs') }}"
+    apply: true
   register: ue_apply
-  changed_when: "'configured' in ue_apply.stdout or 'created' in ue_apply.stdout"
+  ignore_errors: false
 
-- name: Wait for UE pods to be running
+- name: Wait for UERANSIM UE pods to be running
   community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
     label_selectors:
       - "component=ue"
   register: ue_pods
-  retries: 12
+  until: ue_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length >= 3
+  retries: 30
   delay: 5
-  until: ue_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length == 3
