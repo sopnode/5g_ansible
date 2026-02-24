@@ -40,7 +40,7 @@
     until: 
       - pod_initial.resources | length > 0
       - (pod_initial.resources[0].status.containerStatuses | default([{'ready':false}]) | selectattr('name', 'equalto', 'gnb') | first).ready | bool
-    retries: 15
+    retries: 3
     delay: 5
     ignore_errors: yes
     when: helm_result is succeeded
