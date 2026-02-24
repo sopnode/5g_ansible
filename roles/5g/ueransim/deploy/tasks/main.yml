@@ -1,14 +1,15 @@
-# roles/5g/ueransim/deploy/tasks/main.yml
 ---
-- name: Deploy UERANSIM gNodeB using kustomize
+
+- name: Deploy UERANSIM gNodeB using Kustomize
   ansible.builtin.command:
     cmd: "kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}"
-  register: gnb_apply
   environment:
-    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
-  ignore_errors: false
+    KUBECONFIG: "{{ kubeconfig | default(omit) }}"
+  register: gnb_apply
+  changed_when: "'configured' in gnb_apply.stdout or 'created' in gnb_apply.stdout"
+  failed_when: gnb_apply.rc != 0 and "'configured' not in gnb_apply.stdout and 'created' not in gnb_apply.stdout"
 
-- name: Wait for UERANSIM gNB pod to be ready
+- name: Wait for UERANSIM gNB pod to be Running
   community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
@@ -19,15 +20,16 @@
   retries: 20
   delay: 5
 
-- name: Deploy UERANSIM UEs using kustomize
+- name: Deploy UERANSIM UEs using Kustomize
   ansible.builtin.command:
     cmd: "kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}"
-  register: ue_apply
   environment:
-    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
-  ignore_errors: false
+    KUBECONFIG: "{{ kubeconfig | default(omit) }}"
+  register: ue_apply
+  changed_when: "'configured' in ue_apply.stdout or 'created' in ue_apply.stdout"
+  failed_when: ue_apply.rc != 0 and "'configured' not in ue_apply.stdout and 'created' not in ue_apply.stdout"
 
-- name: Wait for UERANSIM UE pods to be running
+- name: Wait for UERANSIM UE pods to be Running
   community.kubernetes.k8s_info:
     kind: Pod
     namespace: "{{ ran_ns | default('open5gs') }}"
