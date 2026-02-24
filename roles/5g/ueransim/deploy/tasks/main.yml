@@ -33,13 +33,18 @@
   retries: 40
   delay: 5
 
-- name: Ensure gNB endpoints are available before deploying UEs
-  ansible.builtin.wait_for:
-    host: "{{ gnb_service_ip | default('gnb-service.' ~ (ran_ns | default('open5gs')) ) }}"
-    port: 4997
-    state: started
-    timeout: 60
-  when: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
+- name: Verify that gNB service has active endpoints before deploying UEs
+  ansible.builtin.shell: |
+    endpoints=$(kubectl get endpoints gnb-service -n {{ ran_ns | default('open5gs') }} \
+      -o jsonpath='{.subsets[0].addresses[*].ip}' 2>/dev/null)
+    if [ -z "$endpoints" ]; then
+      echo "ERROR: gNB service has no ready endpoints"
+      exit 1
+    else
+      echo "gNB endpoints ready: $endpoints"
+    fi
+  register: gnb_check
+  changed_when: false
 
 - name: Deploy UERANSIM UEs using kubectl Kustomize
   ansible.builtin.shell: >
@@ -48,7 +53,6 @@
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
   register: ue_apply
   ignore_errors: false
-  when: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
 
 - name: Patch UEs to run on ran_node
   kubernetes.core.k8s:
