@@ -1,14 +1,10 @@
 ---
-- name: Ensure gNB Deployment runs on ran_node
-  ansible.builtin.replace:
-    path: "{{ ueransim_root }}/ueransim-gnb/gnb-deployment.yaml"
-    regexp: '^( *)spec:$'
-    replace: '\1spec:\n\1  template:\n\1    spec:\n\1      nodeSelector:\n\1        kubernetes.io/hostname: "{{ ran_node_name }}"'
-
-- name: Deploy gNB using kustomize
+- name: Deploy gNB using kustomize on ran_node
   ansible.builtin.command: >
     kubectl apply -k {{ ueransim_root }}/ueransim-gnb
     -n {{ ran_ns | default('open5gs') }}
+  environment:
+    KUBE_NODE_SELECTOR: "kubernetes.io/hostname={{ ran_node_name }}"
   register: gnb_apply
   changed_when: "'configured' in gnb_apply.stdout or 'created' in gnb_apply.stdout"
 
@@ -19,31 +15,16 @@
     label_selectors:
       - "component=gnb"
   register: gnb_pods
-
-- name: Ensure gNB pod is running
-  ansible.builtin.wait_for:
-    path: "/tmp/dummy"  # dummy path since we use pod check loop
-    state: present
-    timeout: 60
-  until: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
   retries: 12
   delay: 5
+  until: gnb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
 
-# --- UE Deployments ---
-- name: Ensure UE Deployments run on ran_node
-  ansible.builtin.replace:
-    path: "{{ item }}/ue-deployment.yaml"
-    regexp: '^( *)spec:$'
-    replace: '\1spec:\n\1  template:\n\1    spec:\n\1      nodeSelector:\n\1        kubernetes.io/hostname: "{{ ran_node_name }}"'
-  loop:
-    - "{{ ueransim_root }}/ueransim-ue/ue1"
-    - "{{ ueransim_root }}/ueransim-ue/ue2"
-    - "{{ ueransim_root }}/ueransim-ue/ue3"
-
-- name: Deploy UEs using kustomize
+- name: Deploy UEs using kustomize on ran_node
   ansible.builtin.command: >
     kubectl apply -k {{ ueransim_root }}/ueransim-ue
     -n {{ ran_ns | default('open5gs') }}
+  environment:
+    KUBE_NODE_SELECTOR: "kubernetes.io/hostname={{ ran_node_name }}"
   register: ue_apply
   changed_when: "'configured' in ue_apply.stdout or 'created' in ue_apply.stdout"
 
@@ -54,12 +35,6 @@
     label_selectors:
       - "component=ue"
   register: ue_pods
-
-- name: Ensure all UE pods are running
-  ansible.builtin.wait_for:
-    path: "/tmp/dummy"
-    state: present
-    timeout: 60
-  until: ue_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length == 3
   retries: 12
   delay: 5
+  until: ue_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length == 3
