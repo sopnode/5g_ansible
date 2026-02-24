@@ -17,7 +17,6 @@
           spec:
             nodeSelector:
               kubernetes.io/hostname: "{{ ran_node_name }}"
-  loop: []
 
 # post-processing patch via kubernetes.core.k8s
 - name: Patch gNB Deployment to run on ran_node
