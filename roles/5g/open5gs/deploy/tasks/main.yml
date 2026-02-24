@@ -170,14 +170,10 @@
   when: item not in (nad_info.resources | map(attribute='metadata.name') | list)
   loop: "{{ nad_list }}"
 
-# --- ESSENTIAL FIX: Prepare OVS infrastructure BEFORE applying NFs ---
-- name: Bring OVS bridges up if single-node Open5GS
+- name: Bring OVS bridges up and clean stale ports
   ansible.builtin.shell: |
-    ip link set dev n2br up
-    ip link set dev n3br up
-    ip link set dev n4br up
-    # Clean up stale veth ports to avoid OVS resource exhaustion
     for br in n2br n3br n4br; do
+      ip link set dev $br up
       for port in $(ovs-vsctl list-ports $br | grep veth); do
          ovs-vsctl del-port $br $port || true
       done
@@ -185,16 +181,16 @@
   become: true
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
-- name: Assign Gateway IPs to OVS bridges for Single-Node SCTP bind
+- name: Assign Gateway IPs to OVS bridges
   ansible.builtin.shell: |
-    # Assign IP .254 of each subnet to the bridge to simulate active link
     ip addr add 10.10.2.254/24 dev n2br || true
     ip addr add 10.10.3.254/24 dev n3br || true
     ip addr add 10.10.4.254/24 dev n4br || true
   become: true
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
-- name: Wait for OVS resource to be registered on the node
+# --- NEW: Wait for the Operator to actually register the OVS capacity on the node ---
+- name: Wait for OVS resource registration on Node
   ansible.builtin.shell: |
     kubectl get node {{ inventory_hostname }} -o json | grep -q "ovs-cni.network.kubevirt.io/n3br"
   register: ovs_res_check
@@ -224,7 +220,6 @@
   loop_control:
     label: "{{ item }}"
 
-# --- DEEP CHECK: Verify Multus actually created the n3 device ---
 - name: Verify Multus N3 interface inside AMF pod
   ansible.builtin.shell: |
     AMF_POD=$(kubectl get pods -n {{ open5gs_ns }} -l nf=amf -o jsonpath='{.items[0].metadata.name}')
@@ -299,3 +294,4 @@
 - name: Check Open5GS deployment
   ansible.builtin.include_role:
     name: 5g/open5gs/check_all
+ 
