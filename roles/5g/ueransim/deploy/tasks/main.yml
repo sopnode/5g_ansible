@@ -1,6 +1,5 @@
----
 # roles/5g/ueransim/deploy/tasks/main.yml
-
+---
 - name: Deploy UERANSIM gNodeB
   kubernetes.core.k8s:
     state: present
@@ -9,7 +8,6 @@
     apply: true
   environment:
     KUSTOMIZE_PLUGIN_HOME: "/tmp"  # facultatif, si kustomize utilise des plugins
-  register: gnb_apply
   ignore_errors: false
 
 - name: Wait for UERANSIM gNB pod to be ready
@@ -29,7 +27,8 @@
     src: "{{ ueransim_root }}/ueransim-ue"
     namespace: "{{ ran_ns | default('open5gs') }}"
     apply: true
-  register: ue_apply
+  environment:
+    KUSTOMIZE_PLUGIN_HOME: "/tmp"
   ignore_errors: false
 
 - name: Wait for UERANSIM UE pods to be running

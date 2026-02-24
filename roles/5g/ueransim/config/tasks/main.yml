@@ -114,7 +114,19 @@
       - { regexp: 'sst:\s*["+'']?([0-9]+)["+'']?', replace: 'sst: \1' }
       - { regexp: 'supi:\s*["+'']?(imsi-[0-9]+)["+'']?', replace: 'supi: \1' }
 
-      
+- name: Set nodeSelector in gNB deployment
+  ansible.builtin.replace:
+    path: "{{ ueransim_root }}/ueransim-gnb/gnb-deployment.yaml"
+    regexp: '(^\s*)#?nodeSelector:.*'
+    replace: '\1nodeSelector:\n\1  kubernetes.io/hostname: "{{ ran_node_name }}"'
+
+- name: Set nodeSelector in UE deployments
+  ansible.builtin.replace:
+    path: "{{ ueransim_root }}/ueransim-ue/ue{{ item }}/ue-deployment.yaml"
+    regexp: '(^\s*)#?nodeSelector:.*'
+    replace: '\1nodeSelector:\n\1  kubernetes.io/hostname: "{{ ran_node_name }}"'
+  loop: [1,2,3]
+
 - name: Final check of generated configs
   ansible.builtin.shell: "grep -E 'sst:|sd:|supi:' {{ ueransim_root }}/ueransim-ue/ue1/ue1.yaml"
   register: check_ue
