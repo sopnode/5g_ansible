@@ -1,9 +1,25 @@
 ---
-- name: Deploy UERANSIM gNB
-  include_tasks: deploy_gnb.yml
+- name: Deploy UERANSIM gNB using local kustomization
+  ansible.builtin.shell: >
+    kubectl apply -k {{ ueransim_root }}/ueransim-gnb
+  args:
+    chdir: "{{ ueransim_root }}/ueransim-gnb"
+  register: gnb_apply
+  changed_when: "'configured' in gnb_apply.stdout or 'created' in gnb_apply.stdout"
 
-- name: Deploy UERANSIM UEs
-  include_tasks: deploy_each_ue.yml
-  loop: "{{ range(0, 3) | list }}"
+- debug:
+    msg: "{{ gnb_apply.stdout }}"
+
+- name: Deploy all UERANSIM UEs using local kustomizations
+  ansible.builtin.shell: >
+    kubectl apply -k {{ ueransim_root }}/ueransim-ue/ue{{ item }}
+  args:
+    chdir: "{{ ueransim_root }}/ueransim-ue/ue{{ item }}"
+  loop: "{{ range(1,4) | list }}"
   loop_control:
-    index_var: ue_idx
+    label: "ue{{ item }}"
+  register: ue_apply
+  changed_when: "'configured' in ue_apply.stdout or 'created' in ue_apply.stdout"
+
+- debug:
+    msg: "{{ ue_apply.results | map(attribute='stdout') | list }}"
