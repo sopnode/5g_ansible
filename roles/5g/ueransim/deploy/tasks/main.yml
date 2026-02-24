@@ -1,11 +1,16 @@
 ---
+# 1. PRE-CLEANUP: Force remove existing UEs to clear stale sessions
+- name: Remove existing UERANSIM UEs for session cleanup
+  ansible.builtin.shell: >
+    kubectl delete -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }} --ignore-not-found=true
+  environment:
+    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
+
 - name: Deploy UERANSIM gNodeB using kubectl Kustomize
   ansible.builtin.shell: >
     kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
-  register: gnb_apply
-  ignore_errors: false
 
 - name: Patch gNB Deployment to run on ran_node
   kubernetes.core.k8s:
@@ -33,44 +38,19 @@
   retries: 20
   delay: 5
 
-- name: Deploy UERANSIM UEs using kubectl Kustomize
-  ansible.builtin.shell: >
-    kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}
-  environment:
-    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
-  register: ue_apply
-  ignore_errors: false
+# 2. DELAY: Wait 10s for gNB NGAP/SCTP stability with AMF
+- name: Wait 10 seconds for gNB stability
+  ansible.builtin.pause:
+    seconds: 10
 
-- name: Patch each UE Deployment to run on ran_node
+# 3. SEQUENTIAL DEPLOYMENT: UEs with 5s delay between each
+- name: Deploy and Patch UEs sequentially
   vars:
-    ue_deployments:
-      - ueransim-ue1
-      - ueransim-ue2
-      - ueransim-ue3
-  loop: "{{ ue_deployments }}"
+    ue_list:
+      - { name: "ueransim-ue1", path: "ue1" }
+      - { name: "ueransim-ue2", path: "ue2" }
+      - { name: "ueransim-ue3", path: "ue3" }
+  include_tasks: sequential_ue_deploy.yml
+  loop: "{{ ue_list }}"
   loop_control:
-    loop_var: ue_name
-  kubernetes.core.k8s:
-    state: patched
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: "{{ ue_name }}"
-        namespace: "{{ ran_ns | default('open5gs') }}"
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ran_node_name }}"
-
-- name: Wait for UE pods to be Running
-  community.kubernetes.k8s_info:
-    kind: Pod
-    namespace: "{{ ran_ns | default('open5gs') }}"
-    label_selectors:
-      - "component=ue"
-  register: ue_pods
-  until: ue_pods.resources | selectattr('status.phase','equalto','Running') | list | length >= 3
-  retries: 60
-  delay: 5
+    loop_var: ue_item

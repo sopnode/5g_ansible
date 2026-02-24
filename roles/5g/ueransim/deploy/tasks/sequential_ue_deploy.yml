@@ -1,0 +1,25 @@
+---
+- name: "Deploy {{ ue_item.name }}"
+  ansible.builtin.shell: >
+    kubectl apply -f {{ ueransim_root }}/ueransim-ue/{{ ue_item.path }}/{{ ue_item.path }}-deployment.yaml -n {{ ran_ns | default('open5gs') }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
+
+- name: "Patch {{ ue_item.name }} to ran_node"
+  kubernetes.core.k8s:
+    state: patched
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: "{{ ue_item.name }}"
+        namespace: "{{ ran_ns | default('open5gs') }}"
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ran_node_name }}"
+
+- name: "Wait 5 seconds before next UE"
+  ansible.builtin.pause:
+    seconds: 5
