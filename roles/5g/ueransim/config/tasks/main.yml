@@ -82,19 +82,17 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Update UERANSIM UEs configurations
+- name: Update UERANSIM UEs configurations dynamically
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
-      .mcc = "{{ fiveg.plmn.mcc }}" |
-      .mnc = "{{ fiveg.plmn.mnc }}" |
-      .supi = "imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}" |
       .configured-nssai = [{"sst": {{ curr_slice.sst | int }}, "sd": {{ curr_sd }} }] |
       .default-nssai = [{"sst": {{ curr_slice.sst | int }}, "sd": {{ curr_sd }} }] |
       .sessions[0].slice = {"sst": {{ curr_slice.sst | int }}, "sd": {{ curr_sd }} } |
       .sessions[0].apn = "{{ curr_slice.dnn }}"
     ' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
   vars:
-    curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
+    ue_slice_name: "{{ item.value.slice }}"
+    curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', ue_slice_name) | first }}"
     curr_sd: "{{ lookup('template', 'slice_sd.j2', vars=dict(sl_item=curr_slice)) | trim }}"
     loop_idx: "{{ loop_item_index }}"
   loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"

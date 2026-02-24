@@ -1,32 +1,27 @@
 ---
-- name: Apply UERANSIM gNB and UE base configurations
+- name: Apply UERANSIM base configurations
   ansible.builtin.shell: |
     kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}
     kubectl apply -k {{ ueransim_root }}/ueransim-ue -n {{ ran_ns | default('open5gs') }}
   environment:
     KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
-- name: Force scale down UEs for sequential start
+- name: Force scale down UEs
   ansible.builtin.shell: >
     kubectl scale deployment -n {{ ran_ns | default('open5gs') }} -l component=ue --replicas=0
-  environment:
-    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
   failed_when: false
 
-- name: Wait for gNB pod to be ready
+- name: Wait for gNB
   ansible.builtin.shell: >
     kubectl wait --for=condition=Ready pod -l component=gnb -n {{ ran_ns | default('open5gs') }} --timeout=60s
-  environment:
-    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
 
-- name: Stability delay for gNB (10s)
+- name: Delay for gNB stability
   ansible.builtin.pause:
     seconds: 10
 
-- name: Sequential deployment of UEs
+- name: Sequential UE deployment
   include_tasks: sequential_ue_deploy.yml
   loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"
   loop_control:
     loop_var: ue_item
     index_var: ue_idx
-    label: "Scaling up ueransim-ue{{ ue_idx + 1 }}"
