@@ -126,7 +126,6 @@
             name: cluster
           spec:
             ovs: {}
-
     - name: Apply NetworkAddonsConfig
       ansible.builtin.shell: |
         kubectl apply -f /tmp/netaddonsconf.yaml
@@ -157,7 +156,7 @@
     executable: /bin/bash
   register: patch_nad
   failed_when: false
-  changed_when: "'Skipping' not in patch_nad.stdout"
+  changed_when: false
 
 - name: Verify required NADs exist
   kubernetes.core.k8s_info:
@@ -171,13 +170,13 @@
   when: item not in (nad_info.resources | map(attribute='metadata.name') | list)
   loop: "{{ nad_list }}"
 
-# --- FIXED: Prepare host bridges BEFORE applying NFs ---
+# --- ESSENTIAL FIX: Prepare OVS infrastructure BEFORE applying NFs ---
 - name: Bring OVS bridges up if single-node Open5GS
   ansible.builtin.shell: |
     ip link set dev n2br up
     ip link set dev n3br up
     ip link set dev n4br up
-    # Clean stale ports from OVS to avoid resource exhaustion
+    # Clean up stale veth ports to avoid OVS resource exhaustion
     for br in n2br n3br n4br; do
       for port in $(ovs-vsctl list-ports $br | grep veth); do
          ovs-vsctl del-port $br $port || true
@@ -215,7 +214,7 @@
   loop_control:
     label: "{{ item }}"
 
-# --- VERIFICATION: Ensure Multus actually created the n3 device ---
+# --- DEEP CHECK: Verify Multus actually created the n3 device ---
 - name: Verify Multus N3 interface inside AMF pod
   ansible.builtin.shell: |
     AMF_POD=$(kubectl get pods -n {{ open5gs_ns }} -l nf=amf -o jsonpath='{.items[0].metadata.name}')
@@ -276,4 +275,17 @@
 
 - name: Run Python scripts to generate and add subscribers
   ansible.builtin.shell: |
-    {{ repo_dest }}/venv/bin/python {{ repo
+    "{{ repo_dest }}/venv/bin/python" "{{ repo_dest }}/mongo-tools/generate-data-fiveg.py"
+    "{{ repo_dest }}/venv/bin/python" "{{ repo_dest }}/mongo-tools/add-subscribers.py"
+  args:
+    chdir: "{{ repo_dest }}"
+
+- name: Run add-admin-account.py
+  ansible.builtin.command: >
+    "{{ repo_dest }}/venv/bin/python" mongo-tools/add-admin-account.py
+  args:
+    chdir: "{{ repo_dest }}"
+
+- name: Check Open5GS deployment
+  ansible.builtin.include_role:
+    name: 5g/open5gs/check_all
