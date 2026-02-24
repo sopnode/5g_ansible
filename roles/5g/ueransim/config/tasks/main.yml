@@ -90,18 +90,19 @@
       .supi = "imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}" |
       .configured-nssai = {{ ueransim_slices | to_json }} |
       .default-nssai = [{{ ueransim_slices[idx | int] | to_json }}]
+      .sessions[0].slice = {{ ue_slice | to_json }}
     ' "{{ ueransim_root }}/ueransim-ue/ue{{ loop_idx + 1 }}/ue{{ loop_idx + 1 }}.yaml"
   vars:
-    idx: >-
-      {% set mapping = {} %}
-      {% for s in fiveg.slices %} {% set _ = mapping.update({s.name: loop.index0}) %} {% endfor %}
-      {{ mapping[item.value.slice] | default(0) }}
+    current_slice_profile: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
+    ue_slice:
+      sst: "{{ current_slice_profile.sst | int }}"
+      sd: "{{ lookup('template', 'slice_sd.j2', vars=dict(sl_item=current_slice_profile)) | trim }}"
     loop_idx: "{{ loop_item_index }}"
   loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | list }}"
   loop_control:
     index_var: loop_item_index
 
-- name: Remove ALL quotes for UERANSIM (Final Fix)
+- name: Remove ALL quotes for UERANSIM
   ansible.builtin.replace:
     path: "{{ item.0 }}"
     regexp: '{{ item.1.regexp }}'
