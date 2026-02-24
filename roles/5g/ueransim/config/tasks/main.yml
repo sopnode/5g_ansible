@@ -82,26 +82,54 @@
       .slices = {{ ueransim_slices | to_json }}
     ' "{{ ueransim_root }}/ueransim-gnb/config/open5gs-gnb.yaml"
 
-- name: Fix UERANSIM (Final Regex)
-  ansible.builtin.shell: |
-    RAW_SD="{{ curr_slice.sd }}"
-    if [ "$RAW_SD" == "EMPTY" ]; then
-      FINAL_SD="0xFFFFFF"
-    elif [[ "$RAW_SD" =~ ^[0-9A-Fa-f]+$ ]] && [[ "$RAW_SD" != 0x* ]]; then
-      FINAL_SD="0x$RAW_SD"
-    else
-      FINAL_SD="$RAW_SD"
-    fi
-    
-    FILE_PATH="{{ ueransim_root }}/ueransim-ue/ue{{ ue_num }}/ue{{ ue_num }}.yaml"
-    
-    sed -i "s/[[:space:]]*sd:.*/      sd: $FINAL_SD/g" "$FILE_PATH"
-    
-    sed -i "s/supi:.*/supi: imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}/g" "$FILE_PATH"
-    sed -i "s/apn:.*/    apn: '{{ curr_slice.dnn }}'/g" "$FILE_PATH"
-    
-    sed -i "s/['\"]//g" "$FILE_PATH"
-    sed -i "s/apn: \(.*\)/apn: '\1'/g" "$FILE_PATH"
+- name: Rewrite UERANSIM configs
+  ansible.builtin.copy:
+    dest: "{{ ueransim_root }}/ueransim-ue/ue{{ ue_num }}/ue{{ ue_num }}.yaml"
+    content: |
+      supi: imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ item.value.imsi_suffix }}
+      mcc: '{{ fiveg.plmn.mcc }}'
+      mnc: '{{ fiveg.plmn.mnc }}'
+      key: 'fec86ba6eb707ed08905757b1bb44b8f'
+      op: 'C42449363BBAD02B66D16BC975D77CC1'
+      opType: 'OPC'
+      amf: '8000'
+      imei: '356938035643803'
+      imeiSv: '4370816125816151'
+      gnbSearchList:
+        - gnb-service
+      uacAic:
+        mps: false
+        mcs: false
+      uacAcc:
+        normalClass: 0
+        class11: false
+        class12: false
+        class13: false
+        class14: false
+        class15: false
+      sessions:
+        - type: 'IPv4'
+          apn: '{{ curr_slice.dnn }}'
+          slice:
+            sst: 1
+            sd: {{ '0xFFFFFF' if curr_slice.sd == 'EMPTY' else ('0x' + curr_slice.sd if '0x' not in curr_slice.sd|string else curr_slice.sd) }}
+      configured-nssai:
+        - sst: 1
+          sd: {{ '0xFFFFFF' if curr_slice.sd == 'EMPTY' else ('0x' + curr_slice.sd if '0x' not in curr_slice.sd|string else curr_slice.sd) }}
+      default-nssai:
+        - sst: 1
+          sd: {{ '0xFFFFFF' if curr_slice.sd == 'EMPTY' else ('0x' + curr_slice.sd if '0x' not in curr_slice.sd|string else curr_slice.sd) }}
+      integrity:
+        IA1: true
+        IA2: true
+        IA3: true
+      ciphering:
+        EA1: true
+        EA2: true
+        EA3: true
+      integrityMaxRate:
+        uplink: 'full'
+        downlink: 'full'
   vars:
     curr_slice: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
     ue_num: "{{ '1' if item.key == 'UE18' else '2' if item.key == 'UE19' else '3' }}"
