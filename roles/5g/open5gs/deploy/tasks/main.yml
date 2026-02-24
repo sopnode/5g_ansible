@@ -194,6 +194,16 @@
   become: true
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
+- name: Wait for OVS resource to be registered on the node
+  ansible.builtin.shell: |
+    kubectl get node {{ inventory_hostname }} -o json | grep -q "ovs-cni.network.kubevirt.io/n3br"
+  register: ovs_res_check
+  until: ovs_res_check.rc == 0
+  retries: 20
+  delay: 5
+  changed_when: false
+  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+
 - name: Apply Open5GS NFs with Kustomize
   ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/{{ deployment_option }}" -n {{ open5gs_ns }}
 
