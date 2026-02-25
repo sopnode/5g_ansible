@@ -31,6 +31,18 @@
   ansible.builtin.debug:
     msg: "{{ ue_list }}"
 
+- name: Clean old ConfigMap for this UE release
+  when: rru == "rfsim"
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: ConfigMap
+    namespace: "{{ ran_ns }}"
+    name: "srsran-ue-{{ item.name }}-ue-config"
+    state: absent
+  loop: "{{ ue_list }}"
+  loop_control:
+    loop_var: item
+
 # Deploy each UE as a separate Helm release
 - name: Deploy each srsUE pod as separate Helm release
   when: rru == "rfsim"
