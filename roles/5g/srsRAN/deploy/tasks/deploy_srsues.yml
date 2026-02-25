@@ -3,47 +3,51 @@
 # Deploy srsRAN UEs (multi-pod, RFSIM only)
 # ------------------------------
 
-# Build the list of UEs to deploy from the 5G profile
-- name: Build UE list from 5G profile
-  set_fact:
-    ue_list:
-      - name: ue1
-        imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE18.imsi_suffix }}"
-        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE18.slice) | map(attribute='dnn') | first }}"
-        tx_port: 2100
-        rx_port: 2000
+# WARNING: This section is only used for RFSIM (simulation) mode.
+#          Real USRP UEs remain unchanged and use the tmux multi-UE pod logic.
 
-      - name: ue2
-        imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE19.imsi_suffix }}"
-        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE19.slice) | map(attribute='dnn') | first }}"
-        tx_port: 2200
-        rx_port: 2000
+- name: Deploy srsUE pods in RFSIM mode
+  when: rru == "rfsim"
+  block:
 
-      - name: ue3
-        imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE20.imsi_suffix }}"
-        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE20.slice) | map(attribute='dnn') | first }}"
-        tx_port: 2300
-        rx_port: 2000
+    # Build UE list from 5G profile (UE18/UE19/UE20)
+    - name: Build UE list from 5G profile
+      set_fact:
+        ue_list:
+          - name: ue1
+            imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE18.imsi_suffix }}"
+            dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE18.slice) | map(attribute='dnn') | first }}"
+            tx_port: 2100
 
-# Debug the list of UEs before deployment
-- name: Debug UE list
-  ansible.builtin.debug:
-    msg: "{{ ue_list }}"
+          - name: ue2
+            imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE19.imsi_suffix }}"
+            dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE19.slice) | map(attribute='dnn') | first }}"
+            tx_port: 2200
 
-# Deploy each UE as a separate Helm release / pod
-- name: Deploy each srsUE pod as separate Helm release
-  kubernetes.core.helm:
-    name: "srsue-{{ item.name }}"           # unique release name per UE
-    chart_ref: "{{ [repo_dest_abs, 'charts', 'srsue'] | path_join }}" # path to srsUE Helm chart
-    release_namespace: "{{ ran_ns }}"       # deployment namespace
-    state: present                          # ensure the release is installed
-    wait: true                              # wait for pod to be ready
-    values:                                 # specific values for this UE
-      imsi: "{{ item.imsi }}"               # IMSI from profile
-      k: "{{ fiveg.security.full_key }}"    # UE K key
-      opc: "{{ fiveg.security.opc }}"       # UE OPC
-      apn: "{{ item.dnn }}"                 # DNN slice
-      zmq:
-        tx_port: "{{ item.tx_port }}"       # unique TX port for this UE
-        rx_port: "{{ item.rx_port }}"       # RX port on gNB (shared across UEs)
-  loop: "{{ ue_list }}"                     # iterate over the 3 UEs
+          - name: ue3
+            imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE20.imsi_suffix }}"
+            dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE20.slice) | map(attribute='dnn') | first }}"
+            tx_port: 2300
+
+    # Debug UE list before deployment
+    - name: Debug UE list
+      ansible.builtin.debug:
+        msg: "{{ ue_list }}"
+
+    # Deploy each UE as a separate Helm release
+    - name: Deploy each srsUE pod as separate Helm release
+      kubernetes.core.helm:
+        name: "srsue-{{ item.name }}"           # unique release name per UE
+        chart_ref: "{{ [repo_dest_abs, 'charts', 'srsue'] | path_join }}" # path to srsUE Helm chart
+        release_namespace: "{{ ran_ns }}"       # deployment namespace
+        state: present                          # ensure release installed
+        wait: true                              # wait until pod is Ready
+        values:                                 # per-UE values
+          imsi: "{{ item.imsi }}"
+          k: "{{ fiveg.security.full_key }}"
+          opc: "{{ fiveg.security.opc }}"
+          apn: "{{ item.dnn }}"
+          zmq:
+            tx_port: "{{ item.tx_port }}"       # UE TX port (unique)
+            rx_port: 2000                        # gNB RX port (shared)
+      loop: "{{ ue_list }}"
