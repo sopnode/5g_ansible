@@ -1,5 +1,4 @@
 ---
-# roles/5g/srsRAN/config/tasks/apply_5g_profile.yaml
 
 - name: Check if yq is already installed
   ansible.builtin.stat:
@@ -89,7 +88,6 @@
     regexp: 'sst: "([0-9]+)"'
     replace: 'sst: \1'
 
-
 - name: Ensure values file has node constraints
   blockinfile:
     path: "{{ values_file }}"
@@ -99,60 +97,3 @@
       nodeSelector:
         kubernetes.io/hostname: "{{ ran_node_name }}"
       nodeName: {{ ran_node_name }}
-
-- name: Deploy srsRAN gNB using Helm
-  kubernetes.core.helm:
-    name: srsran-gnb
-    chart_ref: "{{ [repo_dest_abs, 'charts', 'srsran-gnb'] | path_join }}"
-    release_namespace: "{{ ran_ns }}"
-    values_files:
-      - "{{ values_file }}"
-    state: present
-    wait: True
-    atomic: True
-    timeout: 120s
-
-# ==========================================================
-# SRSUE MULTI-POD DEPLOYMENT (Simulation mode only)
-# ==========================================================
-# WARNING: srsue is 4G and not 5G. So, slicing is managed at the gNB
-#   and on the core network, not at the UE level.
-
-- name: Deploy srsUE pods in RFSIM mode
-  when: rru == "rfsim"
-  block:
-
-    - name: Build UE list from 5G profile (UE18/19/20)
-      set_fact:
-        ue_list:
-          - name: ue1
-            imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE18.imsi_suffix }}"
-            dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE18.slice) | map(attribute='dnn') | first }}"
-            tx_port: 2100
-
-          - name: ue2
-            imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE19.imsi_suffix }}"
-            dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE19.slice) | map(attribute='dnn') | first }}"
-            tx_port: 2200
-
-          - name: ue3
-            imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE20.imsi_suffix }}"
-            dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE20.slice) | map(attribute='dnn') | first }}"
-            tx_port: 2300
-
-    - name: Deploy each srsUE as separate Helm release
-      kubernetes.core.helm:
-        name: "srsue-{{ item.name }}"
-        chart_ref: "{{ [repo_dest_abs, 'charts', 'srsue'] | path_join }}"
-        release_namespace: "{{ ran_ns }}"
-        state: present
-        wait: true
-        values:
-          imsi: "{{ item.imsi }}"
-          k: "{{ fiveg.security.full_key }}"
-          opc: "{{ fiveg.security.opc }}"
-          apn: "{{ item.dnn }}"
-          zmq:
-            tx_port: "{{ item.tx_port }}"
-            rx_port: 2000
-      loop: "{{ ue_list }}"
