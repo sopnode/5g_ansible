@@ -128,17 +128,19 @@
           - name: ue1
             imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE18.imsi_suffix }}"
             dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE18.slice) | map(attribute='dnn') | first }}"
-            tx_port: 2100
-
+            # Chaque UE a son propre IP sur n3network. On commence à .232 (si gNB est .231)
+            ue_ip: "10.10.3.232"
+            tx_port: 2001
           - name: ue2
             imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE19.imsi_suffix }}"
             dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE19.slice) | map(attribute='dnn') | first }}"
-            tx_port: 2200
-
+            ue_ip: "10.10.3.233"
+            tx_port: 2001
           - name: ue3
             imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE20.imsi_suffix }}"
             dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE20.slice) | map(attribute='dnn') | first }}"
-            tx_port: 2300
+            ue_ip: "10.10.3.234"
+            tx_port: 2001
 
     - name: Deploy each srsUE as separate Helm release
       kubernetes.core.helm:
@@ -148,10 +150,15 @@
         state: present
         wait: true
         values:
+          # Identité
           imsi: "{{ item.imsi }}"
           k: "{{ fiveg.security.full_key }}"
           opc: "{{ fiveg.security.opc }}"
           apn: "{{ item.dnn }}"
+          # Réseau (Multus)
+          ueIp: "{{ item.ue_ip }}"
+          gnbIp: "10.10.3.231"
+          # Radio ZMQ
           zmq:
             tx_port: "{{ item.tx_port }}"
             rx_port: 2000
