@@ -90,14 +90,13 @@
 
 - name: Add ip route to target_server
   shell: |
-    kubectl exec -n {{ core_ns }} {{ item.metadata.name }} -- \
+    kubectl exec -n {{ core_ns }} {{ item.pod }} -- \
     ip route add {{ target_server }} via {{ item.ip.split('.')[:2] | join('.') }}.1.1 dev {{ tun_name }}
   loop: "{{ valid_ues }}"
   loop_control:
-    label: "Setting route to iperf server on {{ item.metadata.name }}"
+    label: "Setting route to iperf server on {{ item.pod }}"
   register: route_result
   failed_when: false
-
 
 - name: Show iperf uplink command
   debug:
