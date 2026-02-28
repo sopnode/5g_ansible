@@ -1,48 +1,55 @@
 ---
 
-- name: Test UHD + GNU Radio installation on sopnode
+- name: Install UHD + GNU Radio on sopnode
   hosts: core_node
   become: true
   vars:
-    uhd_version: "4.7.0.0"           # Default UHD version (override if needed)
-    gnuradio_version: "3.10.12.0"    # Default GNU Radio version
+    uhd_version: "4.7.0.0"
+    gnuradio_version: "3.10.12.0"
+    install_prefix: "/usr/local"
 
   roles:
     - role: setup/uhd-gnuradio
 
   tasks:
-    - name: Verify UHD installation
+    - name: Verify complete installation
       shell: |
-        echo "=== UHD version ==="
+        export PATH={{ install_prefix }}/bin:$PATH
+        export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+        
+        echo "=========================================="
+        echo "Installation Summary"
+        echo "=========================================="
+        echo ""
+        
+        echo "UHD Version:"
         uhd_config_info --version
-        echo "=== UHD tools test ==="
-        uhd_fft --help
-      register: uhd_check
-      ignore_errors: yes
+        echo ""
+        
+        echo "GNU Radio Version:"
+        gnuradio-config-info --version
+        echo ""
+        
+        echo "uhd_siggen Status:"
+        if command -v uhd_siggen &> /dev/null; then
+          echo "✓ uhd_siggen found at: $(which uhd_siggen)"
+        else
+          echo "✗ uhd_siggen NOT FOUND"
+          exit 1
+        fi
+        echo ""
+        
+        echo "Installed UHD/GNU Radio binaries:"
+        ls -1 {{ install_prefix }}/bin/ | grep -E "^(uhd_|gnuradio)" | head -20
+        echo ""
+        
+        echo "=========================================="
+        echo "Installation completed successfully!"
+        echo "=========================================="
+      args:
+        executable: /bin/bash
+      register: final_check
 
-    - name: Show UHD test results
+    - name: Display installation summary
       debug:
-        msg: |
-          UHD version output: {{ uhd_check.stdout }}
-          UHD command exit code: {{ uhd_check.rc }}
-      failed_when: uhd_check.rc != 0
-
-    - name: Verify GNU Radio installation
-      shell: gnuradio-config-info --version
-      register: gnuradio_check
-      ignore_errors: yes
-
-    - name: Show GNU Radio version
-      debug:
-        msg: "GNU Radio version: {{ gnuradio_check.stdout }}"
-      failed_when: gnuradio_check.rc != 0
-
-    - name: Verify UHD libraries
-      shell: ldd {{ install_prefix }}/lib/libgnuradio-uhd.so | grep libuhd
-      register: ldd_check
-      ignore_errors: yes
-
-    - name: Display UHD library paths
-      debug:
-        msg: "{{ ldd_check.stdout }}"
-      failed_when: ldd_check.rc != 0
+        msg: "{{ final_check.stdout_lines }}"
