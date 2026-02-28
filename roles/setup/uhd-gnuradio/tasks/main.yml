@@ -19,6 +19,10 @@
       - python3-yaml
       - python3-sphinx
       - python3-pyqt5
+      - libqwt-qt5-dev
+      - qtbase5-dev
+      - python3-mako
+      - python3-click-plugins
     state: present
     update_cache: yes
 
@@ -31,14 +35,18 @@
 
 - name: Build and install UHD
   shell: |
-    mkdir -p {{ uhd_src_dir }}/build
-    cd {{ uhd_src_dir }}/build
-    cmake ../ -DCMAKE_INSTALL_PREFIX={{ install_prefix }}
+    mkdir -p {{ uhd_src_dir }}/host/build
+    cd {{ uhd_src_dir }}/host/build
+    cmake ../ \
+      -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
+      -DENABLE_PYTHON_API=ON \
+      -DENABLE_TESTS=OFF
     make -j{{ make_jobs }}
     make install
     ldconfig
   args:
-    chdir: "{{ uhd_src_dir }}/build"
+    executable: /bin/bash
+    chdir: "{{ uhd_src_dir }}/host/build"
 
 - name: Clone GNU Radio sources
   git:
@@ -51,12 +59,21 @@
   shell: |
     mkdir -p {{ gnuradio_src_dir }}/build
     cd {{ gnuradio_src_dir }}/build
-    cmake ../ -DCMAKE_INSTALL_PREFIX={{ install_prefix }}
+    cmake ../ \
+      -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
+      -DENABLE_PYTHON=ON \
+      -DENABLE_GR_UHD=ON
     make -j{{ make_jobs }}
     make install
     ldconfig
   args:
+    executable: /bin/bash
     chdir: "{{ gnuradio_src_dir }}/build"
+
+- name: Update library cache
+  shell: ldconfig
+  args:
+    executable: /bin/bash
 
 - name: Ensure /usr/local/bin is in PATH for all shells
   copy:
@@ -66,25 +83,41 @@
     group: root
     mode: '0755'
 
-- name: Verify UHD installation (uhd_fft)
+- name: Update LD_LIBRARY_PATH
+  copy:
+    dest: /etc/ld.so.conf.d/usr_local.conf
+    content: '{{ install_prefix }}/lib'
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Reload library cache after adding path
+  shell: ldconfig
+  args:
+    executable: /bin/bash
+
+- name: Verify UHD installation (uhd_config_info)
   shell: |
-    source /etc/profile.d/usr_local_bin.sh
-    uhd_fft --help
+    export PATH={{ install_prefix }}/bin:$PATH
+    export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+    uhd_config_info --version
+  args:
+    executable: /bin/bash
   register: uhd_test
   failed_when: uhd_test.rc != 0
 
-- name: Verify GNU Radio installation (gnuradio-companion)
+- name: Verify GNU Radio installation and UHD tools (uhd_fft)
   shell: |
-    source /etc/profile.d/usr_local_bin.sh
-    gnuradio-companion --version
-  register: gnuradio_test
-  failed_when: gnuradio_test.rc != 0
+    export PATH={{ install_prefix }}/bin:$PATH
+    export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+    uhd_fft --help
+  args:
+    executable: /bin/bash
+  register: uhd_fft_test
+  failed_when: uhd_fft_test.rc != 0
 
 - name: Display UHD and GNU Radio test results
   debug:
     msg: |
-      UHD test stdout: {{ uhd_test.stdout }}
-      UHD test stderr: {{ uhd_test.stderr }}
-      GNU Radio test stdout: {{ gnuradio_test.stdout }}
-      GNU Radio test stderr: {{ gnuradio_test.stderr }}
-
+      UHD version: {{ uhd_test.stdout }}
+      uhd_fft available: {{ uhd_fft_test.rc == 0 }}
