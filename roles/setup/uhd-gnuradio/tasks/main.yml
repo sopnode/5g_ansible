@@ -1,0 +1,82 @@
+---
+
+- name: Install dependencies for UHD and GNU Radio build
+  package:
+    name:
+      - git
+      - cmake
+      - build-essential
+      - libboost-all-dev
+      - python3-dev
+      - python3-mako
+      - libfftw3-dev
+      - libcomedi-dev
+      - libcppunit-dev
+      - swig
+      - libusb-1.0-0-dev
+      - python3-numpy
+      - python3-apt
+      - libqt5opengl5-dev
+      - qtbase5-dev
+      - libgmp-dev
+      - libmpfr-dev
+      - doxygen
+      - python3-sphinx
+    state: present
+
+- name: Clone UHD repository
+  git:
+    repo: https://github.com/EttusResearch/uhd.git
+    dest: "{{ uhd_src_dir }}"
+    version: "v{{ uhd_version }}"
+    force: yes
+
+- name: Build and install UHD
+  shell: |
+    mkdir -p {{ uhd_src_dir }}/build
+    cd {{ uhd_src_dir }}/build
+    cmake ../host -DCMAKE_INSTALL_PREFIX={{ install_prefix }}
+    make -j{{ make_jobs }}
+    make install
+    ldconfig
+  args:
+    executable: /bin/bash
+
+- name: Clone GNU Radio repository
+  git:
+    repo: https://github.com/gnuradio/gnuradio.git
+    dest: "{{ gnuradio_src_dir }}"
+    version: "v{{ gnuradio_version }}"
+    force: yes
+
+- name: Build and install GNU Radio
+  shell: |
+    mkdir -p {{ gnuradio_src_dir }}/build
+    cd {{ gnuradio_src_dir }}/build
+    cmake ../ -DCMAKE_INSTALL_PREFIX={{ install_prefix }}
+    make -j{{ make_jobs }}
+    make install
+    ldconfig
+  args:
+    executable: /bin/bash
+
+- name: Ensure /usr/local/bin is in PATH for all shells
+  lineinfile:
+    path: /etc/profile.d/usr_local_bin.sh
+    create: yes
+    line: 'export PATH={{ install_prefix }}/bin:$PATH'
+    state: present
+
+- name: Test if UHD tools (uhd_fft) are available
+  shell: "uhd_fft --help"
+  register: uhd_test
+  ignore_errors: yes
+
+- name: Display UHD test result
+  debug:
+    msg: |
+      UHD test command: uhd_fft --help
+      stdout: {{ uhd_test.stdout }}
+      stderr: {{ uhd_test.stderr }}
+      rc: {{ uhd_test.rc }}
+  failed_when: uhd_test.rc != 0

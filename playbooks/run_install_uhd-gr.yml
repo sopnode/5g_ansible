@@ -1,0 +1,48 @@
+---
+
+- name: Test UHD + GNU Radio installation on sopnode
+  hosts: core_node
+  become: true
+  vars:
+    uhd_version: "4.7.0.0"           # Default UHD version (override if needed)
+    gnuradio_version: "3.10.12.0"    # Default GNU Radio version
+
+  roles:
+    - role: uhd-gnuradio
+
+  tasks:
+    - name: Verify UHD installation
+      shell: |
+        echo "=== UHD version ==="
+        uhd_config_info --version
+        echo "=== UHD tools test ==="
+        uhd_fft --help
+      register: uhd_check
+      ignore_errors: yes
+
+    - name: Show UHD test results
+      debug:
+        msg: |
+          UHD version output: {{ uhd_check.stdout }}
+          UHD command exit code: {{ uhd_check.rc }}
+      failed_when: uhd_check.rc != 0
+
+    - name: Verify GNU Radio installation
+      shell: gnuradio-config-info --version
+      register: gnuradio_check
+      ignore_errors: yes
+
+    - name: Show GNU Radio version
+      debug:
+        msg: "GNU Radio version: {{ gnuradio_check.stdout }}"
+      failed_when: gnuradio_check.rc != 0
+
+    - name: Verify UHD libraries
+      shell: ldd {{ install_prefix }}/lib/libgnuradio-uhd.so | grep libuhd
+      register: ldd_check
+      ignore_errors: yes
+
+    - name: Display UHD library paths
+      debug:
+        msg: "{{ ldd_check.stdout }}"
+      failed_when: ldd_check.rc != 0
