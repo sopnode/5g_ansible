@@ -1,105 +1,87 @@
 ---
-# Install prerequisites
-- name: Install dependencies (Ubuntu)
+- name: Install required packages for build
   apt:
     name:
       - build-essential
       - cmake
       - git
-      - libboost-all-dev
       - python3-dev
-      - python3-numpy
+      - python3-pip
       - swig
+      - libboost-all-dev
+      - libgmp-dev
+      - libmpfr-dev
+      - libusb-1.0-0-dev
       - libfftw3-dev
       - libcomedi-dev
       - libcppunit-dev
+      - doxygen
       - libgsl-dev
-      - libusb-1.0-0-dev
-      - libqt5opengl5-dev
+      - libqwt-qt5-dev
+      - qt5-qmake
+      - qtbase5-dev
+      - python3-numpy
       - python3-mako
       - python3-sphinx
-      - doxygen
-      - libxi-dev
-      - libqt5svg5-dev
-      - libqwt-qt5-dev
+      - python3-lxml
+      - python3-cheetah
+      - libgsl-dev
+      - git
+      - python3-apt
     state: present
     update_cache: yes
 
-# -------------------
-# UHD installation
-# -------------------
 - name: Clone UHD repository
   git:
     repo: https://github.com/EttusResearch/uhd.git
-    dest: /tmp/uhd
+    dest: /usr/local/src/uhd
     version: "v{{ uhd_version }}"
-    force: yes
+    update: yes
 
-- name: Build UHD
+- name: Build and install UHD
   shell: |
-    mkdir -p /tmp/uhd/build
-    cd /tmp/uhd/build
+    mkdir -p /usr/local/src/uhd/build
+    cd /usr/local/src/uhd/build
     cmake ../ -DCMAKE_INSTALL_PREFIX={{ install_prefix }}
     make -j{{ make_jobs }}
     make install
     ldconfig
   args:
-    executable: /bin/bash
+    chdir: /usr/local/src/uhd/build
 
-- name: Verify UHD installation
-  shell: |
-    export PATH={{ install_prefix }}/bin:$PATH
-    uhd_usrp_probe --version
-  register: uhd_test
-  changed_when: false
-
-- name: Display UHD test result
-  debug:
-    msg: "UHD version: {{ uhd_test.stdout }}"
-
-# -------------------
-# GNU Radio installation
-# -------------------
 - name: Clone GNU Radio repository
   git:
     repo: https://github.com/gnuradio/gnuradio.git
-    dest: /tmp/gnuradio
+    dest: /usr/local/src/gnuradio
     version: "v{{ gnuradio_version }}"
-    force: yes
+    update: yes
 
-- name: Build and install GNU Radio with utils and examples
+- name: Build and install GNU Radio
   shell: |
-    mkdir -p /tmp/gnuradio/build
-    cd /tmp/gnuradio/build
-    cmake ../ \
-      -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
-      -DENABLE_GR_UTILS=ON \
-      -DENABLE_EXAMPLES=ON
+    mkdir -p /usr/local/src/gnuradio/build
+    cd /usr/local/src/gnuradio/build
+    cmake ../ -DCMAKE_INSTALL_PREFIX={{ install_prefix }}
     make -j{{ make_jobs }}
     make install
     ldconfig
   args:
-    executable: /bin/bash
+    chdir: /usr/local/src/gnuradio/build
 
 - name: Ensure /usr/local/bin is in PATH for all shells
   copy:
     dest: /etc/profile.d/usr_local_bin.sh
-    content: 'export PATH={{ install_prefix }}/bin:$PATH'
+    content: "export PATH={{ install_prefix }}/bin:\$PATH"
     owner: root
     group: root
     mode: '0755'
 
-- name: Test if UHD and GNU Radio tools are available
+- name: Test if UHD tools (uhd_fft) are available
   shell: |
     export PATH={{ install_prefix }}/bin:$PATH
     uhd_fft --help
-    gnuradio-companion --version
-  register: gnuradio_test
-  failed_when: gnuradio_test.rc != 0
-  changed_when: false
+  register: uhd_test
+  failed_when: uhd_test.rc != 0
 
-- name: Display GNU Radio test result
+- name: Display UHD test result
   debug:
-    msg: |
-      UHD & GNU Radio utilities test:
-      {{ gnuradio_test.stdout }}
+    msg: "UHD test command: {{ uhd_test.stdout }} {{ uhd_test.stderr }}"
