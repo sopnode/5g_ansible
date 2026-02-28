@@ -26,6 +26,16 @@
     state: present
     update_cache: yes
 
+- name: Clean previous UHD build
+  file:
+    path: "{{ uhd_src_dir }}"
+    state: absent
+
+- name: Clean previous GNU Radio build
+  file:
+    path: "{{ gnuradio_src_dir }}"
+    state: absent
+
 - name: Clone UHD sources
   git:
     repo: "https://github.com/EttusResearch/uhd.git"
@@ -46,7 +56,6 @@
     ldconfig
   args:
     executable: /bin/bash
-    chdir: "{{ uhd_src_dir }}/host/build"
 
 - name: Clone GNU Radio sources
   git:
@@ -68,7 +77,6 @@
     ldconfig
   args:
     executable: /bin/bash
-    chdir: "{{ gnuradio_src_dir }}/build"
 
 - name: Update library cache
   shell: ldconfig
@@ -121,3 +129,4 @@
     msg: |
       UHD version: {{ uhd_test.stdout }}
       uhd_fft available: {{ uhd_fft_test.rc == 0 }}
+
