@@ -8,7 +8,7 @@
     gnuradio_version: "3.10.12.0"    # Default GNU Radio version
 
   roles:
-    - role: uhd-gnuradio
+    - role: setup/uhd-gnuradio
 
   tasks:
     - name: Verify UHD installation
