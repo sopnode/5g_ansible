@@ -1,16 +1,7 @@
 ---
-# UHD version to install (format: major.minor.patch)
-uhd_version: "4.7.0.0"
-
-# GNU Radio version to install
+uhd_version: "4.7.0"
 gnuradio_version: "3.10.12.0"
-
-# Source directories for building
-uhd_src_dir: "/usr/local/src/uhd"
-gnuradio_src_dir: "/usr/local/src/gnuradio"
-
-# Installation prefix
 install_prefix: "/usr/local"
 
-# Number of parallel make jobs
-make_jobs: "{{ ansible_processor_vcpus | default(2) }}"
+# Determine number of parallel make jobs automatically
+make_jobs: "{{ ansible_processor_vcpus | default(ansible_facts['processor_vcpus'] | default(2)) }}"
