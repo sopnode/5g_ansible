@@ -1,5 +1,5 @@
 ---
-- name: Install required packages for build
+- name: Ensure required packages are installed (Ubuntu/Debian)
   apt:
     name:
       - build-essential
@@ -12,76 +12,80 @@
       - libgmp-dev
       - libmpfr-dev
       - libusb-1.0-0-dev
-      - libfftw3-dev
-      - libcomedi-dev
-      - libcppunit-dev
-      - doxygen
-      - libgsl-dev
-      - libqwt-qt5-dev
-      - qt5-qmake
-      - qtbase5-dev
+      - libqt5svg5-dev
       - python3-numpy
-      - python3-mako
-      - python3-sphinx
+      - python3-click
       - python3-lxml
-      - python3-cheetah
-      - libgsl-dev
-      - git
-      - python3-apt
+      - python3-cheetah3
+      - python3-yaml
+      - python3-sphinx
+      - python3-pyqt5
     state: present
     update_cache: yes
 
-- name: Clone UHD repository
+- name: Clone UHD sources
   git:
-    repo: https://github.com/EttusResearch/uhd.git
-    dest: /usr/local/src/uhd
+    repo: "https://github.com/EttusResearch/uhd.git"
     version: "v{{ uhd_version }}"
-    update: yes
+    dest: "{{ uhd_src_dir }}"
+    force: yes
 
 - name: Build and install UHD
   shell: |
-    mkdir -p /usr/local/src/uhd/build
-    cd /usr/local/src/uhd/build
+    mkdir -p {{ uhd_src_dir }}/build
+    cd {{ uhd_src_dir }}/build
     cmake ../ -DCMAKE_INSTALL_PREFIX={{ install_prefix }}
     make -j{{ make_jobs }}
     make install
     ldconfig
   args:
-    chdir: /usr/local/src/uhd/build
+    chdir: "{{ uhd_src_dir }}/build"
 
-- name: Clone GNU Radio repository
+- name: Clone GNU Radio sources
   git:
-    repo: https://github.com/gnuradio/gnuradio.git
-    dest: /usr/local/src/gnuradio
+    repo: "https://github.com/gnuradio/gnuradio.git"
     version: "v{{ gnuradio_version }}"
-    update: yes
+    dest: "{{ gnuradio_src_dir }}"
+    force: yes
 
 - name: Build and install GNU Radio
   shell: |
-    mkdir -p /usr/local/src/gnuradio/build
-    cd /usr/local/src/gnuradio/build
+    mkdir -p {{ gnuradio_src_dir }}/build
+    cd {{ gnuradio_src_dir }}/build
     cmake ../ -DCMAKE_INSTALL_PREFIX={{ install_prefix }}
     make -j{{ make_jobs }}
     make install
     ldconfig
   args:
-    chdir: /usr/local/src/gnuradio/build
+    chdir: "{{ gnuradio_src_dir }}/build"
 
 - name: Ensure /usr/local/bin is in PATH for all shells
   copy:
     dest: /etc/profile.d/usr_local_bin.sh
-    content: "export PATH={{ install_prefix }}/bin:\$PATH"
+    content: 'export PATH={{ install_prefix }}/bin:$PATH'
     owner: root
     group: root
     mode: '0755'
 
-- name: Test if UHD tools (uhd_fft) are available
+- name: Verify UHD installation (uhd_fft)
   shell: |
-    export PATH={{ install_prefix }}/bin:$PATH
+    source /etc/profile.d/usr_local_bin.sh
     uhd_fft --help
   register: uhd_test
   failed_when: uhd_test.rc != 0
 
-- name: Display UHD test result
+- name: Verify GNU Radio installation (gnuradio-companion)
+  shell: |
+    source /etc/profile.d/usr_local_bin.sh
+    gnuradio-companion --version
+  register: gnuradio_test
+  failed_when: gnuradio_test.rc != 0
+
+- name: Display UHD and GNU Radio test results
   debug:
-    msg: "UHD test command: {{ uhd_test.stdout }} {{ uhd_test.stderr }}"
+    msg: |
+      UHD test stdout: {{ uhd_test.stdout }}
+      UHD test stderr: {{ uhd_test.stderr }}
+      GNU Radio test stdout: {{ gnuradio_test.stdout }}
+      GNU Radio test stderr: {{ gnuradio_test.stderr }}
+
