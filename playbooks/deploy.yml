@@ -253,6 +253,8 @@
       include_vars:
         file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
   roles:
+    - role: 5g/free5gc/node
+      when: core == 'free5gc'
     - role: 5g/free5gc/config
       when: core == 'free5gc'
     - role: 5g/free5gc/deploy
