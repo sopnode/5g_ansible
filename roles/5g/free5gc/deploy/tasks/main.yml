@@ -10,7 +10,34 @@
     name: "{{ core_ns }}"
     state: present
 
-- name: Deploy free5gc using Helm
+- name: Create cert-pvc for Free5GC
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: cert-pvc
+        namespace: "{{ core_ns }}"
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+        storageClassName: openebs-hostpath
+        volumeMode: Filesystem
+
+- name: Wait for cert-pvc to be Bound
+  kubernetes.core.k8s_info:
+    kind: PersistentVolumeClaim
+    namespace: "{{ core_ns }}"
+    name: cert-pvc
+  register: pvc_info
+  until: pvc_info.resources[0].status.phase == "Bound"
+  retries: 20
+  delay: 3
+
+- name: Deploy Free5GC using Helm
   when: rru == 'rfsim'
   kubernetes.core.helm:
     name: free5gc
@@ -32,20 +59,9 @@
                     operator: In
                     values:
                       - "{{ core_node_name }}"
-
       upf:
         privileged: true
         capabilities:
           add:
             - NET_ADMIN
             - SYS_MODULE
-
-      # PVC cert-pvc compatible OpenEBS hostpath
-      pvc:
-        cert:
-          enabled: true
-          size: 1Gi
-          storageClassName: openebs-hostpath
-          accessModes:
-            - ReadWriteOnce
-          volumeMode: Filesystem
