@@ -32,12 +32,15 @@
                     operator: In
                     values:
                       - "{{ core_node_name }}"
+
       upf:
         privileged: true
         capabilities:
           add:
             - NET_ADMIN
             - SYS_MODULE
+
+      # PVC cert-pvc compatible OpenEBS hostpath
       pvc:
         cert:
           enabled: true
