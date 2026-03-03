@@ -10,23 +10,10 @@
     name: "{{ core_ns }}"
     state: present
 
-- name: Create cert-pvc for Free5GC
-  kubernetes.core.k8s:
-    state: present
-    definition:
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: cert-pvc
-        namespace: "{{ core_ns }}"
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 1Gi
-        storageClassName: openebs-hostpath
-        volumeMode: Filesystem
-
+# =========================
+# Déploiement Free5GC via Helm
+# Helm créera automatiquement le PVC cert-pvc
+# =========================
 - name: Deploy Free5GC using Helm
   when: rru == 'rfsim'
   kubernetes.core.helm:
@@ -38,6 +25,7 @@
     atomic: true
     timeout: 1200s
     values:
+      # Tous les pods Free5GC planifiés sur le core node
       nodeSelector:
         kubernetes.io/hostname: "{{ core_node_name }}"
       affinity:
@@ -49,6 +37,7 @@
                     operator: In
                     values:
                       - "{{ core_node_name }}"
+      # UPF doit être privilégié pour charger le module gtp5g
       upf:
         privileged: true
         capabilities:
