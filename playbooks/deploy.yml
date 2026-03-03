@@ -175,7 +175,7 @@
   roles:
     - role: setup/cni
     - role: setup/storage
-      when: core == 'open5gs'
+      when: core == 'open5gs' or core == 'free5gc'
 
 - name: Apply specific tuning on RAN Node
   hosts: ran_node
@@ -245,6 +245,18 @@
       when: core == 'open5gs'
     - role: 5g/open5gs/deploy
       when: core == 'open5gs'
+
+- name: Deploy Free5gc
+  hosts: core_node
+  pre_tasks:
+    - name: Load 5G profile
+      include_vars:
+        file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+  roles:
+    - role: 5g/free5gc/config
+      when: core == 'free5gc'
+    - role: 5g/free5gc/deploy
+      when: core == 'free5gc'
 
 - name: Deploy OAI CN/RAN
   hosts: ran_node

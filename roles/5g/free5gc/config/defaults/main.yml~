@@ -1,0 +1,5 @@
+---
+repo_url: "https://github.com/sopnode/free5gc-helm.git"
+repo_dest: "~/free5gc-helm"
+repo_branch: "main"
+free5gc_root: "{{ repo_dest }}/charts/free5gc"

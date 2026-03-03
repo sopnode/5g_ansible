@@ -1,0 +1,47 @@
+---
+- name: Remove existing free5gc directory to ensure clean state
+  ansible.builtin.file:
+    path: "{{ repo_dest }}"
+    state: absent
+
+- name: Clone free5gc repo
+  ansible.builtin.git:
+    repo: "{{ repo_url }}"
+    dest: "{{ repo_dest }}"
+    version: "{{ repo_branch }}"
+    update: yes
+    force: yes
+
+# Then apply the 5G profile settings on the repo
+
+- name: Load active 5G profile
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+    name: fiveg
+
+- name: Validate PLMN
+  assert:
+    that:
+      - fiveg.plmn.mcc is defined
+      - fiveg.plmn.mnc is defined
+      - fiveg.plmn.tac is defined
+
+- name: Validate slices
+  assert:
+    that:
+      - slice.name is defined
+      - slice.sst is defined
+      - slice.dnn is defined
+  loop: "{{ fiveg.slices }}"
+  loop_control:
+    loop_var: slice
+
+- name: Validate UE slice references
+  assert:
+    that:
+      - ue.value.slice in fiveg.slices | map(attribute='name') | list
+  loop: "{{ fiveg.ues | dict2items }}"
+  loop_control:
+    loop_var: ue
+
+

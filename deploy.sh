@@ -152,13 +152,15 @@ echo ""
 echo "Which CORE do you want to deploy? (default: ${DEFAULT_CORE})"
 echo "1) OAI"
 echo "2) Open5Gs"
-read -rp "Enter choice [1-2]: " core_choice
+echo "3) Free5gc"
+read -rp "Enter choice [1-3]: " core_choice
 if [[ -z "$core_choice" ]]; then
   core=${DEFAULT_CORE}
 else
   case "${core_choice}" in
     1) core="oai" ;;
     2) core="open5gs" ;;
+    3) core="free5gc" ;;
     *) echo "❌ Invalid choice"; exit 1 ;;
   esac
 fi

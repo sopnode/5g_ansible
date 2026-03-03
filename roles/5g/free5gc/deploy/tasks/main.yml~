@@ -1,0 +1,12 @@
+- name: Deploy free5gc using Helm
+  when: rru == 'rfsim'
+  kubernetes.core.helm:
+    name: free5gc
+    chart_ref: "{{ [repo_dest, 'charts', 'free5gc'] | path_join }}"
+    release_namespace: "{{ core_ns }}"
+    values_files:
+      - "{{ values_file }}"
+    state: present
+    wait: True
+    atomic: True
+    timeout: 1200s
