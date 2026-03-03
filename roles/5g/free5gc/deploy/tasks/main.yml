@@ -27,16 +27,6 @@
         storageClassName: openebs-hostpath
         volumeMode: Filesystem
 
-- name: Wait for cert-pvc to be Bound
-  kubernetes.core.k8s_info:
-    kind: PersistentVolumeClaim
-    namespace: "{{ core_ns }}"
-    name: cert-pvc
-  register: pvc_info
-  until: pvc_info.resources[0].status.phase == "Bound"
-  retries: 20
-  delay: 3
-
 - name: Deploy Free5GC using Helm
   when: rru == 'rfsim'
   kubernetes.core.helm:
