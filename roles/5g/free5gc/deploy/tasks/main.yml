@@ -201,6 +201,8 @@
     wait: true
     atomic: true
     timeout: 1200s
+    values_files:
+      - "{{ free5gc_repo_dest }}/values-profile-override.yaml"
     values:
       nodeSelector:
         kubernetes.io/hostname: "{{ core_node_name }}"
