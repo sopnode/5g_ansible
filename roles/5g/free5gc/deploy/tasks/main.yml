@@ -1,33 +1,77 @@
-# ------------------------
-# Step 1: Uninstall existing Helm release if present
-# ------------------------
-- name: Check if free5gc Helm release already exists
-  shell: helm list -n "{{ core_ns }}" | grep -w "free5gc" | wc -l
+---
+- name: Load common variables
+  include_vars:
+    file: "../config/defaults/main.yml"
+
+- name: Ensure free5gc namespace exists
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ core_ns }}"
+    state: present
+
+# ============================================================
+# Step 1: Clean up any existing Helm release (including stuck)
+# ============================================================
+
+- name: Check if free5gc Helm release exists (including pending/failed states)
+  shell: helm list -n "{{ core_ns }}" -a -q | grep -w "^free5gc$" | wc -l
   register: helm_release_exists
-  ignore_errors: yes
+  changed_when: false
+  failed_when: false
 
-- name: Uninstall existing free5gc Helm release
-  when: helm_release_exists.stdout | int > 0
-  shell: helm uninstall free5gc -n "{{ core_ns }}" --wait --timeout 120s
-  ignore_errors: yes
+- name: Uninstall existing free5gc Helm release (handles pending-install/upgrade/failed)
+  shell: helm uninstall free5gc -n "{{ core_ns }}" --no-hooks --timeout 120s
+  when: helm_release_exists.stdout | trim | int > 0
+  failed_when: false
+  register: helm_uninstall_result
 
-# ------------------------
-# Step 2: Clean existing cert-pvc
-# ------------------------
-- name: Patch cert-pvc finalizers to force deletion
-  shell: |
-    kubectl patch pvc cert-pvc -n "{{ core_ns }}" \
-      -p '{"metadata":{"finalizers":[]}}' --type=merge
-  ignore_errors: yes
+- name: Debug Helm uninstall result
+  debug:
+    msg: "{{ helm_uninstall_result.stderr | default('no output') }}"
+  when:
+    - helm_release_exists.stdout | trim | int > 0
+    - helm_uninstall_result is defined
 
-- name: Delete existing cert-pvc if exists
+- name: Wait for Helm release to be fully removed
+  shell: helm list -n "{{ core_ns }}" -a -q | grep -w "^free5gc$" | wc -l
+  register: helm_gone
+  until: helm_gone.stdout | trim | int == 0
+  retries: 24
+  delay: 5
+  changed_when: false
+  failed_when: false
+  when: helm_release_exists.stdout | trim | int > 0
+
+# ============================================================
+# Step 2: Clean up cert-pvc and its bound PV
+# ============================================================
+
+- name: Check if cert-pvc exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: PersistentVolumeClaim
+    name: cert-pvc
+    namespace: "{{ core_ns }}"
+  register: cert_pvc_info
+  failed_when: false
+
+- name: Patch cert-pvc finalizers to unblock deletion
+  shell: >
+    kubectl patch pvc cert-pvc -n "{{ core_ns }}"
+    -p '{"metadata":{"finalizers":[]}}' --type=merge
+  when: cert_pvc_info.resources | length > 0
+  failed_when: false
+
+- name: Delete cert-pvc
   kubernetes.core.k8s:
     state: absent
     api_version: v1
     kind: PersistentVolumeClaim
     name: cert-pvc
     namespace: "{{ core_ns }}"
-  ignore_errors: yes
+  when: cert_pvc_info.resources | length > 0
+  failed_when: false
 
 - name: Wait for cert-pvc to be fully deleted
   kubernetes.core.k8s_info:
@@ -39,30 +83,39 @@
   until: pvc_check.resources | length == 0
   retries: 30
   delay: 5
-  ignore_errors: yes
+  failed_when: false
 
-- name: Delete PV linked to cert-pvc if exists
-  shell: |
-    PV=$(kubectl get pv --no-headers | grep cert-pvc | awk '{print $1}')
-    if [[ ! -z "$PV" ]]; then
-      kubectl patch pv $PV -p '{"metadata":{"finalizers":[]}}' --type=merge
-      kubectl delete pv $PV --force --grace-period=0
-    fi
-  args:
-    executable: /bin/bash
-  ignore_errors: yes
+- name: Find PV bound to cert-pvc
+  shell: kubectl get pv --no-headers | grep "{{ core_ns }}/cert-pvc" | awk '{print $1}'
+  register: cert_pv_name
+  changed_when: false
+  failed_when: false
 
-- name: Wait for PV linked to cert-pvc to be fully deleted
-  shell: kubectl get pv --no-headers | grep cert-pvc | wc -l
+- name: Patch PV finalizers to unblock deletion
+  shell: >
+    kubectl patch pv {{ cert_pv_name.stdout | trim }}
+    -p '{"metadata":{"finalizers":[]}}' --type=merge
+  when: cert_pv_name.stdout | trim | length > 0
+  failed_when: false
+
+- name: Force delete PV bound to cert-pvc
+  shell: kubectl delete pv {{ cert_pv_name.stdout | trim }} --force --grace-period=0
+  when: cert_pv_name.stdout | trim | length > 0
+  failed_when: false
+
+- name: Wait for PV to be fully deleted
+  shell: kubectl get pv --no-headers | grep "{{ core_ns }}/cert-pvc" | wc -l
   register: pv_check
-  until: pv_check.stdout | int == 0
+  until: pv_check.stdout | trim | int == 0
   retries: 30
   delay: 5
-  ignore_errors: yes
+  changed_when: false
+  failed_when: false
+  when: cert_pv_name.stdout | trim | length > 0
 
-# ------------------------
+# ============================================================
 # Step 3: Deploy Free5GC via Helm
-# ------------------------
+# ============================================================
 
 - name: Deploy free5gc using Helm
   when: rru == 'rfsim'
