@@ -219,3 +219,11 @@
           add:
             - NET_ADMIN
             - SYS_MODULE
+
+# ============================================================
+# Step 6: Verify deployment matches the 5G profile
+# ============================================================
+
+- name: Run free5gc profile verification
+  ansible.builtin.include_role:
+    name: 5g/free5gc/verify
