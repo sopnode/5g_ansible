@@ -32,6 +32,8 @@
       - slice.name is defined
       - slice.sst is defined
       - slice.dnn is defined
+      - slice.sd is defined
+      - slice.ip_prefix is defined
   loop: "{{ fiveg.slices }}"
   loop_control:
     loop_var: slice
@@ -43,5 +45,30 @@
   loop: "{{ fiveg.ues | dict2items }}"
   loop_control:
     loop_var: ue
+
+- name: Generate free5gc Helm values override
+  ansible.builtin.template:
+    src: free5gc-values-override.yaml.j2
+    dest: "{{ free5gc_chart_dest }}/values-profile-override.yaml"
+    mode: "0644"
+  vars:
+    profile: "{{ fiveg }}"
+
+- name: Generate add_subscribers.py for free5gc
+  ansible.builtin.template:
+    src: add_subscribers.py.j2
+    dest: "{{ repo_dest }}/docker/free5gc/free5gc-dbpython/add_subscribers.py"
+    mode: "0755"
+  vars:
+    profile: "{{ fiveg }}"
+
+- name: Generate free5gc profile check file
+  ansible.builtin.template:
+    src: profile-check.j2
+    dest: /root/free5gc_profile_check.txt
+    owner: root
+    mode: '0644'
+  vars:
+    profile: "{{ fiveg }}"
 
 

@@ -1,0 +1,27 @@
+# free5gc 5G Profile Check
+# Profile: {{ fiveg_profile | default('default') }}
+
+## PLMN
+MCC : {{ profile.plmn.mcc }}
+MNC : {{ profile.plmn.mnc }}
+TAC : {{ profile.plmn.tac }}
+
+## Slices ({{ profile.slices | length }})
+{% for slice in profile.slices %}
+  [{{ slice.name }}]
+    SST       : {{ slice.sst }}
+    SD        : {{ 'EMPTY (0xFFFFFF)' if slice.sd == 'EMPTY' else slice.sd }}
+    DNN       : {{ slice.dnn }}
+    IP prefix : {{ slice.ip_prefix }}.0/24
+    Bandwidth : UL={{ slice.bandwidth.uplink }} / DL={{ slice.bandwidth.downlink }}
+    5QI       : {{ slice.qos.five_qi }}
+{% endfor %}
+
+## UEs ({{ profile.ues | length }})
+{% for ue_name, ue in profile.ues.items() %}
+  {{ ue_name }} : imsi-{{ profile.plmn.mcc }}{{ profile.plmn.mnc }}{{ ue.imsi_suffix }} → {{ ue.slice }}
+{% endfor %}
+
+## Security
+Key : {{ profile.security.full_key }}
+OPC : {{ profile.security.opc }}
