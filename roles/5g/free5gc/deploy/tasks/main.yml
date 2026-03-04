@@ -1,14 +1,24 @@
----
-- name: Load common variables
-  include_vars:
-    file: "../config/defaults/main.yml"
+# ------------------------
+# Step 1: Uninstall existing Helm release if present
+# ------------------------
+- name: Check if free5gc Helm release already exists
+  shell: helm list -n "{{ core_ns }}" | grep -w "free5gc" | wc -l
+  register: helm_release_exists
+  ignore_errors: yes
 
-- name: Ensure Open5GS namespace exists
-  kubernetes.core.k8s:
-    api_version: v1
-    kind: Namespace
-    name: "{{ core_ns }}"
-    state: present
+- name: Uninstall existing free5gc Helm release
+  when: helm_release_exists.stdout | int > 0
+  shell: helm uninstall free5gc -n "{{ core_ns }}" --wait --timeout 120s
+  ignore_errors: yes
+
+# ------------------------
+# Step 2: Clean existing cert-pvc
+# ------------------------
+- name: Patch cert-pvc finalizers to force deletion
+  shell: |
+    kubectl patch pvc cert-pvc -n "{{ core_ns }}" \
+      -p '{"metadata":{"finalizers":[]}}' --type=merge
+  ignore_errors: yes
 
 - name: Delete existing cert-pvc if exists
   kubernetes.core.k8s:
@@ -50,6 +60,9 @@
   delay: 5
   ignore_errors: yes
 
+# ------------------------
+# Step 3: Deploy Free5GC via Helm
+# ------------------------
 
 - name: Deploy free5gc using Helm
   when: rru == 'rfsim'
