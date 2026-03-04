@@ -1,7 +1,7 @@
 ---
 - name: Load common variables
   include_vars:
-    file: "../config/defaults/main.yml"
+    file: "../../config/defaults/main.yml"
 
 - name: Ensure free5gc namespace exists
   kubernetes.core.k8s:

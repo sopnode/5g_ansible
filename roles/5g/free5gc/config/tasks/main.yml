@@ -49,7 +49,7 @@
 - name: Generate free5gc Helm values override
   ansible.builtin.template:
     src: free5gc-values-override.yaml.j2
-    dest: "{{ free5gc_chart_dest }}/values-profile-override.yaml"
+    dest: "{{ free5gc_repo_dest }}/values-profile-override.yaml"
     mode: "0644"
   vars:
     profile: "{{ fiveg }}"
