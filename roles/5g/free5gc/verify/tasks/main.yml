@@ -171,25 +171,59 @@
 # ============================================================
 # MongoDB subscribers
 # ============================================================
+- name: Find add_subscribers.py path in dbpython pod
+  shell: |
+    kubectl exec -n {{ core_ns }} deployment/free5gc-free5gc-dbpython-dbpython -- \
+      find / -name "add_subscribers.py" 2>/dev/null | head -1
+  register: subscribers_script_path
+  failed_when: false
+  changed_when: false
+
 - name: Check MongoDB subscriber count
   shell: |
     kubectl exec -n {{ core_ns }} deployment/free5gc-free5gc-dbpython-dbpython -- \
-      python3 /app/add_subscribers.py -a list 2>/dev/null | \
-      grep "subscriptionData.authenticationData.authenticationSubscription:" | \
-      awk -F': ' '{print $2}'
+      python3 {{ subscribers_script_path.stdout | trim }} -a list 2>/dev/null | \
+      tail -10
+  register: mongo_list_output
+  failed_when: false
+  changed_when: false
+  when: subscribers_script_path.stdout | trim | length > 0
+
+- name: Parse MongoDB subscriber count
+  shell: |
+    kubectl exec -n {{ core_ns }} deployment/free5gc-free5gc-dbpython-dbpython -- \
+      python3 {{ subscribers_script_path.stdout | trim }} -a list 2>/dev/null | \
+      grep "^subscriptionData.authenticationData.authenticationSubscription:" | \
+      tail -1 | awk -F': ' '{print $2}'
   register: mongo_ue_count
   failed_when: false
   changed_when: false
+  when: subscribers_script_path.stdout | trim | length > 0
+
+- name: Debug MongoDB list output
+  debug:
+    msg: "MongoDB list output: {{ mongo_list_output.stdout | default('N/A') }}"
+  when: subscribers_script_path.stdout | trim | length > 0
 
 - name: "Verify MongoDB subscriber count (expected={{ fiveg.ues | length }})"
   assert:
     that: "mongo_ue_count.stdout | trim | int == fiveg.ues | length"
     fail_msg: >-
-      MongoDB has {{ mongo_ue_count.stdout | trim }} subscribers
+      MongoDB has '{{ mongo_ue_count.stdout | trim }}' subscribers
       but profile defines {{ fiveg.ues | length }} UEs
-  when: mongo_ue_count.rc == 0
+  when:
+    - subscribers_script_path.stdout | trim | length > 0
+    - mongo_ue_count.stdout | trim | length > 0
 
 - name: Warn if MongoDB subscriber check could not run
   debug:
-    msg: "WARNING: Could not verify MongoDB subscribers — dbpython pod may not be ready"
-  when: mongo_ue_count.rc != 0
+    msg: >-
+      WARNING: Could not verify MongoDB subscribers —
+      {% if subscribers_script_path.stdout | trim | length == 0 %}
+      add_subscribers.py not found in dbpython pod
+      {% else %}
+      script returned empty output
+      {% endif %}
+  when: >-
+    subscribers_script_path.stdout | trim | length == 0 or
+    mongo_ue_count.stdout | trim | length == 0
