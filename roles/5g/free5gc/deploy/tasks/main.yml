@@ -10,9 +10,6 @@
     name: "{{ core_ns }}"
     state: present
 
-# ------------------------
-# Step 1: Clean existing cert-pvc
-# ------------------------
 - name: Delete existing cert-pvc if exists
   kubernetes.core.k8s:
     state: absent
@@ -22,19 +19,38 @@
     namespace: "{{ core_ns }}"
   ignore_errors: yes
 
+- name: Wait for cert-pvc to be fully deleted
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: PersistentVolumeClaim
+    name: cert-pvc
+    namespace: "{{ core_ns }}"
+  register: pvc_check
+  until: pvc_check.resources | length == 0
+  retries: 30
+  delay: 5
+  ignore_errors: yes
+
 - name: Delete PV linked to cert-pvc if exists
   shell: |
     PV=$(kubectl get pv --no-headers | grep cert-pvc | awk '{print $1}')
     if [[ ! -z "$PV" ]]; then
-      kubectl delete pv $PV
+      kubectl patch pv $PV -p '{"metadata":{"finalizers":[]}}' --type=merge
+      kubectl delete pv $PV --force --grace-period=0
     fi
   args:
     executable: /bin/bash
   ignore_errors: yes
 
-# ------------------------
-# Step 2: Deploy Free5GC via Helm
-# ------------------------
+- name: Wait for PV linked to cert-pvc to be fully deleted
+  shell: kubectl get pv --no-headers | grep cert-pvc | wc -l
+  register: pv_check
+  until: pv_check.stdout | int == 0
+  retries: 30
+  delay: 5
+  ignore_errors: yes
+
+
 - name: Deploy free5gc using Helm
   when: rru == 'rfsim'
   kubernetes.core.helm:
