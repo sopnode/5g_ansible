@@ -199,19 +199,6 @@
         target_node: "{{ monitor_node_name }}"
       when: monitoring_enabled and core_node_name != ran_node_name
 
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
-
 - name: SRIOV setup
   hosts: ran_node
   become: true
@@ -245,6 +232,19 @@
       when: core == 'open5gs'
     - role: 5g/open5gs/deploy
       when: core == 'open5gs'
+
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
 
 - name: Deploy Free5gc
   hosts: core_node
