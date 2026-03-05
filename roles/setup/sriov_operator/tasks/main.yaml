@@ -43,9 +43,7 @@
         repo: https://github.com/k8snetworkplumbingwg/sriov-network-operator.git
         dest: /root/sriov-network-operator
         clone: yes
-        # FIX: pin to a stable release tag instead of master — master can break
-        # between runs causing non-reproducible deployments.
-        version: "v1.6.0" # master
+        version: master
       become: yes
 
     - name: Install python3-venv, python3-pip, setuptools and wheel
