@@ -6,3 +6,8 @@ ueransim_root: "/root/open5gs-k8s/ueransim"
 
 # free5gc
 ueransim_chart_path: "/root/free5gc-helm/charts/ueransim"
+
+ueransim_emulated_ues:
+  - UE18
+  - UE19
+  - UE20

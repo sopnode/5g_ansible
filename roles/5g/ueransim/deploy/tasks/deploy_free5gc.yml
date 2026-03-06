@@ -23,7 +23,7 @@
   register: ue_release_exists
   changed_when: false
   failed_when: false
-  loop: "{{ fiveg.ues | dict2items }}"
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | sort(attribute='key') | list }}"
   loop_control:
     label: "{{ item.key }}"
 
@@ -74,7 +74,8 @@
 # -- Deploy UEs sequentially --
 - name: Sequential UE deployment
   include_tasks: sequential_ue_deploy_free5gc.yml
-  loop: "{{ fiveg.ues | dict2items }}"
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | sort(attribute='key') | list }}"
+
   loop_control:
     loop_var: ue_item
     index_var: ue_idx

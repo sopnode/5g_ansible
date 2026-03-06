@@ -3,7 +3,6 @@
 # ueransim config for free5gc (Helm values overrides)
 # 1 release for gNB + 1 release per UE
 # ============================================================
-
 - name: Ensure ueransim output directory exists
   ansible.builtin.file:
     path: "{{ ueransim_chart_path }}/overrides"
@@ -30,6 +29,6 @@
     ue_name: "{{ ue.key }}"
     ue_data: "{{ ue.value }}"
     slice_data: "{{ fiveg.slices | selectattr('name', 'equalto', ue.value.slice) | first }}"
-  loop: "{{ fiveg.ues | dict2items }}"
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['UE18', 'UE19', 'UE20']) | sort(attribute='key') | list }}"
   loop_control:
     loop_var: ue
