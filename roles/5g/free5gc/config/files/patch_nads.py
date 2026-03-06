@@ -71,7 +71,7 @@ def patch_nad_file(path):
         indent = re.match(r'(\s*)', routes_block).group(1)
         return (
             f"{ipam_open}"
-            f"{{{{- if .Values.global.{netvar}.gatewayIP }}}}\n"
+            f"{{{{- if and .Values.global.{netvar}.gatewayIP (ne .Values.global.{netvar}.gatewayIP \"\") }}}}\n"
             f"{routes_block}"
             f"{{{{- end }}}}\n"
             f"{ipam_close}"
