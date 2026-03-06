@@ -22,15 +22,17 @@
 # ============================================================
 global:
   n2network:
-    enabled: false
-  n3network:
-    enabled: false
-  n4network:
-    enabled: false
-  n6network:
-    enabled: false
-  n9network:
-    enabled: false
+    enabled: true
+    masterIf: "{{ nic_interface }}"
+   n3network:
+    enabled: true
+    masterIf: "{{ nic_interface }}"
+   n4network:
+    masterIf: "{{ nic_interface }}"
+   n6network:
+    masterIf: "{{ nic_interface }}"
+   n9network:
+    masterIf: "{{ nic_interface }}"
   amf:
     service:
       ngap:

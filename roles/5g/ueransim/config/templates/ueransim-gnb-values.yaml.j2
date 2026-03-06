@@ -10,9 +10,11 @@
 
 global:
   n2network:
-    enabled: false   # ipvlan disabled: eth0 is DOWN in Flannel/overlay setup
+    enabled: true
+    masterIf: "{{ nic_interface }}"
   n3network:
-    enabled: false   # ipvlan disabled: eth0 is DOWN in Flannel/overlay setup
+    enabled: true
+    masterIf: "{{ nic_interface }}"
 
 gnb:
   enabled: true
