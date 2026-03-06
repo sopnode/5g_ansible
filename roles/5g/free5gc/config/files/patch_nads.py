@@ -4,25 +4,33 @@ patch_nads.py <chart_dest>
 
 Patches all NAD Helm templates under <chart_dest> to make the default
 route conditional on gatewayIP being set. This is needed when the
-masterIf (physical NIC) has no IP in the NAD subnet.
+masterIf (physical NIC) has no IP in the NAD subnet (e.g. Flannel overlay).
 
 Before:
-    "routes": [
-      {
-        "dst": "0.0.0.0/0",
-        "gw": "{{ .Values.global.n2network.gatewayIP }}"
-      }
-    ]
+          "ipam": {
+            "type": "static",
+            "routes": [
+              {
+                "dst": "0.0.0.0/0",
+                "gw": "{{ .Values.global.nXnetwork.gatewayIP }}"
+              }
+            ]
+          }
 
 After:
-    {{- if .Values.global.n2network.gatewayIP }}
-    "routes": [
-      {
-        "dst": "0.0.0.0/0",
-        "gw": "{{ .Values.global.n2network.gatewayIP }}"
-      }
-    ],
-    {{- end }}
+          "ipam": {
+{{- if and .Values.global.nXnetwork.gatewayIP (ne .Values.global.nXnetwork.gatewayIP "") }}
+            "type": "static",
+            "routes": [
+              {
+                "dst": "0.0.0.0/0",
+                "gw": "{{ .Values.global.nXnetwork.gatewayIP }}"
+              }
+            ]
+{{- else }}
+            "type": "static"
+{{- end }}
+          }
 """
 
 import sys
@@ -30,16 +38,14 @@ import os
 import re
 import glob
 
+
 def patch_nad_file(path):
-    with open(path, 'r') as f:
-        content = f.read()
+    content = open(path).read()
 
     # Already patched
-    if '{{- if' in content and 'gatewayIP' in content and 'routes' in content:
-        already = re.search(r'\{\{-\s*if\s+\.Values\.\S+\.gatewayIP\s*\}\}', content)
-        if already:
-            print(f"  already patched: {path}")
-            return False
+    if '{{- else }}' in content and 'gatewayIP' in content:
+        print(f"  already patched: {path}")
+        return False
 
     # Find the network variable name (e.g. n2network, n3network, n4network...)
     m = re.search(r'\.Values\.global\.(\w+network)\.gatewayIP', content)
@@ -49,42 +55,36 @@ def patch_nad_file(path):
 
     netvar = m.group(1)
 
-    # Pattern to match the routes block
-    routes_pattern = re.compile(
-        r'(\s*"ipam":\s*\{\s*\n'
-        r'\s*"type":\s*"static",\s*\n)'
-        r'(\s*"routes":\s*\[\s*\n'
-        r'\s*\{\s*\n'
-        r'\s*"dst":\s*"0\.0\.0\.0/0",\s*\n'
-        r'\s*"gw":\s*"[^"]*"\s*\n'
-        r'\s*\}\s*\n'
-        r'\s*\]\s*\n)'
-        r'(\s*\})',
-        re.MULTILINE
+    old = (
+        f'            "type": "static",\n'
+        f'            "routes": [\n'
+        f'              {{\n'
+        f'                "dst": "0.0.0.0/0",\n'
+        f'                "gw": "{{{{ .Values.global.{netvar}.gatewayIP }}}}"\n'
+        f'              }}\n'
+        f'            ]'
     )
 
-    def replacer(m):
-        ipam_open = m.group(1)
-        routes_block = m.group(2)
-        ipam_close = m.group(3)
-        # Detect indentation
-        indent = re.match(r'(\s*)', routes_block).group(1)
-        return (
-            f"{ipam_open}"
-            f"{{{{- if and .Values.global.{netvar}.gatewayIP (ne .Values.global.{netvar}.gatewayIP \"\") }}}}\n"
-            f"{routes_block}"
-            f"{{{{- end }}}}\n"
-            f"{ipam_close}"
-        )
+    new = (
+        f'{{{{- if and .Values.global.{netvar}.gatewayIP '
+        f'(ne .Values.global.{netvar}.gatewayIP "") }}}}\n'
+        f'            "type": "static",\n'
+        f'            "routes": [\n'
+        f'              {{\n'
+        f'                "dst": "0.0.0.0/0",\n'
+        f'                "gw": "{{{{ .Values.global.{netvar}.gatewayIP }}}}"\n'
+        f'              }}\n'
+        f'            ]\n'
+        f'{{{{- else }}}}\n'
+        f'            "type": "static"\n'
+        f'{{{{- end }}}}'
+    )
 
-    new_content, count = routes_pattern.subn(replacer, content)
-
-    if count == 0:
-        print(f"  pattern not matched: {path}")
+    if old not in content:
+        print(f"  pattern not found: {path}")
         return False
 
-    with open(path, 'w') as f:
-        f.write(new_content)
+    open(path, 'w').write(content.replace(old, new))
     print(f"  patched: {path}")
     return True
 
@@ -96,15 +96,10 @@ def main():
 
     chart_dest = sys.argv[1]
 
-    # Find all NAD templates in free5gc and ueransim charts
-    patterns = [
-        os.path.join(chart_dest, 'charts/free5gc/**/*-nad.yaml'),
-        os.path.join(chart_dest, 'charts/ueransim/**/*-nad.yaml'),
-    ]
-
-    nad_files = []
-    for pattern in patterns:
-        nad_files.extend(glob.glob(pattern, recursive=True))
+    nad_files = glob.glob(
+        os.path.join(chart_dest, 'charts/**/*-nad.yaml'),
+        recursive=True
+    )
 
     if not nad_files:
         print(f"No NAD files found under {chart_dest}")
