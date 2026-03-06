@@ -75,9 +75,7 @@ free5gc-amf:
             snssaiList:
 {% for slice in profile.slices %}
               - sst: {{ slice.sst | int }}
-{% if slice.sd != "EMPTY" %}
                 sd: {{ resolve_sd(slice.sd) }}
-{% endif %}
 {% endfor %}
         supportDnnList:
 {% for slice in profile.slices %}
@@ -160,9 +158,7 @@ free5gc-smf:
 {% for slice in profile.slices %}
           - sNssai:
               sst: {{ slice.sst | int }}
-{% if slice.sd != "EMPTY" %}
               sd: {{ resolve_sd(slice.sd) }}
-{% endif %}
             dnnInfos:
               - dnn: {{ slice.dnn }}
                 dns:
@@ -183,9 +179,7 @@ free5gc-smf:
 {% for slice in profile.slices %}
                 - sNssai:
                     sst: {{ slice.sst | int }}
-{% if slice.sd != "EMPTY" %}
                     sd: {{ resolve_sd(slice.sd) }}
-{% endif %}
                   dnnUpfInfoList:
                     - dnn: {{ slice.dnn }}
 {% endfor %}
@@ -211,9 +205,7 @@ free5gc-smf:
 {% for slice in profile.slices %}
                 - sNssai:
                     sst: {{ slice.sst | int }}
-{% if slice.sd != "EMPTY" %}
                     sd: {{ resolve_sd(slice.sd) }}
-{% endif %}
                   dnnUpfInfoList:
                     - dnn: {{ slice.dnn }}
                       pools:
@@ -234,9 +226,7 @@ free5gc-smf:
 {% for slice in profile.slices %}
                 - sNssai:
                     sst: {{ slice.sst | int }}
-{% if slice.sd != "EMPTY" %}
                     sd: {{ resolve_sd(slice.sd) }}
-{% endif %}
                   dnnUpfInfoList:
                     - dnn: {{ slice.dnn }}
                       pools:
@@ -300,9 +290,7 @@ free5gc-nssf:
             supportedSnssaiList:
 {% for slice in profile.slices %}
               - sst: {{ slice.sst | int }}
-{% if slice.sd != "EMPTY" %}
                 sd: {{ resolve_sd(slice.sd) }}
-{% endif %}
 {% endfor %}
         amfList: []
         taList:
@@ -315,9 +303,7 @@ free5gc-nssf:
             supportedSnssaiList:
 {% for slice in profile.slices %}
               - sst: {{ slice.sst | int }}
-{% if slice.sd != "EMPTY" %}
                 sd: {{ resolve_sd(slice.sd) }}
-{% endif %}
 {% endfor %}
         mappingListFromPlmn: []
 
