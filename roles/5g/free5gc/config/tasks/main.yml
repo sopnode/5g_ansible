@@ -24,6 +24,17 @@
   ansible.builtin.command: python3 /tmp/patch_nads.py "{{ free5gc_repo_dest }}"
   changed_when: true
 
+- name: Patch UPF wrapper.sh to create /etc/iproute2 if missing
+  ansible.builtin.replace:
+    path: "{{ item }}"
+    regexp: 'echo "1200 n6if" >> /etc/iproute2/rt_tables'
+    replace: 'mkdir -p /etc/iproute2 && echo "1200 n6if" >> /etc/iproute2/rt_tables'
+  loop:
+    - "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/upf/upf-configmap.yaml"
+    - "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/psaupf1/psaupf1-configmap.yaml"
+    - "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/psaupf2/psaupf2-configmap.yaml"
+  ignore_errors: true
+
 # Then apply the 5G profile settings on the repo
 
 - name: Load active 5G profile
