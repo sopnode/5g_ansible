@@ -19,6 +19,10 @@ ue:
 
   nodeSelector:
     kubernetes.io/hostname: "{{ ran_node_name }}"
+  configmap:
+    name: "ue-configmap-{{ ue_name | lower }}"
+  volume:
+    name: "ue-volume-{{ ue_name | lower }}"
 
   configuration: |-
     supi: "imsi-{{ profile.plmn.mcc }}{{ profile.plmn.mnc }}{{ ue_data.imsi_suffix }}"
