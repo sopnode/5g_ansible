@@ -26,7 +26,7 @@ gnb:
   n2if:
     ipAddress: 0.0.0.0   # listen on all interfaces (Flannel eth0)
   n3if:
-    ipAddress: 0.0.0.0   # listen on all interfaces (Flannel eth0)
+    ipAddress: {{ net.n3.gnb_ip }}
 
   amf:
     n2if:
