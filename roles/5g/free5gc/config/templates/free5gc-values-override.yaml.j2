@@ -22,14 +22,19 @@
 # ============================================================
 
 {% set ran_masterIf = 'n3br' if (core_node_name is defined and ran_node_name is defined and core_node_name != ran_node_name) else nic_interface %}
+{% set n2n3_type = 'macvlan' if (core_node_name is defined and ran_node_name is defined and core_node_name != ran_node_name) else 'ipvlan' %}
 
 global:
   n2network:
+    enabled: true
     masterIf: "{{ ran_masterIf }}"
+    type: "{{ n2n3_type }}"
   n3network:
+    enabled: true
     masterIf: "{{ ran_masterIf }}"
+    type: "{{ n2n3_type }}"
   n4network:
-    masterIf: "{{ 'n4br' if (core_node_name is defined and ran_node_name is defined and core_node_name != ran_node_name) else nic_interface }}"
+    masterIf: "{{ nic_interface }}"
   n6network:
     masterIf: "{{ nic_interface }}"
   n9network:
