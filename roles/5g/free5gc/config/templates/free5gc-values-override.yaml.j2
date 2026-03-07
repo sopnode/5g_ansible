@@ -29,7 +29,7 @@ global:
   n3network:
     masterIf: "{{ ran_masterIf }}"
   n4network:
-    masterIf: "{{ nic_interface }}"
+    masterIf: "{{ 'n4br' if (core_node_name is defined and ran_node_name is defined and core_node_name != ran_node_name) else nic_interface }}"
   n6network:
     masterIf: "{{ nic_interface }}"
   n9network:
