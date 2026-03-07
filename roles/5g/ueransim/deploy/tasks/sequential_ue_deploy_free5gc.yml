@@ -16,9 +16,7 @@
     kind: Pod
     namespace: "{{ ran_ns | default('free5gc') }}"
     label_selectors:
-      - app=ueransim
-      - component=ue
-      - "ue={{ ue_item.key | lower }}"
+      - "app.kubernetes.io/instance=ueransim-{{ ue_item.key | lower }}"
   register: ue_pod
   until:
     - ue_pod.resources | length > 0
