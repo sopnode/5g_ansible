@@ -35,6 +35,25 @@
     - "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/psaupf2/psaupf2-configmap.yaml"
   ignore_errors: true
 
+- name: Patch UPF wrapper.sh — iupf1 configmap also
+  ansible.builtin.replace:
+    path: "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/iupf1/iupf1-configmap.yaml"
+    regexp: 'echo "1200 n6if" >> /etc/iproute2/rt_tables'
+    replace: 'mkdir -p /etc/iproute2 && echo "1200 n6if" >> /etc/iproute2/rt_tables'
+  ignore_errors: true
+
+- name: Patch iupf1 N3 addr to use n3if.ipAddress instead of 0.0.0.0
+  ansible.builtin.replace:
+    path: "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/iupf1/iupf1-configmap.yaml"
+    regexp: '(\s*)- addr: 0\.0\.0\.0(\s*\n\s*type: N3)'
+    replace: '\1- addr: {{ ''{{'' }} .n3if.ipAddress {{ ''}}'' }}\2'
+
+- name: Patch UPF securityContext to add SYS_ADMIN capability
+  ansible.builtin.replace:
+    path: "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/values.yaml"
+    regexp: 'add: \["NET_ADMIN"\]'
+    replace: 'add: ["NET_ADMIN", "SYS_ADMIN"]'
+
 # Then apply the 5G profile settings on the repo
 
 - name: Load active 5G profile
