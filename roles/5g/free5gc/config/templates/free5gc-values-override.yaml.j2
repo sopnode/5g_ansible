@@ -43,7 +43,7 @@ global:
         nodeport: 31412
         protocol: SCTP
         type: NodePort
-  uesubnet: "12.1.1.0/24"
+  uesubnet: "{{ (profile.slices | map(attribute='ip_prefix') | first) }}.0/24"
 
 # ============================================================
 # AMF

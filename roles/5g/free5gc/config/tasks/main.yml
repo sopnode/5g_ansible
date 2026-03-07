@@ -54,6 +54,17 @@
     regexp: 'add: \["NET_ADMIN"\]'
     replace: 'add: ["NET_ADMIN", "SYS_ADMIN"]'
 
+
+- name: Copy UPF wrapper patch script
+  ansible.builtin.copy:
+    src: patch_upf_wrapper.py
+    dest: /tmp/patch_upf_wrapper.py
+    mode: '0755'
+
+- name: Patch UPF psaupf wrapper.sh to use eth0 instead of n6
+  ansible.builtin.command: python3 /tmp/patch_upf_wrapper.py "{{ free5gc_repo_dest }}"
+  changed_when: true
+
 # Then apply the 5G profile settings on the repo
 
 - name: Load active 5G profile
