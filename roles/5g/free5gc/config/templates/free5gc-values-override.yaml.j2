@@ -44,6 +44,11 @@ global:
     cidr: "29"
     gatewayIP: ""
 {% endif %}
+{% if multinode %}
+  amf:
+    n2if:
+      ipAddress: "10.100.50.234"
+{% endif %}
   n4network:
     masterIf: "{{ nic_interface }}"
   n6network:
@@ -66,10 +71,6 @@ global:
 # ============================================================
 free5gc-amf:
   amf:
-{% if multinode %}
-    n2if:
-      ipAddress: "10.100.50.234"
-{% endif %}
     configuration:
       configuration: |-
         amfName: AMF
