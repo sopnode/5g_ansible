@@ -89,7 +89,7 @@
       {%- if core == 'open5gs' -%}
         10.10.3.200
       {%- elif core == 'free5gc' -%}
-        10.100.50.249
+        10.100.50.234
       {%- else -%}
         {{ ran_node_name if fhi72 | bool else core_node_name }}
       {%- endif -%}
