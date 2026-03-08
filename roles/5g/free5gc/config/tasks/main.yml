@@ -18,15 +18,15 @@
     dest: /tmp/patch_nads.py
     mode: '0755'
 
-- name: Patch AMF N2 NAD template to support OVS CNI for multinode
-  ansible.builtin.replace:
-    path: "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-amf/templates/amf-n2-nad.yaml"
-    regexp: '(\s+)"type": \{\{ \.Values\.global\.n2network\.type \| quote \}\},'
-    replace: >-
-      \1"type": {{ '{{' }} .Values.global.n2network.type | quote {{ '}}' }},
-      {{- if eq .Values.global.n2network.type "ovs" }}
-              "bridge": {{ '{{' }} .Values.global.n2network.masterIf | quote {{ '}}' }},
-      {{- end }}
+- name: Copy AMF N2 NAD patch script
+  ansible.builtin.copy:
+    src: patch_amf_n2_nad.py
+    dest: /tmp/patch_amf_n2_nad.py
+    mode: '0755'
+
+- name: Patch AMF N2 NAD to support OVS CNI
+  ansible.builtin.command: python3 /tmp/patch_amf_n2_nad.py "{{ free5gc_repo_dest }}"
+  changed_when: true
 
 - name: Patch NAD templates to make gateway route conditional
   ansible.builtin.command: python3 /tmp/patch_nads.py "{{ free5gc_repo_dest }}"
