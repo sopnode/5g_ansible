@@ -48,13 +48,15 @@ global:
   amf:
     n2if:
       ipAddress: "10.100.50.234"
-{% endif %}
-  n4network:
-    masterIf: "{{ nic_interface }}"
-  n6network:
-    masterIf: "{{ nic_interface }}"
-  n9network:
-    masterIf: "{{ nic_interface }}"
+    service:
+      ngap:
+        enabled: true
+        name: amf-n2
+        port: 38412
+        nodeport: 31412
+        protocol: SCTP
+        type: NodePort
+{% else %}
   amf:
     service:
       ngap:
@@ -64,6 +66,7 @@ global:
         nodeport: 31412
         protocol: SCTP
         type: NodePort
+{% endif %}
   uesubnet: "{{ (profile.slices | map(attribute='ip_prefix') | first) }}.0/24"
 
 # ============================================================
