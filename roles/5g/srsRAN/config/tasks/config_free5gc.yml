@@ -78,7 +78,7 @@
 - name: Fix device_args for rfsim multi-UE mode
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
-      .gnbConfig.ru_sdr.device_args = "tx_port0=tcp://0.0.0.0:2000,tx_port1=tcp://0.0.0.0:2001,tx_port2=tcp://0.0.0.0:2002,rx_port0=tcp://0.0.0.0:2100,rx_port1=tcp://0.0.0.0:2200,rx_port2=tcp://0.0.0.0:2300,base_srate=23.04e6"
+      .gnbConfig.ru_sdr.device_args = "tx_port0=tcp://{{ srsran_free5gc_network.n3.gnb_ip }}:2000,tx_port1=tcp://{{ srsran_free5gc_network.n3.gnb_ip }}:2001,tx_port2=tcp://{{ srsran_free5gc_network.n3.gnb_ip }}:2002,rx_port0=tcp://{{ srsran_free5gc_network.n3.gnb_ip }}:2100,rx_port1=tcp://{{ srsran_free5gc_network.n3.gnb_ip }}:2200,rx_port2=tcp://{{ srsran_free5gc_network.n3.gnb_ip }}:2300,base_srate=23.04e6"
     ' "{{ values_file }}"
   when: rru == 'rfsim'
   
