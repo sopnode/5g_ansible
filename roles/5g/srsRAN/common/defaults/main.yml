@@ -3,6 +3,7 @@ repo_url: "https://github.com/turletti/srsran-helm.git"
 version: main
 ran_ns: "{{ core }}"
 repo_dest: "~/srsran-helm"
+
 srs_gnb_label_selectors:
   - "app=srsran"
   - "component=gnb"
@@ -11,9 +12,11 @@ srs_ue_label_selectors:
   - "component=ue"
 ue_count: 3
 kubectl_bin: "/usr/bin/kubectl"
+
 yq_version: "v4.45.1"
 yq_bin_path: "/usr/local/bin/yq"
 yq_url: "https://github.com/mikefarah/yq/releases/download/{{ yq_version }}/yq_linux_amd64"
+
 # Network config for srsRAN + free5gc
 srsran_free5gc_network:
   n2:
@@ -21,6 +24,7 @@ srsran_free5gc_network:
     amf_port: 31412
   n3:
     gnb_ip: "10.100.50.236"  # same as ueransim n3 gnb_ip
+
 # Network config for srsRAN + open5gs
 srsran_open5gs_network:
   n2:
@@ -28,6 +32,7 @@ srsran_open5gs_network:
     amf_port: 31412
   n3:
     gnb_ip: "10.100.50.236"  # same as ueransim n3 gnb_ip
+
 # Multus NetworkAttachmentDefinition names
 free5gc_n3_nad_name: "n3network-free5gc-free5gc-upf"
 open5gs_n3_nad_name: "n3network"
