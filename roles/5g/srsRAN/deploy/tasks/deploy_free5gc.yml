@@ -41,6 +41,12 @@
   when: gnb_release_exists.stdout | trim | int > 0
   failed_when: false
 
+- name: Patch deployment template - parameterize n3network name
+  ansible.builtin.replace:
+    path: "{{ repo_dest_abs }}/charts/srsran-gnb/templates/deployment.yaml"
+    regexp: '"name":\s*"n3network"'
+    replace: '"name": "{{ ''{{'' }} .Values.n3networkName {{ ''}}'' }}"'
+
 - name: Deploy srsRAN gNB via Helm (rfsim)
   when: rru == 'rfsim'
   kubernetes.core.helm:

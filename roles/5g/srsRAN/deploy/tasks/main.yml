@@ -7,10 +7,12 @@
   ansible.builtin.include_tasks: deploy_open5gs.yml
   when: core == 'open5gs'
 
-#- name: Deploy Telegraf
-#  include_tasks: deploy_telegraf.yml
-#
-#- name: Deploy srsRAN UEs
+- name: Deploy Telegraf
+  include_tasks: deploy_telegraf.yml
+
+
+
+#- name: Deploy srsRAN UEs # now done in deploy_free5gc.yml / deploy_open5gs.yml
 #  include_tasks: deploy_srsues.yml
 #  when: rru == 'rfsim'
 #

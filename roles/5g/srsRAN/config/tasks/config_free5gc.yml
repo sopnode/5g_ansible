@@ -3,17 +3,14 @@
 # srsRAN config for free5gc
 # Generates Helm values override for srsran-gnb chart
 # ============================================================
-
 - name: Normalize repo_dest to remote HOME
   ansible.builtin.set_fact:
     repo_dest_abs: "{{ (repo_dest | default('~/srsran-helm') | trim)
                        | regex_replace('^~/?', ansible_env.HOME ~ '/') }}"
-
 - name: Gather env facts (remote)
   ansible.builtin.setup:
     filter: ansible_env
   when: ansible_env is not defined
-
 - name: Select values filename from rru
   ansible.builtin.set_fact:
     values_filename: "{{ rru_file_map[(rru | default('rfsim') | string | trim | lower)] | default('values.yaml') }}"
@@ -24,26 +21,21 @@
       n300:    values-n300-n78-20MHz.yaml
       n320:    values-n320-n78-20MHz.yaml
       rfsim:   values-rfsim.yaml
-
 - name: Build absolute values_file path
   ansible.builtin.set_fact:
     values_file: "{{ [repo_dest_abs, 'charts', 'srsran-gnb', values_filename] | path_join }}"
-
 - name: Ensure values file exists
   ansible.builtin.stat:
     path: "{{ values_file }}"
   register: values_stat
-
 - name: Fail if values file missing
   ansible.builtin.fail:
     msg: "Values file not found: {{ values_file }}"
   when: not values_stat.stat.exists
-
 - name: Build gnb_slices list for free5gc
   set_fact:
     gnb_slices: []
     amf_slices: []
-
 - name: Map slices for gNB and AMF
   set_fact:
     gnb_slices: "{{ gnb_slices + [slice_entry] }}"
@@ -55,7 +47,6 @@
     slice_entry:
       sst: "{{ sl_item.sst | int }}"
       sd: "{{ lookup('template', '../templates/slice_sd.j2') | trim }}"
-
 - name: Update gNB PLMN/TAC/slices
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
@@ -64,28 +55,25 @@
       .gnbConfig.cell_cfg.slicing = {{ gnb_slices | to_json }} |
       .gnbConfig.cu_cp.amf.supported_tracking_areas[0].plmn_list[0].tai_slice_support_list = {{ amf_slices | to_json }}
     ' "{{ values_file }}"
-
-- name: Update AMF address and gNB N3 IP for free5gc
+- name: Update AMF address, gNB N3 IP and n3networkName for free5gc
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
       .gnbConfig.cu_cp.amf.addr = "{{ srsran_free5gc_network.n2.amf_ip }}" |
       .gnbConfig.cu_cp.amf.port = {{ srsran_free5gc_network.n2.amf_port }} |
       .gnbConfig.cu_cp.amf.bind_addr = "{{ hostvars[groups['ran_node'][0]].ip }}" |
-      .gnbIp = "{{ srsran_free5gc_network.n3.gnb_ip }}"
+      .gnbIp = "{{ srsran_free5gc_network.n3.gnb_ip }}" |
+      .n3networkName = "n3network-free5gc-free5gc-upf"
     ' "{{ values_file }}"
-
 - name: Force remove quotes on SD values
   replace:
     path: "{{ values_file }}"
     regexp: 'sd: "(0x[0-9A-Fa-f]+)"'
     replace: 'sd: \1'
-
 - name: Force remove quotes on SST values
   replace:
     path: "{{ values_file }}"
     regexp: 'sst: "([0-9]+)"'
     replace: 'sst: \1'
-
 - name: Ensure values file has node constraints
   blockinfile:
     path: "{{ values_file }}"

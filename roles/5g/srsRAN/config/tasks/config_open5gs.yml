@@ -1,10 +1,8 @@
 ---
-
 - name: Check if yq is already installed
   ansible.builtin.stat:
     path: "{{ yq_bin_path }}"
   register: yq_bin
-
 - name: Download yq binary using curl or wget
   ansible.builtin.shell: |
     set -e
@@ -20,41 +18,34 @@
     creates: "{{ yq_bin_path }}"
   when: not yq_bin.stat.exists
   become: true
-
 - name: Ensure yq is executable
   ansible.builtin.file:
     path: "{{ yq_bin_path }}"
     mode: '0755'
     state: file
   become: true
-
 - name: Resolve 5G profile file
   set_fact:
     fiveg_profile_file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
-
 - name: Load 5G profile
   include_vars:
     file: "{{ fiveg_profile_file }}"
     name: fiveg
-
 - name: Show active 5G profile
   debug:
     msg:
       - "Using 5G profile: {{ fiveg_profile | default('default') }}"
       - "PLMN: {{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}"
       - "TAC: {{ fiveg.plmn.tac }}"
-
 - name: Uninstall existing srsran-gnb Helm release if present
   ansible.builtin.shell: >
     helm -n {{ ran_ns }} uninstall srsran-gnb || true
   changed_when: true
   ignore_errors: true
-
 - name: Initialize gnb_slices and amf_slices
   set_fact:
     gnb_slices: []
     amf_slices: []
-
 - name: Map slices strictly for gNB and AMF
   set_fact:
     gnb_slices: "{{ (gnb_slices | default([])) + [ slice_entry ] }}"
@@ -66,7 +57,6 @@
     slice_entry:
       sst: "{{ sl_item.sst | int }}"
       sd: "{{ lookup('template', 'slice_sd.j2') | trim }}"
-
 - name: Update gNB configurations (Structure only)
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
@@ -75,29 +65,25 @@
       .gnbConfig.cell_cfg.tac = {{ fiveg.plmn.tac | int }} |
       .gnbConfig.cell_cfg.slicing = {{ gnb_slices | to_json }}
     ' "{{ values_file }}"
-
-- name: Update AMF address and gNB N3 IP for free5gc core
+- name: Update AMF address, gNB N3 IP and n3networkName for open5gs
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
-      .gnbConfig.cu_cp.amf.addr = "{{ srsran_free5gc_network.n2.amf_ip }}" |
-      .gnbConfig.cu_cp.amf.port = {{ srsran_free5gc_network.n2.amf_port }} |
+      .gnbConfig.cu_cp.amf.addr = "{{ srsran_open5gs_network.n2.amf_ip }}" |
+      .gnbConfig.cu_cp.amf.port = {{ srsran_open5gs_network.n2.amf_port }} |
       .gnbConfig.cu_cp.amf.bind_addr = "{{ hostvars[groups['ran_node'][0]].ip }}" |
-      .gnbIp = "{{ srsran_free5gc_network.n3.gnb_ip }}"
+      .gnbIp = "{{ srsran_open5gs_network.n3.gnb_ip }}" |
+      .n3networkName = "n3network"
     ' "{{ values_file }}"
-  when: core == 'free5gc'
-  
 - name: Force remove quotes on SD values (Post-processing)
   replace:
     path: "{{ values_file }}"
     regexp: 'sd: "(0x[0-9A-Fa-f]+)"'
     replace: 'sd: \1'
-
 - name: Force remove quotes on SST values (Post-processing)
   replace:
     path: "{{ values_file }}"
     regexp: 'sst: "([0-9]+)"'
     replace: 'sst: \1'
-
 - name: Ensure values file has node constraints
   blockinfile:
     path: "{{ values_file }}"
