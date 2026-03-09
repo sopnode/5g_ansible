@@ -70,7 +70,7 @@
       .gnbConfig.cu_cp.amf.addr = "{{ srsran_free5gc_network.n2.amf_ip }}" |
       .gnbConfig.cu_cp.amf.port = {{ srsran_free5gc_network.n2.amf_port }} |
       .gnbConfig.cu_cp.amf.bind_addr = "{{ hostvars[groups['ran_node'][0]].ip }}" |
-      .gnbConfig.cu_up.gtpu_bind_addr = "{{ srsran_free5gc_network.n3.gnb_ip }}" |
+      .gnbConfig.cu_up.ngu.socket = [{"bind_addr": "{{ srsran_free5gc_network.n3.gnb_ip }}"}] |
       .gnbIp = "{{ srsran_free5gc_network.n3.gnb_ip }}" |
       .n3networkName = "n3network-free5gc-free5gc-upf"
     ' "{{ values_file }}"
