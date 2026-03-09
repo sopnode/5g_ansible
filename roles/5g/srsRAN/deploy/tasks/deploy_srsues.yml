@@ -60,7 +60,7 @@
       apn: "{{ item.dnn }}"
       n3networkName: "{{ free5gc_n3_nad_name | default('n3network') }}"
       ueIp: "{{ item.ue_ip }}"
-      gnbIp: "{{ srsran_free5gc_network.n3.gnb_ip }}
+      gnbIp: "{{ srsran_free5gc_network.n3.gnb_ip }}"
       zmq:
         tx_port: "{{ item.tx_port }}"
         rx_port: "{{ item.rx_port }}"
