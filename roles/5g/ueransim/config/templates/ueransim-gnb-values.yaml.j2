@@ -36,8 +36,7 @@ gnb:
       ngap:
         enabled: true   # use NGAP NodePort service instead of ipvlan
 
-  nodeSelector:
-    kubernetes.io/hostname: "{{ ran_node_name }}"
+  nodeName: "{{ ran_node_name }}"
 
   configuration: |-
     mcc: '{{ profile.plmn.mcc }}'

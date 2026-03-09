@@ -17,8 +17,7 @@ ue:
   enabled: true
   replicaCount: 1
 
-  nodeSelector:
-    kubernetes.io/hostname: "{{ ran_node_name }}"
+  nodeName: "{{ ran_node_name }}"
   configmap:
     name: "ue-configmap-{{ ue_name | lower }}"
   volume:
