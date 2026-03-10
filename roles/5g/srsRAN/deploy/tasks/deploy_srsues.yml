@@ -126,55 +126,6 @@
         msg: "WARNING: not all UE processes started - check tmux windows"
       when: ue_up_check.rc != 0
 
-    - name: Pause before starting GNU Radio
-      ansible.builtin.pause:
-        seconds: 3
-
-    # --- Start GNU Radio broker ---
-
-    - name: Start GNU Radio broker in tmux window 'gnu'
-      ansible.builtin.command: >
-        {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
-        /bin/sh -lc "
-          tmux list-windows -t ran | grep -q '^\s*[0-9]\+: gnu\b' \
-            && tmux kill-window -t ran:gnu || true;
-          tmux new-window -t ran -n gnu \
-            'bash -lc \"/srsran/config/start_gnu.sh {{ ue_count }} 2>&1\"'
-        "
-      changed_when: true
-      failed_when: false
-
-    - name: Wait for GNU Radio to be ready
-      ansible.builtin.command: >
-        {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
-        "grep -q 'Press Enter to quit' /var/log/gnu_multi_ue.log 2>/dev/null"
-      register: gnu_log_wait
-      changed_when: false
-      failed_when: false
-      retries: 30
-      delay: 2
-      until: gnu_log_wait.rc == 0
-
-    - name: Warn if GNU Radio did not start
-      ansible.builtin.debug:
-        msg: "WARNING: GNU Radio broker did not start - check /var/log/gnu_multi_ue.log"
-      when: gnu_log_wait.rc != 0
-
-    - name: Show GNU Radio status
-      ansible.builtin.command: >
-        {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
-        "echo '== processes ==';
-         pgrep -af 'multi_ue_scenario' || echo 'not running';
-         echo '== log tail ==';
-         tail -n 20 /var/log/gnu_multi_ue.log 2>/dev/null || echo 'no log'"
-      register: gnu_status
-      changed_when: false
-      failed_when: false
-
-    - name: GNU Radio status
-      ansible.builtin.debug:
-        msg: "{{ gnu_status.stdout_lines }}"
-
     - name: Pause before adding routes
       ansible.builtin.pause:
         seconds: 3

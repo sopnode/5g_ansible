@@ -1,0 +1,28 @@
+---
+- name: Start GNU Radio broker in tmux window 'gnu'
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
+    /bin/sh -lc "
+      tmux list-windows -t ran | grep -q '^\s*[0-9]\+: gnu\b' \
+        && tmux kill-window -t ran:gnu || true;
+      tmux new-window -t ran -n gnu \
+        'bash -lc \"/srsran/config/start_gnu.sh {{ ue_count }} 2>&1\"'
+    "
+  changed_when: true
+  failed_when: false
+
+- name: Wait for GNU Radio to be ready
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
+    "grep -q 'Press Enter to quit' /var/log/gnu_multi_ue.log 2>/dev/null"
+  register: gnu_log_wait
+  changed_when: false
+  failed_when: false
+  retries: 30
+  delay: 2
+  until: gnu_log_wait.rc == 0
+
+- name: Warn if GNU Radio did not start
+  ansible.builtin.debug:
+    msg: "WARNING: GNU Radio broker did not start"
+  when: gnu_log_wait.rc != 0

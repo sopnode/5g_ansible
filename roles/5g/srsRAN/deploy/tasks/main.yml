@@ -10,5 +10,9 @@
 - name: Deploy srsRAN gNB
   include_tasks: deploy_gnb.yml
 
+- name: Start GNU Radio broker (after gNB is ready)
+  include_tasks: start_broker.yml
+  when: rru == 'rfsim'
+
 - name: Deploy Telegraf
   include_tasks: deploy_telegraf.yml
