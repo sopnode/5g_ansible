@@ -116,32 +116,68 @@
     mode: '0644'
     content: "{{ lookup('template', 'srsue_configmap.yaml.j2') }}"
 
-# --- Patch deployment.yaml ---
+# --- Rewrite deployment.yaml complet (evite les patches fragiles) ---
 
-- name: Patch srsUE deployment - sleep infinity
-  ansible.builtin.replace:
-    path: "{{ repo_dest_abs }}/charts/srsue/templates/deployment.yaml"
-    regexp: '/bin/bash /srsran/config/start_ue\.sh 1'
-    replace: 'sleep infinity'
+- name: Rewrite srsue deployment.yaml
+  ansible.builtin.copy:
+    dest: "{{ repo_dest_abs }}/charts/srsue/templates/deployment.yaml"
+    mode: '0644'
+    content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{ '{{' }} include "srsran-ue.fullname" . {{ '}}' }}-{{ '{{' }} .Release.Name {{ '}}' }}
+        labels:
+          {{ '{{-' }} include "srsran-ue.labels" . | nindent 4 {{ '}}' }}
+      spec:
+        selector:
+          matchLabels:
+            {{ '{{-' }} include "srsran-ue.selectorLabels" . | nindent 6 {{ '}}' }}
+        replicas: 1
+        template:
+          metadata:
+            labels:
+              {{ '{{-' }} include "srsran-ue.selectorLabels" . | nindent 8 {{ '}}' }}
+            annotations:
+              k8s.v1.cni.cncf.io/networks: >-
+                [{ "name": "{{ '{{' }} .Values.n3networkName {{ '}}' }}", "interface": "n3", "ips": [ "{{ '{{' }} .Values.ueIp {{ '}}' }}/24" ] }]
+          spec:
+            containers:
+              - name: ue
+                image: "{{ '{{' }} .Values.image.repository {{ '}}' }}:{{ '{{' }} .Values.image.tag {{ '}}' }}"
+                imagePullPolicy: {{ '{{' }} .Values.image.pullPolicy {{ '}}' }}
+                securityContext:
+                  privileged: true
+                  capabilities:
+                    add: ["NET_ADMIN", "SYS_NICE", "IPC_LOCK", "CAP_NET_ADMIN"]
+                command: ["/bin/bash", "-c", "--"]
+                args:
+                  - |
+                    mkdir -p /dev/net
+                    if [ ! -c /dev/net/tun ]; then mknod /dev/net/tun c 10 200; fi
+                    apt update && apt install -y iputils-ping iperf3 tmux
+                    sleep infinity
+                env:
+                  - name: PATH
+                    value: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/srsran/config"
+                  - name: GNB_IP
+                    value: "{{ srsran_network.n3.gnb_ip }}"
+                  - name: UE_IPS
+                    value: "{{ srsran_network.n3.ue_ips | join(',') }}"
+                  - name: UE_COUNT
+                    value: "{{ ue_count | default(3) | string }}"
+                volumeMounts:
+                  - name: ue-config
+                    mountPath: /srsran/config
+            dnsPolicy: ClusterFirst
+            restartPolicy: Always
+            volumes:
+              - name: ue-config
+                configMap:
+                  name: {{ '{{' }} include "srsran-ue.fullname" . {{ '}}' }}-{{ '{{' }} .Release.Name {{ '}}' }}-ue-config
+                  defaultMode: 0755
 
-- name: Patch srsUE deployment - add env vars
-  ansible.builtin.replace:
-    path: "{{ repo_dest_abs }}/charts/srsue/templates/deployment.yaml"
-    regexp: '(\s+- name: PATH\s+value: "[^"]+")'
-    replace: |
-      \1
-              - name: GNB_IP
-                value: "{{ srsran_network.n3.gnb_ip }}"
-              - name: UE_IPS
-                value: "{{ srsran_network.n3.ue_ips | join(',') }}"
-              - name: UE_COUNT
-                value: "{{ ue_count | default(3) | string }}"
-
-- name: Patch srsUE deployment - parameterize n3network name
-  ansible.builtin.replace:
-    path: "{{ repo_dest_abs }}/charts/srsue/templates/deployment.yaml"
-    regexp: '"name":\s*"n3network"'
-    replace: '"name": "{{ ''{{'' }} .Values.n3networkName {{ ''}}'' }}"'
+# --- Patch gNB deployment - n3network name (toujours, pas seulement rfsim) ---
 
 - name: Patch gNB deployment - parameterize n3network name
   ansible.builtin.replace:
