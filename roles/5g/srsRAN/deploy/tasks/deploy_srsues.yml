@@ -1,36 +1,36 @@
 ---
 # ------------------------------
 # Deploy srsRAN UEs (multi-pod, RFSIM only)
-# Minimal changes, safe for USRP mode
 # ------------------------------
-
-# Build the list of UEs to deploy from the 5G profile
-- name: Build UE list from 5G profile (UE18/19/20)
+- name: Build full UE list from 5G profile (UE18/19/20)
   set_fact:
-    ue_list:
+    ue_list_full:
       - name: ue1
         imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE18.imsi_suffix }}"
         dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE18.slice) | map(attribute='dnn') | first }}"
         tx_port: 2100
         rx_port: 2000
-        ue_ip: "10.100.50.234"
+        ue_ip: "{{ srsran_network.n3.ue_ips[0] }}"
       - name: ue2
         imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE19.imsi_suffix }}"
         dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE19.slice) | map(attribute='dnn') | first }}"
         tx_port: 2200
         rx_port: 2001
-        ue_ip: "10.100.50.235"
+        ue_ip: "{{ srsran_network.n3.ue_ips[1] }}"
       - name: ue3
         imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE20.imsi_suffix }}"
         dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE20.slice) | map(attribute='dnn') | first }}"
         tx_port: 2300
         rx_port: 2002
-        ue_ip: "10.100.50.237"
+        ue_ip: "{{ srsran_network.n3.ue_ips[2] }}"
 
-# Debug the list of UEs before deployment
+- name: Slice UE list to ue_count
+  set_fact:
+    ue_list: "{{ ue_list_full[:ue_count | int] }}"
+
 - name: Debug UE list
   ansible.builtin.debug:
-    msg: "{{ ue_list }}"
+    msg: "Deploying {{ ue_list | length }} UE(s): {{ ue_list | map(attribute='name') | list }}"
 
 - name: Clean old ConfigMap for this UE release
   when: rru == "rfsim"
@@ -38,13 +38,12 @@
     api_version: v1
     kind: ConfigMap
     namespace: "{{ ran_ns }}"
-    name: "srsran-ue-{{ item.name }}-ue-config"
+    name: "srsran-ue-srsue-{{ item.name }}-ue-config"
     state: absent
   loop: "{{ ue_list }}"
   loop_control:
     loop_var: item
 
-# Deploy each UE as a separate Helm release
 - name: Deploy each srsUE pod as separate Helm release
   when: rru == "rfsim"
   kubernetes.core.helm:
@@ -60,8 +59,10 @@
       apn: "{{ item.dnn }}"
       n3networkName: "{{ free5gc_n3_nad_name | default('n3network') }}"
       ueIp: "{{ item.ue_ip }}"
-      gnbIp: "{{ srsran_free5gc_network.n3.gnb_ip }}"
+      gnbIp: "{{ srsran_network.n3.gnb_ip }}"
       zmq:
         tx_port: "{{ item.tx_port }}"
         rx_port: "{{ item.rx_port }}"
   loop: "{{ ue_list }}"
+
+
