@@ -3,6 +3,11 @@
 # RFSIM only - up to 3 UEs on a single radio channel
 # ------------------------------
 
+- name: Include 5G profile variables
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+    name: fiveg
+
 - name: Build full UE list from 5G profile
   set_fact:
     ue_list_full:
@@ -16,7 +21,7 @@
       - name: ue2
         index: 2
         imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE19.imsi_suffix }}"
-        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE19.slice) | map(attribute,'dnn') | first }}"
+        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE19.slice) | map(attribute='dnn') | first }}"
         tx_port: 2200
         rx_port: 2001
         ue_ip: "{{ srsran_network.n3.ue_ips[1] }}"
