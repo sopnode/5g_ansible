@@ -81,8 +81,9 @@
 - name: Fix device_args for rfsim GNU Radio single-channel multi-UE
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
+      .gnbConfig.cell_cfg.channel_bandwidth_MHz = 10 |
       .gnbConfig.ru_sdr.srate = 11.52 |
-      .gnbConfig.ru_sdr.device_args = "tx_port=tcp://{{ srsran_network.n3.gnb_ip }}:2000,rx_port=tcp://{{ srsran_network.n3.ue_ips[0] }}:2001,base_srate=11.52e6"
+      .gnbConfig.ru_sdr.device_args = "tx_port=tcp://{{ srsran_network.n3.gnb_ip }}:2000,rx_port=tcp://{{ srsran_network.n3.gnb_ip }}:2001,base_srate=11.52e6"
     ' "{{ values_file }}"
   when: rru == 'rfsim'
 

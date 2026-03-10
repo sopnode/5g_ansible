@@ -52,7 +52,7 @@
                   self.connect(ue_src, (adder, i))
               gnb_sink = zeromq.rep_sink(
                   gr.sizeof_gr_complex, 1,
-                  f"tcp://{UE_IPS[0]}:2001", 100, False, -1)
+                  f"tcp://{GNB_IP}:2001", 100, False, -1)
               self.connect(adder, gnb_sink)
       if __name__ == "__main__":
           parser = argparse.ArgumentParser()
