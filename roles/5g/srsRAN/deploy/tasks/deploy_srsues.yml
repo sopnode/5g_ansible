@@ -36,6 +36,15 @@
         state: absent
       failed_when: false
 
+    # --- Wait for gNB to be ready before deploying UEs ---
+
+    - name: Wait for gNB pod to be Ready
+      ansible.builtin.command: >
+        {{ kubectl_bin }} wait --for=condition=Ready pod
+        -n {{ ran_ns }} -l app=srsran,component=gnb
+        --timeout=120s
+      changed_when: false
+
     # --- Deploy single UE pod via Helm ---
 
     - name: Deploy srsRAN UE pod via Helm

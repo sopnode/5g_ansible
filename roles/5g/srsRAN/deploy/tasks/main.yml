@@ -4,12 +4,12 @@
   include_tasks: patch_charts.yml
   when: rru == 'rfsim'
 
+- name: Deploy srsRAN gNB
+  include_tasks: deploy_gnb.yml
+
 - name: Deploy srsRAN UEs (rfsim - before gNB so GNU Radio is ready)
   include_tasks: deploy_srsues.yml
   when: rru == 'rfsim'
-
-- name: Deploy srsRAN gNB
-  include_tasks: deploy_gnb.yml
 
 - name: Deploy Telegraf
   include_tasks: deploy_telegraf.yml
