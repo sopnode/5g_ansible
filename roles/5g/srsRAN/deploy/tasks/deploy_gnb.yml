@@ -55,4 +55,4 @@
     state: present
     wait: False # True # FAlse for debug
     atomic: True
-    timeout: 120s
+    timeout: 1200s
