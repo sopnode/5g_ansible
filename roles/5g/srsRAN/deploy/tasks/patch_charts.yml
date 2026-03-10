@@ -58,6 +58,25 @@
           parser = argparse.ArgumentParser()
           parser.add_argument("--nof-ues", type=int, default=1)
           args = parser.parse_args()
+          # Wait for gNB ZMQ to be ready before starting broker
+          import zmq as _zmq
+          _ctx = _zmq.Context()
+          _s = _ctx.socket(_zmq.REQ)
+          _s.setsockopt(_zmq.LINGER, 0)
+          _s.setsockopt(_zmq.RCVTIMEO, 1000)
+          _s.connect(f"tcp://{GNB_IP}:2000")
+          print("Waiting for gNB ZMQ to be ready...", flush=True)
+          for _i in range(60):
+              try:
+                  _s.send(b"")
+                  _s.recv()
+                  print("gNB ready!", flush=True)
+                  break
+              except Exception:
+                  print(f"  [{_i+1}/60] gNB not ready yet...", flush=True)
+                  time.sleep(1)
+          _s.close()
+          _ctx.term()
           tb = MultiUEBroker(args.nof_ues)
           tb.start()
           print("Press Enter to quit", flush=True)
