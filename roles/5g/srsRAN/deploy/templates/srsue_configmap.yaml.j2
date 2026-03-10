@@ -112,8 +112,8 @@ UE_TEMPLATE = """[rf]
         os.makedirs(output_directory, exist_ok=True)
         cfg = UE_CONFIGS.get(ue_number, UE_CONFIGS[1])
         content = UE_TEMPLATE.format(
-            tx_port=f"tcp://{cfg['ue_ip']}:{cfg['tx_port']}",
-            rx_port=f"tcp://{cfg['ue_ip']}:{cfg['rx_port']}",
+            tx_port="tcp://{}:{}".format(cfg['ue_ip'], cfg['tx_port']),
+            rx_port="tcp://{}:{}".format(cfg['ue_ip'], cfg['rx_port']),
             log_file=os.path.join(output_directory, f"ue{ue_number}.log"),
             opc=cfg["opc"], k=cfg["k"],
             imsi=cfg["imsi"], apn=cfg["apn"],
