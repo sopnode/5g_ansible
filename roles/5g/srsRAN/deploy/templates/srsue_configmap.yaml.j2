@@ -29,20 +29,15 @@ data:
       sleep 2
     done
     wait $UE_PID
-
   start_gnu.sh: |
 {{ '{{' }} .Files.Get "files/start_gnu.sh" | indent 4 {{ '}}' }}
-
   multi_ue_scenario.py: |
 {{ '{{' }} .Files.Get "files/multi_ue_scenario.py" | indent 4 {{ '}}' }}
-
   add_route.sh: |
 {{ '{{' }} .Files.Get "files/add_route.sh" | indent 4 {{ '}}' }}
-
   generate_ue_conf.py: |
     #!/usr/bin/env python3
     import argparse, os
-
     UE_CONFIGS = {
     {{ '{{-' }} range $i, $ue := .Values.ues {{ '}}' }}
       {{ '{{' }} add $i 1 {{ '}}' }}: {
@@ -57,65 +52,64 @@ data:
       },
     {{ '{{-' }} end {{ '}}' }}
     }
-UE_TEMPLATE = """[rf]
-    freq_offset = 0
-    tx_gain = 80
-    rx_gain = 40
-    srate = 11.52e6
-    nof_antennas = 1
-    device_name = zmq
-    device_args = tx_port={tx_port},rx_port={rx_port},base_srate=11.52e6
-    [rat.eutra]
-    nof_carriers = 0
-    [rat.nr]
-    bands = 3
-    nof_carriers = 1
-    max_nof_prb = 106
-    nof_prb = 106
-    dl_nr_arfcn = 368500
-    ssb_nr_arfcn = 368410
-    [log]
-    all_level = warning
-    phy_lib_level = none
-    all_hex_limit = 32
-    filename = {log_file}
-    file_max_size = 1000
-    [usim]
-    mode = soft
-    algo = milenage
-    opc  = {opc}
-    k    = {k}
-    imsi = {imsi}
-    imei = 356938035643803
-    [rrc]
-    release = 15
-    ue_category = 4
-    [nas]
-    apn = {apn}
-    apn_protocol = ipv4
-    [gw]
-    ip_devname = tun_srsue
-    ip_netmask = 255.255.255.0
-    [gui]
-    enable = false
-    """
-
+    UE_TEMPLATE = (
+        "[rf]\n"
+        "freq_offset = 0\n"
+        "tx_gain = 80\n"
+        "rx_gain = 40\n"
+        "srate = 11.52e6\n"
+        "nof_antennas = 1\n"
+        "device_name = zmq\n"
+        "device_args = tx_port={tx_port},rx_port={rx_port},base_srate=11.52e6\n"
+        "[rat.eutra]\n"
+        "nof_carriers = 0\n"
+        "[rat.nr]\n"
+        "bands = 3\n"
+        "nof_carriers = 1\n"
+        "max_nof_prb = 106\n"
+        "nof_prb = 106\n"
+        "dl_nr_arfcn = 368500\n"
+        "ssb_nr_arfcn = 368410\n"
+        "[log]\n"
+        "all_level = warning\n"
+        "phy_lib_level = none\n"
+        "all_hex_limit = 32\n"
+        "filename = {log_file}\n"
+        "file_max_size = 1000\n"
+        "[usim]\n"
+        "mode = soft\n"
+        "algo = milenage\n"
+        "opc  = {opc}\n"
+        "k    = {k}\n"
+        "imsi = {imsi}\n"
+        "imei = 356938035643803\n"
+        "[rrc]\n"
+        "release = 15\n"
+        "ue_category = 4\n"
+        "[nas]\n"
+        "apn = {apn}\n"
+        "apn_protocol = ipv4\n"
+        "[gw]\n"
+        "ip_devname = tun_srsue\n"
+        "ip_netmask = 255.255.255.0\n"
+        "[gui]\n"
+        "enable = false\n"
+    )
     def generate_ue_config(ue_number, output_directory):
         os.makedirs(output_directory, exist_ok=True)
         cfg = UE_CONFIGS.get(ue_number, UE_CONFIGS[1])
         content = UE_TEMPLATE.format(
             tx_port="tcp://{}:{}".format(cfg['ue_ip'], cfg['tx_port']),
             rx_port="tcp://{}:{}".format(cfg['ue_ip'], cfg['rx_port']),
-            log_file=os.path.join(output_directory, f"ue{ue_number}.log"),
+            log_file=os.path.join(output_directory, "ue{}.log".format(ue_number)),
             opc=cfg["opc"], k=cfg["k"],
             imsi=cfg["imsi"], apn=cfg["apn"],
         )
-        path = os.path.join(output_directory, f"ue_{ue_number}.conf")
+        path = os.path.join(output_directory, "ue_{}.conf".format(ue_number))
         with open(path, "w") as f:
             f.write(content)
-        print(f"Wrote {path}")
+        print("Wrote {}".format(path))
         return path
-
     if __name__ == "__main__":
         parser = argparse.ArgumentParser()
         parser.add_argument("ue_number", type=int)
