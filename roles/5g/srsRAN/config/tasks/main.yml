@@ -83,7 +83,7 @@
     {{ yq_bin_path }} eval -i '
       .gnbConfig.cell_cfg.channel_bandwidth_MHz = 10 |
       .gnbConfig.ru_sdr.srate = 11.52 |
-      .gnbConfig.ru_sdr.device_args = "tx_port=tcp://{{ srsran_network.n3.gnb_ip }}:2000,rx_port=tcp://{{ srsran_network.n3.gnb_ip }}:2001,base_srate=11.52e6"
+      .gnbConfig.ru_sdr.device_args = "tx_port=tcp://{{ srsran_network.n3.gnb_ip }}:2000,rx_port=tcp://{{ srsran_network.n3.ue_ips[0] }}:2001,base_srate=11.52e6"
     ' "{{ values_file }}"
   when: rru == 'rfsim'
 
@@ -123,14 +123,14 @@
         dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE19.slice) | map(attribute='dnn') | first }}"
         tx_port: 2201
         rx_port: 2200
-        ue_ip: "{{ srsran_network.n3.ue_ips[1] }}"
+        ue_ip: "{{ srsran_network.n3.ue_ips[0] }}"
       - name: ue3
         index: 3
         imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.UE20.imsi_suffix }}"
         dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.UE20.slice) | map(attribute='dnn') | first }}"
         tx_port: 2301
         rx_port: 2300
-        ue_ip: "{{ srsran_network.n3.ue_ips[2] }}"
+        ue_ip: "{{ srsran_network.n3.ue_ips[0] }}"
   when: rru == 'rfsim'
 
 - name: Slice UE list to ue_count

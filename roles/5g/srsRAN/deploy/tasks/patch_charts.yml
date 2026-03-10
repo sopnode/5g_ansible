@@ -41,18 +41,18 @@
                   port = 2100 + i * 100
                   ue_sink = zeromq.rep_sink(
                       gr.sizeof_gr_complex, 1,
-                      f"tcp://{UE_IPS[i]}:{port}", 100, False, -1)
+                      f"tcp://{UE_IPS[0]}:{port}", 100, False, -1) # UE_IPS[i] → UE_IPS[0]
                   self.connect(throttle_dl, ue_sink)
               adder = blocks.add_cc(1)
               for i in range(nof_ues):
                   port = 2101 + i * 100
                   ue_src = zeromq.pull_source(
                       gr.sizeof_gr_complex, 1,
-                      f"tcp://{UE_IPS[i]}:{port}", 100, False, -1, False)
+                      f"tcp://{UE_IPS[0]}:{port}", 100, False, -1, False) # UE_IPS[i] → UE_IPS[0]
                   self.connect(ue_src, (adder, i))
               gnb_sink = zeromq.rep_sink(
                   gr.sizeof_gr_complex, 1,
-                  f"tcp://{GNB_IP}:2001", 100, False, -1)
+                  f"tcp://{UE_IPS[0]}:2001", 100, False, -1) # GNB_IP → UE_IPS[0]
               self.connect(adder, gnb_sink)
       if __name__ == "__main__":
           parser = argparse.ArgumentParser()
