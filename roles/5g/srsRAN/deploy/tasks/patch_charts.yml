@@ -25,42 +25,40 @@
       """GNU Radio ZMQ broker for srsRAN multi-UE rfsim - GR 3.10"""
       from gnuradio import gr, zeromq, blocks
       import argparse, signal, sys, os
-
       GNB_IP = os.environ.get("GNB_IP", "{{ srsran_network.n3.gnb_ip }}")
       UE_IPS = os.environ.get("UE_IPS", "{{ srsran_network.n3.ue_ips | join(',') }}").split(",")
-
+      SAMP_RATE = 23.04e6
+      SLOW_DOWN = 4
       class MultiUEBroker(gr.top_block):
           def __init__(self, nof_ues):
               gr.top_block.__init__(self, "MultiUE ZMQ Broker")
-
-              # DL: req_source connect gNB:2000 -> rep_sink bind UE:2100/2200/2300
-              # UE rx_port doit pointer vers UE_IP:2100 (GNU Radio bind)
+              # DL: req_source connect gNB:2000 -> throttle -> rep_sink bind UE:2100/2200/2300
               gnb_src = zeromq.req_source(
                   gr.sizeof_gr_complex, 1,
                   f"tcp://{GNB_IP}:2000", 100, False, -1)
+              throttle_dl = blocks.throttle(gr.sizeof_gr_complex, SAMP_RATE / SLOW_DOWN)
+              self.connect(gnb_src, throttle_dl)
               for i in range(nof_ues):
                   port = 2100 + i * 100
                   ue_sink = zeromq.rep_sink(
                       gr.sizeof_gr_complex, 1,
                       f"tcp://{UE_IPS[i]}:{port}", 100, False, -1)
-                  self.connect(gnb_src, ue_sink)
-
-              # UL: UE tx_port bind UE:2101/2201/2301
-              # pull_source connect (bind=False) vers UE TX
-              # -> adder -> rep_sink bind UE[0]:2001 (gNB rx_port connect ici)
+                  self.connect(throttle_dl, ue_sink)
+              # UL: pull_source connect (bind=False) UE:2101/2201/2301
+              # -> throttle -> adder -> rep_sink bind UE[0]:2001
               adder = blocks.add_cc(1)
               for i in range(nof_ues):
                   port = 2101 + i * 100
                   ue_src = zeromq.pull_source(
                       gr.sizeof_gr_complex, 1,
                       f"tcp://{UE_IPS[i]}:{port}", 100, False, -1, False)
-                  self.connect(ue_src, (adder, i))
-
+                  throttle_ul = blocks.throttle(gr.sizeof_gr_complex, SAMP_RATE / SLOW_DOWN)
+                  self.connect(ue_src, throttle_ul)
+                  self.connect(throttle_ul, (adder, i))
               gnb_sink = zeromq.rep_sink(
                   gr.sizeof_gr_complex, 1,
                   f"tcp://{UE_IPS[0]}:2001", 100, False, -1)
               self.connect(adder, gnb_sink)
-
       if __name__ == "__main__":
           parser = argparse.ArgumentParser()
           parser.add_argument("--nof-ues", type=int, default=1)
