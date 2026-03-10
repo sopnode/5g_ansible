@@ -135,12 +135,7 @@
               {{ '{{-' }} include "srsran-ue.selectorLabels" . | nindent 8 {{ '}}' }}
             annotations:
               k8s.v1.cni.cncf.io/networks: >-
-                [
-                {{ '{{-' }} range $i, $ue := .Values.ues {{ '}}' }}
-                {{ '{{' }} if $i {{ '}}' }},{{ '{{' }} end {{ '}}' }}
-                { "name": "{{ '{{' }} $.Values.n3networkName {{ '}}' }}", "interface": "n3{{ '{{' }} $i {{ '}}' }}", "ips": [ "{{ '{{' }} $ue.ueIp {{ '}}' }}/24" ] }
-                {{ '{{-' }} end {{ '}}' }}
-                ]
+                [{ "name": "{{ '{{' }} .Values.n3networkName {{ '}}' }}", "interface": "n3", "ips": [ "{{ '{{' }} .Values.ueIp {{ '}}' }}/24" ] }]
           spec:
             containers:
               - name: ue
