@@ -37,7 +37,7 @@
                   f"tcp://{GNB_IP}:2000", 100, False, -1)
               throttle_dl = blocks.throttle(gr.sizeof_gr_complex, SAMP_RATE / SLOW_DOWN)
               self.connect(gnb_src, throttle_dl)
-	      for i in range(nof_ues):
+              for i in range(nof_ues):
                   port = 2100 + i * 100
                   passthrough = blocks.multiply_const_cc(1.0)
                   ue_sink = zeromq.rep_sink(
