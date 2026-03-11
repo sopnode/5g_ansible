@@ -209,7 +209,6 @@
 # ============================================================
 
 - name: Deploy free5gc using Helm
-  when: rru == 'rfsim'
   kubernetes.core.helm:
     name: free5gc
     chart_ref: "{{ [free5gc_repo_dest, 'charts', 'free5gc'] | path_join }}"
