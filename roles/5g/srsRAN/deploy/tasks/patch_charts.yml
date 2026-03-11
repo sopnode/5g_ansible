@@ -22,39 +22,38 @@
     mode: '0755'
     content: |
       #!/usr/bin/env python3
-      """GNU Radio ZMQ broker for srsRAN multi-UE rfsim - GR 3.10"""
+      """GNU Radio ZMQ broker - srsRAN project gNB + srsRAN 4G UEs"""
       from gnuradio import gr, zeromq, blocks
       import argparse, signal, sys, os
       GNB_IP = os.environ.get("GNB_IP", "{{ srsran_network.n3.gnb_ip }}")
-      UE_IPS = os.environ.get("UE_IPS", "{{ srsran_network.n3.ue_ips | join(',') }}").split(",")
+      UE_IP  = os.environ.get("UE_IPS", "{{ srsran_network.n3.ue_ips | join(',') }}").split(",")[0]
       SAMP_RATE = 11.52e6
-      SLOW_DOWN = 4
       class MultiUEBroker(gr.top_block):
           def __init__(self, nof_ues):
               gr.top_block.__init__(self, "MultiUE ZMQ Broker")
-              gnb_src = zeromq.req_source(
-                  gr.sizeof_gr_complex, 1,
+              # DL: deux req_source independants vers gNB:2000
+              # Chemin DL
+              gnb_src_dl = zeromq.req_source(gr.sizeof_gr_complex, 1,
                   f"tcp://{GNB_IP}:2000", 100, False, -1)
-              throttle_dl = blocks.throttle(gr.sizeof_gr_complex, SAMP_RATE / SLOW_DOWN)
-              self.connect(gnb_src, throttle_dl)
+              throttle_dl = blocks.throttle(gr.sizeof_gr_complex, SAMP_RATE)
+              self.connect(gnb_src_dl, throttle_dl)
               for i in range(nof_ues):
-                  port = 2100 + i * 100
-                  passthrough = blocks.multiply_const_cc(1.0)
-                  ue_sink = zeromq.rep_sink(
-                      gr.sizeof_gr_complex, 1,
-                      f"tcp://{UE_IPS[0]}:{port}", 100, False, -1)
-                  self.connect(throttle_dl, passthrough, ue_sink)
-              adder = blocks.add_cc(1)
+                  pt = blocks.multiply_const_cc(1.0)
+                  sink = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
+                      f"tcp://{UE_IP}:{2100 + i*100}", 100, False, -1)
+                  self.connect(throttle_dl, pt, sink)
+              # Chemin UL vers gNB: horloge propre, silence (zeros)
+              gnb_src_ul = zeromq.req_source(gr.sizeof_gr_complex, 1,
+                  f"tcp://{GNB_IP}:2000", 100, False, -1)
+              silence = blocks.multiply_const_cc(0.0)
+              gnb_ul_sink = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
+                  f"tcp://{UE_IP}:2001", 100, False, -1)
+              self.connect(gnb_src_ul, silence, gnb_ul_sink)
+              # UL depuis UEs: req_source -> null_sink
               for i in range(nof_ues):
-                  port = 2101 + i * 100
-                  ue_src = zeromq.pull_source(
-                      gr.sizeof_gr_complex, 1,
-                      f"tcp://{UE_IPS[0]}:{port}", 100, False, -1, False) # UE_IPS[i] → UE_IPS[0]
-                  self.connect(ue_src, (adder, i))
-              gnb_sink = zeromq.rep_sink(
-                  gr.sizeof_gr_complex, 1,
-                  f"tcp://{UE_IPS[0]}:2001", 100, False, -1) # GNB_IP → UE_IPS[0]
-              self.connect(adder, gnb_sink)
+                  ue_src = zeromq.req_source(gr.sizeof_gr_complex, 1,
+                      f"tcp://{UE_IP}:{2101 + i*100}", 100, False, -1)
+                  self.connect(ue_src, blocks.null_sink(gr.sizeof_gr_complex))
       if __name__ == "__main__":
           parser = argparse.ArgumentParser()
           parser.add_argument("--nof-ues", type=int, default=1)
@@ -63,9 +62,7 @@
           tb.start()
           print("Press Enter to quit", flush=True)
           def _stop(*_):
-              tb.stop()
-              tb.wait()
-              sys.exit(0)
+              tb.stop(); tb.wait(); sys.exit(0)
           signal.signal(signal.SIGTERM, _stop)
           signal.signal(signal.SIGINT, _stop)
           try:
@@ -172,7 +169,7 @@
                   name: {{ '{{' }} include "srsran-ue.fullname" . {{ '}}' }}-{{ '{{' }} .Release.Name {{ '}}' }}-ue-config
                   defaultMode: 0755
 
-# --- Patch gNB deployment - n3network name (toujours, pas seulement rfsim) ---
+# --- Patch gNB deployment - n3network name ---
 
 - name: Patch gNB deployment - parameterize n3network name
   ansible.builtin.replace:
@@ -180,8 +177,8 @@
     regexp: '"name":\s*"n3network"'
     replace: '"name": "{{ ''{{'' }} .Values.n3networkName {{ ''}}'' }}"'
 
-- name: Patch gNB deployment - add low_phy_dl_throttling
+- name: Patch gNB configmap - set log level to info
   ansible.builtin.replace:
-    path: "{{ repo_dest_abs }}/charts/srsran-gnb/templates/deployment.yaml"
-    regexp: '/usr/local/bin/gnb -c /srsran/config/srsran-gnb.yaml'
-    replace: '/usr/local/bin/gnb -c /srsran/config/srsran-gnb.yaml --ru_sdr.expert_cfg.low_phy_dl_throttling=0.9'
+    path: "{{ repo_dest_abs }}/charts/srsran-gnb/templates/configmap.yaml"
+    regexp: 'all_level:\s*warning'
+    replace: 'all_level: info'
