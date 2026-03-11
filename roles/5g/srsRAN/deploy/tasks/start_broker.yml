@@ -1,4 +1,5 @@
 ---
+
 - name: Kill existing processes if any
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
