@@ -31,8 +31,7 @@
       class MultiUEBroker(gr.top_block):
           def __init__(self, nof_ues):
               gr.top_block.__init__(self, "MultiUE ZMQ Broker")
-              # DL: deux req_source independants vers gNB:2000
-              # Chemin DL
+              # DL path: gNB -> throttle -> rep_sink per UE
               gnb_src_dl = zeromq.req_source(gr.sizeof_gr_complex, 1,
                   f"tcp://{GNB_IP}:2000", 100, False, -1)
               throttle_dl = blocks.throttle(gr.sizeof_gr_complex, SAMP_RATE)
@@ -42,18 +41,15 @@
                   sink = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
                       f"tcp://{UE_IP}:{2100 + i*100}", 100, False, -1)
                   self.connect(throttle_dl, pt, sink)
-              # Chemin UL vers gNB: horloge propre, silence (zeros)
-              gnb_src_ul = zeromq.req_source(gr.sizeof_gr_complex, 1,
-                  f"tcp://{GNB_IP}:2000", 100, False, -1)
-              silence = blocks.multiply_const_cc(0.0)
-              gnb_ul_sink = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
-                  f"tcp://{UE_IP}:2001", 100, False, -1)
-              self.connect(gnb_src_ul, silence, gnb_ul_sink)
-              # UL depuis UEs: req_source -> null_sink
+              # UL path: req_source per UE -> adder -> rep_sink to gNB
+              adder = blocks.add_vcc(1)
               for i in range(nof_ues):
                   ue_src = zeromq.req_source(gr.sizeof_gr_complex, 1,
                       f"tcp://{UE_IP}:{2101 + i*100}", 100, False, -1)
-                  self.connect(ue_src, blocks.null_sink(gr.sizeof_gr_complex))
+                  self.connect(ue_src, (adder, i))
+              gnb_ul_sink = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
+                  f"tcp://{UE_IP}:2001", 100, False, -1)
+              self.connect(adder, gnb_ul_sink)
       if __name__ == "__main__":
           parser = argparse.ArgumentParser()
           parser.add_argument("--nof-ues", type=int, default=1)
@@ -64,7 +60,7 @@
           def _stop(*_):
               tb.stop(); tb.wait(); sys.exit(0)
           signal.signal(signal.SIGTERM, _stop)
-          signal.signal(signal.SIGINT, _stop)
+          signal.signal(signal.SIGINT, _ost)
           try:
               tb.wait()
           except KeyboardInterrupt:
