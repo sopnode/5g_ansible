@@ -65,19 +65,21 @@
     msg: "WARNING: GNU Radio broker did not start"
   when: gnu_log_wait.rc != 0
 
-- name: Wait for AMF to be stable (open5gs only - crash workaround)
-  ansible.builtin.command: >
-    {{ kubectl_bin }} get pod -n {{ ran_ns }}
-    -l nf=amf
-    -o jsonpath='{.items[0].status.containerStatuses[0].state.running.startedAt}'
-  register: amf_start_time
+- name: Wait for AMF stable after gNB cell activated (open5gs only)
+  ansible.builtin.shell: >
+    AMF_START=$({{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf
+    -o jsonpath='{.items[0].status.containerStatuses[0].state.running.startedAt}');
+    STARTED=$(date -d "$AMF_START" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$AMF_START" +%s);
+    NOW=$(date +%s);
+    DIFF=$((NOW - STARTED));
+    echo "AMF up for ${DIFF}s";
+    test "$DIFF" -gt 15
+  register: amf_stable
   changed_when: false
   failed_when: false
   retries: 60
-  delay: 5
-  until: >
-    amf_start_time.stdout != "" and
-    (now() - (amf_start_time.stdout | to_datetime('%Y-%m-%dT%H:%M:%SZ'))).seconds > 15
+  delay: 3
+  until: amf_stable.rc == 0
   when: core == 'open5gs'
 
 - name: Start each UE in its own tmux window
