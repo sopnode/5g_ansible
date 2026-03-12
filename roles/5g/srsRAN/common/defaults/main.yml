@@ -21,7 +21,7 @@ yq_url: "https://github.com/mikefarah/yq/releases/download/{{ yq_version }}/yq_l
 srsran_network:
   n2:
     amf_ip: "{{ hostvars[groups['core_node'][0]].ip }}"
-    amf_port: 31412
+    amf_port: "{{ 31412 if core == 'free5gc' else 38412 }}"
   n3:
     gnb_ip: "10.100.50.234"
     ue_ips:
