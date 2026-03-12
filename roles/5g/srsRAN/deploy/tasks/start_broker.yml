@@ -37,16 +37,18 @@
   register: gnb_pod_name_result
   changed_when: false
 
-- name: Wait for gNB cell to be activated
+- name: Wait for gNB cell stable (no AMF reconnection for 10s)
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} -c gnb-logs -- /bin/sh -lc
-    "grep -q 'Cell was activated' /var/log/gnb.log 2>/dev/null"
-  register: gnb_cell_wait
+    "tail -20 /var/log/gnb.log | grep -q 'Cell was activated' &&
+     ! tail -20 /var/log/gnb.log | grep -q 'AMF Reconnection Routine.*started'"
+  register: gnb_stable
   changed_when: false
   failed_when: false
   retries: 60
   delay: 5
-  until: gnb_cell_wait.rc == 0
+  until: gnb_stable.rc == 0
+  when: core == 'open5gs'
 
 - name: Warn if gNB cell did not activate
   ansible.builtin.debug:
@@ -63,6 +65,20 @@
     msg: "WARNING: GNU Radio broker did not start"
   when: gnu_log_wait.rc != 0
 
+- name: Wait for AMF to be stable (open5gs only - crash workaround)
+  ansible.builtin.command: >
+    {{ kubectl_bin }} get pod -n {{ ran_ns }}
+    -l nf=amf
+    -o jsonpath='{.items[0].status.containerStatuses[0].state.running.startedAt}'
+  register: amf_start_time
+  changed_when: false
+  failed_when: false
+  retries: 60
+  delay: 5
+  until: >
+    amf_start_time.stdout != "" and
+    (now() - (amf_start_time.stdout | to_datetime('%Y-%m-%dT%H:%M:%SZ'))).seconds > 15
+  when: core == 'open5gs'
 
 - name: Start each UE in its own tmux window
   ansible.builtin.command: >
