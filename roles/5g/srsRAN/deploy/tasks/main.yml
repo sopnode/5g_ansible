@@ -1,18 +1,35 @@
 ---
+# For free5gc: UEs start before gNB (GNU Radio broker must bind ZMQ ports first)
+# For open5gs: gNB starts first and waits for cell activation before UEs
+# to avoid AMF crash (Assertion 'gnb' failed - known bug in open5gs v2.7.0)
+
 - name: Patch Helm charts
   include_tasks: patch_charts.yml
   when: rru == 'rfsim'
 
-- name: Deploy srsRAN UEs (broker must be ready before gNB)
-  include_tasks: deploy_srsues.yml
-  when: rru == 'rfsim'
-
-- name: Deploy srsRAN gNB
+# open5gs: gNB first, wait for cell activated, then UEs
+- name: Deploy srsRAN gNB (open5gs - must be stable before UEs)
   include_tasks: deploy_gnb.yml
+  when: rru == 'rfsim' and core == 'open5gs'
 
-- name: Start GNU Radio broker (after gNB is ready)
-  include_tasks: start_broker.yml
-  when: rru == 'rfsim'
+- name: Deploy srsRAN UEs (open5gs - after gNB cell is activated)
+  include_tasks: deploy_srsues.yml
+  when: rru == 'rfsim' and core == 'open5gs'
+
+# free5gc: UEs first (broker must be ready before gNB connects)
+- name: Deploy srsRAN UEs (free5gc - broker must be ready before gNB)
+  include_tasks: deploy_srsues.yml
+  when: rru == 'rfsim' and core == 'free5gc'
+
+- name: Deploy srsRAN gNB (free5gc - after UEs and broker are ready)
+  include_tasks: deploy_gnb.yml
+  when: rru == 'rfsim' and core == 'free5gc'
+
+# non-rfsim: gNB only, no UEs
+- name: Deploy srsRAN gNB (non-rfsim)
+  include_tasks: deploy_gnb.yml
+  when: rru != 'rfsim'
 
 - name: Deploy Telegraf
   include_tasks: deploy_telegraf.yml
+
