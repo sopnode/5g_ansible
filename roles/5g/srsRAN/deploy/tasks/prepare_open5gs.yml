@@ -31,22 +31,46 @@
   delay: 3
   until: amf_ready.rc == 0
 
-- name: Get current AMF pod IP
+# --- Use stable ClusterIP service instead of unstable pod IP ---
+# Pod IPs change at every restart; the ClusterIP is stable for the lifetime
+# of the cluster and survives AMF pod restarts.
+
+- name: Ensure AMF NGAP ClusterIP service exists
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: amf-ngap
+        namespace: "{{ ran_ns }}"
+        labels:
+          app: open5gs
+      spec:
+        selector:
+          nf: amf
+        ports:
+          - protocol: SCTP
+            port: 38412
+            targetPort: 38412
+        type: ClusterIP
+
+- name: Get AMF NGAP service ClusterIP
   ansible.builtin.command: >
-    {{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf
-    -o jsonpath='{.items[0].status.podIP}'
-  register: amf_pod_ip
+    {{ kubectl_bin }} get svc -n {{ ran_ns }} amf-ngap
+    -o jsonpath='{.spec.clusterIP}'
+  register: amf_svc_ip
   changed_when: false
-  until: amf_pod_ip.stdout != ""
-  retries: 20
+  until: amf_svc_ip.stdout != ""
+  retries: 10
   delay: 3
 
 - name: Update AMF IP in gNB values-rfsim.yaml
   ansible.builtin.replace:
     path: "{{ repo_dest_abs }}/charts/srsran-gnb/values-rfsim.yaml"
-    regexp: '(^\s*addr:\s*)\d+\.\d+\.\d+\.\d+'
-    replace: '\g<1>{{ amf_pod_ip.stdout }}'
+    regexp: '(^\s*addr:\s*)[\d\.]+'
+    replace: '\g<1>{{ amf_svc_ip.stdout }}'
 
-- name: Debug AMF IP updated
+- name: Debug AMF service IP updated
   ansible.builtin.debug:
-    msg: "AMF IP updated to {{ amf_pod_ip.stdout }} in values-rfsim.yaml"
+    msg: "AMF NGAP ClusterIP service {{ amf_svc_ip.stdout }} written to values-rfsim.yaml (stable across AMF restarts)"
