@@ -57,6 +57,21 @@
     atomic: True
     timeout: 180s
 
+- name: Get gNB pod name
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} get pod
+    -l app=srsran,component=gnb
+    -o jsonpath='{.items[0].metadata.name}'
+  register: gnb_pod_name_result
+  until: gnb_pod_name_result.stdout != ""
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Set gnb_pod_name fact
+  ansible.builtin.set_fact:
+    gnb_pod_name: "{{ gnb_pod_name_result.stdout }}"
+    
 - name: Wait for gNB to connect to AMF
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name }} -c gnb-logs --
