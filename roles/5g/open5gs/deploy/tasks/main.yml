@@ -71,7 +71,7 @@
   ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/networks5g" -n {{ open5gs_ns }}
 
 - name: Wait for kube-apiserver to be responsive
-  shell: kubectl get --raw='/healthz'
+  ansible.builtin.shell: kubectl get --raw='/healthz'
   register: api_health
   retries: 30
   delay: 10
@@ -79,7 +79,7 @@
   changed_when: false
 
 - name: Wait for CRDs registration to be ready
-  shell: kubectl get crds
+  ansible.builtin.shell: kubectl get crds
   register: crd_list
   retries: 20
   delay: 5
@@ -126,6 +126,7 @@
             name: cluster
           spec:
             ovs: {}
+
     - name: Apply NetworkAddonsConfig
       ansible.builtin.shell: |
         kubectl apply -f /tmp/netaddonsconf.yaml
@@ -137,7 +138,7 @@
   become: yes
 
 - name: Patch NADs to use unique interface names
-  shell: |
+  ansible.builtin.shell: |
     set -eu
     for nad in n2network n3network n4network; do
       case "$nad" in
@@ -201,10 +202,34 @@
   changed_when: false
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
+# --- WAIT FOR MULTUS TO BE FULLY OPERATIONAL BEFORE ANY POD CREATION ---
+- name: Wait for multus-shim binary to be present on node
+  ansible.builtin.wait_for:
+    path: /opt/cni/bin/multus-shim
+    timeout: 120
+
+- name: Wait for 00-multus.conf to be present on node
+  ansible.builtin.wait_for:
+    path: /etc/cni/net.d/00-multus.conf
+    timeout: 120
+
+- name: Wait for Multus daemonset pod to be Ready
+  ansible.builtin.shell: |
+    kubectl wait pod -n cluster-network-addons -l app=multus \
+      --for=condition=Ready --timeout=120s
+  register: multus_pod_ready
+  retries: 5
+  delay: 10
+  until: multus_pod_ready.rc == 0
+  changed_when: false
+  failed_when: false
+
 # --- CLEANUP PRE-DEPLOY TO ENSURE MULTUS RE-ATTACH ---
 - name: Force cleanup existing Open5GS pods
-  ansible.builtin.shell: kubectl delete pods -n {{ open5gs_ns }} -l app=open5gs --force --grace-period=0 || true
+  ansible.builtin.shell: |
+    kubectl delete pods -n {{ open5gs_ns }} --all --force --grace-period=0 || true
   when: core_node_name == ran_node_name and core == "open5gs"
+  changed_when: false
 
 - name: Apply Open5GS NFs with Kustomize
   ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/{{ deployment_option }}" -n {{ open5gs_ns }}
@@ -232,7 +257,7 @@
     kubectl exec -n {{ open5gs_ns }} $AMF_POD -- ip addr show n3 | grep "inet 10.10.3.200"
   register: amf_n3_check
   until: amf_n3_check.rc == 0
-  retries: 15
+  retries: 30
   delay: 5
   when: core == "open5gs"
   changed_when: false
