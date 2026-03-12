@@ -17,6 +17,60 @@
   when: gnb_release_exists.stdout | trim | int > 0
   failed_when: false
 
+# open5gs only: restart AMF AFTER gNB uninstall to clear stale UE contexts from RAM
+# This fixes open5gs v2.7.0 bug: Assertion 'gnb' failed at amf-sm.c:815
+- name: Restart AMF to clear stale UE contexts (open5gs rfsim only)
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} rollout restart deployment open5gs-amf
+  changed_when: true
+  when: core == 'open5gs' and rru == 'rfsim'
+
+- name: Wait for AMF rollout complete (open5gs rfsim only)
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} rollout status deployment open5gs-amf --timeout=60s
+  changed_when: false
+  when: core == 'open5gs' and rru == 'rfsim'
+
+- name: Wait for AMF stable 15s (open5gs rfsim only)
+  ansible.builtin.shell: |
+    AMF_START=$({{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf \
+      -o jsonpath='{.items[0].status.containerStatuses[0].state.running.startedAt}')
+    STARTED=$(date -d "$AMF_START" +%s)
+    NOW=$(date +%s)
+    DIFF=$((NOW - STARTED))
+    echo "AMF up for ${DIFF}s"
+    test "$DIFF" -gt 15
+  register: amf_ready
+  changed_when: false
+  failed_when: false
+  retries: 40
+  delay: 3
+  until: amf_ready.rc == 0
+  when: core == 'open5gs' and rru == 'rfsim'
+
+- name: Get current AMF pod IP (open5gs rfsim only)
+  ansible.builtin.command: >
+    {{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf
+    -o jsonpath='{.items[0].status.podIP}'
+  register: amf_pod_ip
+  changed_when: false
+  until: amf_pod_ip.stdout != ""
+  retries: 20
+  delay: 3
+  when: core == 'open5gs' and rru == 'rfsim'
+
+- name: Update AMF IP in gNB values-rfsim.yaml (open5gs rfsim only)
+  ansible.builtin.replace:
+    path: "{{ repo_dest_abs }}/charts/srsran-gnb/values-rfsim.yaml"
+    regexp: '(^\s*addr:\s*)\d+\.\d+\.\d+\.\d+'
+    replace: '\g<1>{{ amf_pod_ip.stdout }}'
+  when: core == 'open5gs' and rru == 'rfsim'
+
+- name: Debug AMF IP updated
+  ansible.builtin.debug:
+    msg: "AMF IP updated to {{ amf_pod_ip.stdout }}"
+  when: core == 'open5gs' and rru == 'rfsim'
+
 - name: Deploy srsRAN gNB (only when not rfsim)
   when: rru != 'rfsim'
   block:
@@ -53,7 +107,7 @@
     values_files:
       - "{{ values_file }}"
     state: present
-    wait: False # True # FAlse for debug
+    wait: False
     atomic: True
     timeout: 180s
 
