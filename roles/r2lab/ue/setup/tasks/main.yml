@@ -1,114 +1,57 @@
----
-- name: RESTART_UE_SETUP
-  ansible.builtin.meta: noop
+- name: Uninstall srsran-gnb
+  shell: helm uninstall srsran-gnb -n {{ ran_ns }} --no-hooks
+  when: gnb_release_exists.stdout | trim | int > 0
+  failed_when: false
 
-- name: Load active 5G profile variables
-  ansible.builtin.include_vars:
-    file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+# open5gs only: restart AMF AFTER gNB uninstall to clear stale UE contexts
+- name: Restart AMF to clear stale UE contexts (open5gs rfsim only)
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} rollout restart deployment open5gs-amf
+  changed_when: true
+  when: core == 'open5gs' and rru == 'rfsim'
 
-- name: Assert 5G profile is loaded
-  ansible.builtin.assert:
-    that:
-      - slices is defined
-      - ues is defined
-    fail_msg: >
-      5G profile not loaded.
-      Expected group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yml
-
-- name: Power ON UEs PDU outlet
-  shell: rhubarbe pdu on "{{ item }}"
-  delegate_to: faraday.inria.fr
-  async: 1800
-  poll: 0
-  loop: "{{ groups['qhats'] }}"
-  loop_control:
-    label: "{{ item }}"
-  register: power_ue_jobs
-
-- name: Wait for all UEs to be turned ON
-  async_status:
-    jid: "{{ item.ansible_job_id }}"
-  register: job_result
-  until: job_result.finished
-  retries: 100
-  delay: 10
-  loop: "{{ power_ue_jobs.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: Wait for UEs to be SSH accessible
-  wait_for:
-    host: "{{ item }}"
-    port: 22
-    timeout: 180
-    sleep: 5
-  delegate_to: faraday.inria.fr
-  loop: "{{ groups['qhats'] }}"
-  loop_control:
-    label: "{{ item }}"
-  register: power_ue_jobs
-
-- name: Prepare and Display qhat-init command for each UE
-  vars:
-    # On définit la logique de calcul une seule fois pour le debug et pour l'exécution
-    ue_slice_info: "{{ slices | selectattr('name', 'equalto', ues[item].slice) | first }}"
-    qhat_command: >-
-      qhat-init --mode={{ hostvars[item].mode | default('default') }}
-      --dnn="{{ ue_slice_info.dnn }}"
-      --nssai="{{ ue_slice_info.sst }}.{{ ue_slice_info.sd }}"
-  debug:
-    msg: "UE {{ item }} command: {{ qhat_command }}"
-  loop: "{{ groups['qhats'] }}"
-  loop_control:
-    label: "{{ item }}"
-
-- name: Init UEs via jump host using 5G profile from YAML
-  vars:
-    ue_slice_info: "{{ slices | selectattr('name', 'equalto', ues[item].slice) | first }}"
-    # Note: J'ai corrigé le ":" en "." pour le NSSAI selon ton format 01.100000
-    qhat_command: >-
-      qhat-init --mode={{ hostvars[item].mode | default('default') }}
-      --dnn="{{ ue_slice_info.dnn }}"
-      --nssai="{{ ue_slice_info.sst }}.{{ ue_slice_info.sd }}"
-  shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -n root@{{ item }} '{{ qhat_command }}'
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -n root@{{ item }} 'stop.sh'
-  delegate_to: faraday.inria.fr
-  async: 1800
-  poll: 0
-  loop: "{{ groups['qhats'] }}"
-  loop_control:
-    label: "{{ item }}"
-  register: set_ue_jobs
-
-- name: Wait for setup to finish on all UEs
-  async_status:
-    jid: "{{ item.ansible_job_id }}"
-  register: job_result
-  until: job_result.finished
-  retries: 100
-  delay: 10
-  loop: "{{ set_ue_jobs.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: Run qhat-check on each UE to verify configuration
-  shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -n root@{{ item }} 'qhat-check'
-  delegate_to: faraday.inria.fr
-  loop: "{{ groups['qhats'] }}"
-  loop_control:
-    label: "{{ item }}"
-  register: check_results
+- name: Wait for AMF rollout complete (open5gs rfsim only)
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} rollout status deployment open5gs-amf --timeout=60s
   changed_when: false
+  when: core == 'open5gs' and rru == 'rfsim'
 
-- name: Display qhat-check output for each UE
-  debug:
-    msg: 
-      - "------------------------------------------------"
-      - "UE: {{ item.item }}"
-      - "{{ item.stdout_lines }}"
-      - "------------------------------------------------"
-  loop: "{{ check_results.results }}"
-  loop_control:
-    label: "{{ item.item }}"
+- name: Wait for AMF stable 15s (open5gs rfsim only)
+  ansible.builtin.shell: |
+    AMF_START=$({{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf \
+      -o jsonpath='{.items[0].status.containerStatuses[0].state.running.startedAt}')
+    STARTED=$(date -d "$AMF_START" +%s)
+    NOW=$(date +%s)
+    DIFF=$((NOW - STARTED))
+    echo "AMF up for ${DIFF}s"
+    test "$DIFF" -gt 15
+  register: amf_ready
+  changed_when: false
+  failed_when: false
+  retries: 40
+  delay: 3
+  until: amf_ready.rc == 0
+  when: core == 'open5gs' and rru == 'rfsim'
+
+- name: Get current AMF pod IP (open5gs rfsim only)
+  ansible.builtin.command: >
+    {{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf
+    -o jsonpath='{.items[0].status.podIP}'
+  register: amf_pod_ip
+  changed_when: false
+  until: amf_pod_ip.stdout != ""
+  retries: 20
+  delay: 3
+  when: core == 'open5gs' and rru == 'rfsim'
+
+- name: Update AMF IP in gNB values-rfsim.yaml (open5gs rfsim only)
+  ansible.builtin.replace:
+    path: "{{ repo_dest_abs }}/charts/srsran-gnb/values-rfsim.yaml"
+    regexp: '(^\s*addr:\s*)\d+\.\d+\.\d+\.\d+'
+    replace: '\g<1>{{ amf_pod_ip.stdout }}'
+  when: core == 'open5gs' and rru == 'rfsim'
+
+- name: Debug AMF IP updated
+  ansible.builtin.debug:
+    msg: "AMF IP updated to {{ amf_pod_ip.stdout }}"
+  when: core == 'open5gs' and rru == 'rfsim'

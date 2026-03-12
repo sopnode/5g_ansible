@@ -8,10 +8,6 @@
   when: rru == 'rfsim'
 
 # open5gs: restart AMF first to clear stale UE contexts, then gNB, then UEs+broker
-- name: Prepare open5gs (restart AMF to clear stale UE contexts)
-  include_tasks: prepare_open5gs.yml
-  when: rru == 'rfsim' and core == 'open5gs'
-
 - name: Deploy srsRAN gNB (open5gs - must be stable before UEs)
   include_tasks: deploy_gnb.yml
   when: rru == 'rfsim' and core == 'open5gs'
