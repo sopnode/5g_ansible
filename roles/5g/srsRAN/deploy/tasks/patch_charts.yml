@@ -72,12 +72,15 @@
     mode: '0755'
     content: |
       #!/bin/bash
-      set -euo pipefail
       UE_COUNT=${1:-${UE_COUNT:-1}}
       LOG=/var/log/gnu_multi_ue.log
       mkdir -p /var/log
-      echo "[$(date -u +%FT%TZ)] Starting GNU Radio broker for ${UE_COUNT} UE(s)..." | tee "$LOG"
-      exec python3 /srsran/config/multi_ue_scenario.py --nof-ues "${UE_COUNT}" >> "$LOG" 2>&1
+      while true; do
+        echo "[$(date -u +%FT%TZ)] Starting GNU Radio broker for ${UE_COUNT} UE(s)..." | tee -a "$LOG"
+        python3 /srsran/config/multi_ue_scenario.py --nof-ues "${UE_COUNT}" >> "$LOG" 2>&1
+        echo "[$(date -u +%FT%TZ)] GNU Radio exited, restarting in 3s..." | tee -a "$LOG"
+        sleep 3
+      done
 
 - name: Write add_route.sh
   ansible.builtin.copy:
