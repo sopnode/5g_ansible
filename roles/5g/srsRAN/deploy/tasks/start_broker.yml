@@ -42,15 +42,20 @@
   register: gnb_pod_name_result
   changed_when: false
 
-- name: Wait for gNB cell activated and stable (open5gs only)
+- name: Wait for gNB cell stable - no AMF reconnection for 20s (open5gs only)
   ansible.builtin.shell: |
-    LAST_CELL=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} \
-      -c gnb-logs -- grep "Cell was activated" /var/log/gnb.log 2>/dev/null | tail -1 | awk '{print $1}')
-    LAST_RECON=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} \
-      -c gnb-logs -- grep "AMF Reconnection Routine.*started" /var/log/gnb.log 2>/dev/null | tail -1 | awk '{print $1}')
-    [ -z "$LAST_CELL" ] && exit 1
-    [ -z "$LAST_RECON" ] && exit 0
-    [ "$LAST_CELL" \> "$LAST_RECON" ] && exit 0 || exit 1
+    CELL=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} \
+      -c gnb-logs -- grep -c "Cell was activated" /var/log/gnb.log 2>/dev/null || echo 0)
+    RECON=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} \
+      -c gnb-logs -- grep "AMF Reconnection Routine.*started" /var/log/gnb.log 2>/dev/null \
+      | tail -1 | awk '{print $1}')
+    [ "$CELL" -lt 1 ] && exit 1
+    [ -z "$RECON" ] && exit 0
+    RECON_S=$(date -d "$RECON" +%s 2>/dev/null) || exit 1
+    NOW=$(date +%s)
+    DIFF=$((NOW - RECON_S))
+    echo "Last AMF reconnection ${DIFF}s ago"
+    test "$DIFF" -gt 20
   register: gnb_stable
   changed_when: false
   failed_when: false
@@ -59,6 +64,11 @@
   until: gnb_stable.rc == 0
   when: core == 'open5gs'
 
+- name: Fail if gNB cell never stabilized
+  ansible.builtin.fail:
+    msg: "gNB cell never stabilized - AMF keeps reconnecting"
+  when: core == 'open5gs' and gnb_stable.rc != 0
+  
 - name: Start each UE in its own tmux window
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
