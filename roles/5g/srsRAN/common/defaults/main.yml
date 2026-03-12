@@ -18,16 +18,30 @@ yq_bin_path: "/usr/local/bin/yq"
 yq_url: "https://github.com/mikefarah/yq/releases/download/{{ yq_version }}/yq_linux_amd64"
 
 # Network config for srsRAN and free5gc
-srsran_network:
-  n2:
-    amf_ip: "{{ hostvars[groups['core_node'][0]].ip }}"
-    amf_port: "{{ 31412 if core == 'free5gc' else 38412 }}"
-  n3:
-    gnb_ip: "10.100.50.234"
-    ue_ips:
-      - "10.100.50.235"
-      - "10.100.50.236"
-      - "10.100.50.237"
+srsran_network_map:
+  free5gc:
+    n2:
+      amf_ip: "{{ hostvars[groups['core_node'][0]].ip }}"
+      amf_port: 31412
+    n3:
+      gnb_ip: "10.100.50.234"
+      ue_ips:
+        - "10.100.50.235"
+        - "10.100.50.236"
+        - "10.100.50.237"
+  open5gs:
+    n2:
+      amf_ip: "{{ hostvars[groups['core_node'][0]].ip }}"
+      amf_port: 38412
+    n3:
+      gnb_ip: "10.10.3.234"
+      ue_ips:
+        - "10.10.3.235"
+        - "10.10.3.236"
+        - "10.10.3.237"
+
+srsran_network: "{{ srsran_network_map[core] }}"
+
 
 # Multus NetworkAttachmentDefinition names
 free5gc_n3_nad_name: "n3network-free5gc-free5gc-upf"
