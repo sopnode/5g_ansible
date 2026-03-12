@@ -7,7 +7,7 @@
   include_tasks: patch_charts.yml
   when: rru == 'rfsim'
 
-# open5gs: gNB first, wait for cell activated, then UEs
+# open5gs: gNB first, wait for cell activated, then UEs + broker
 - name: Deploy srsRAN gNB (open5gs - must be stable before UEs)
   include_tasks: deploy_gnb.yml
   when: rru == 'rfsim' and core == 'open5gs'
@@ -16,9 +16,17 @@
   include_tasks: deploy_srsues.yml
   when: rru == 'rfsim' and core == 'open5gs'
 
-# free5gc: UEs first (broker must be ready before gNB connects)
+- name: Start GNU Radio broker and UEs (open5gs)
+  include_tasks: start_broker.yml
+  when: rru == 'rfsim' and core == 'open5gs'
+
+# free5gc: UEs first, then broker, then gNB (restored original working order)
 - name: Deploy srsRAN UEs (free5gc - broker must be ready before gNB)
   include_tasks: deploy_srsues.yml
+  when: rru == 'rfsim' and core == 'free5gc'
+
+- name: Start GNU Radio broker and UEs (free5gc)
+  include_tasks: start_broker.yml
   when: rru == 'rfsim' and core == 'free5gc'
 
 - name: Deploy srsRAN gNB (free5gc - after UEs and broker are ready)
@@ -32,4 +40,3 @@
 
 - name: Deploy Telegraf
   include_tasks: deploy_telegraf.yml
-
