@@ -30,6 +30,11 @@
   delay: 2
   until: gnu_log_wait.rc == 0
 
+- name: Warn if GNU Radio did not start
+  ansible.builtin.debug:
+    msg: "WARNING: GNU Radio broker did not start"
+  when: gnu_log_wait.rc != 0
+
 - name: Get gNB pod name
   ansible.builtin.command: >
     {{ kubectl_bin }} get pod -n {{ ran_ns }} -l app=srsran,component=gnb
@@ -37,49 +42,21 @@
   register: gnb_pod_name_result
   changed_when: false
 
-- name: Wait for gNB cell stable (no AMF reconnection for 10s)
-  ansible.builtin.command: >
-    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} -c gnb-logs -- /bin/sh -lc
-    "tail -20 /var/log/gnb.log | grep -q 'Cell was activated' &&
-     ! tail -20 /var/log/gnb.log | grep -q 'AMF Reconnection Routine.*started'"
+- name: Wait for gNB cell activated and stable (open5gs only)
+  ansible.builtin.shell: |
+    LAST_CELL=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} \
+      -c gnb-logs -- grep "Cell was activated" /var/log/gnb.log 2>/dev/null | tail -1 | awk '{print $1}')
+    LAST_RECON=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} \
+      -c gnb-logs -- grep "AMF Reconnection Routine.*started" /var/log/gnb.log 2>/dev/null | tail -1 | awk '{print $1}')
+    [ -z "$LAST_CELL" ] && exit 1
+    [ -z "$LAST_RECON" ] && exit 0
+    [ "$LAST_CELL" \> "$LAST_RECON" ] && exit 0 || exit 1
   register: gnb_stable
   changed_when: false
   failed_when: false
   retries: 60
   delay: 5
   until: gnb_stable.rc == 0
-  when: core == 'open5gs'
-
-- name: Warn if gNB cell did not activate
-  ansible.builtin.debug:
-    msg: "WARNING: gNB cell did not activate within timeout"
-  when: gnb_cell_wait.rc != 0
-
-- name: Warn if gNB cell did not activate
-  ansible.builtin.debug:
-    msg: "WARNING: gNB cell did not activate within timeout"
-  when: gnb_cell_wait.rc != 0
-
-- name: Warn if GNU Radio did not start
-  ansible.builtin.debug:
-    msg: "WARNING: GNU Radio broker did not start"
-  when: gnu_log_wait.rc != 0
-
-- name: Wait for AMF stable after gNB cell activated (open5gs only)
-  ansible.builtin.shell: >
-    AMF_START=$({{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf
-    -o jsonpath='{.items[0].status.containerStatuses[0].state.running.startedAt}');
-    STARTED=$(date -d "$AMF_START" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$AMF_START" +%s);
-    NOW=$(date +%s);
-    DIFF=$((NOW - STARTED));
-    echo "AMF up for ${DIFF}s";
-    test "$DIFF" -gt 15
-  register: amf_stable
-  changed_when: false
-  failed_when: false
-  retries: 60
-  delay: 3
-  until: amf_stable.rc == 0
   when: core == 'open5gs'
 
 - name: Start each UE in its own tmux window
