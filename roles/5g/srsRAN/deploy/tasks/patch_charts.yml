@@ -108,7 +108,7 @@
     mode: '0644'
     content: "{{ lookup('template', 'srsue_configmap.yaml.j2') }}"
 
-# --- Rewrite deployment.yaml complet (evite les patches fragiles) ---
+# --- Rewrite deployment.yaml complet ---
 
 - name: Rewrite srsue deployment.yaml
   ansible.builtin.copy:
@@ -133,6 +133,7 @@
             annotations:
               k8s.v1.cni.cncf.io/networks: "[{ \"name\": \"{{ '{{' }} .Values.n3networkName {{ '}}' }}\", \"interface\": \"n3\", \"ips\": [ \"{{ '{{' }} .Values.ueIp {{ '}}' }}/24\" ] }]"
           spec:
+            nodeName: "{{ hostvars[groups['ran_node'][0]].inventory_hostname }}"
             containers:
               - name: ue
                 image: "{{ '{{' }} .Values.image.repository {{ '}}' }}:{{ '{{' }} .Values.image.tag {{ '}}' }}"
