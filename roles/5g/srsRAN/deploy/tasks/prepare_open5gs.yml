@@ -1,5 +1,5 @@
 ---
-# Restart AMF to clear stale UE contexts from previous runs
+# Restart AMF to clear stale UE contexts from RAM
 # Fixes open5gs v2.7.0 bug: Assertion 'gnb' failed at amf-sm.c:815
 # ONLY called for open5gs - never touches free5gc
 
@@ -9,13 +9,13 @@
     open5gs-amf
   changed_when: true
 
-- name: Wait for new AMF pod to appear
+- name: Wait for AMF rollout to complete
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} rollout status deployment
     open5gs-amf --timeout=60s
   changed_when: false
 
-- name: Wait for AMF to be fully ready (15s uptime)
+- name: Wait for AMF pod to be fully ready (15s uptime)
   ansible.builtin.shell: |
     AMF_START=$({{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf \
       -o jsonpath='{.items[0].status.containerStatuses[0].state.running.startedAt}')
@@ -30,3 +30,23 @@
   retries: 40
   delay: 3
   until: amf_ready.rc == 0
+
+- name: Get current AMF pod IP
+  ansible.builtin.command: >
+    {{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf
+    -o jsonpath='{.items[0].status.podIP}'
+  register: amf_pod_ip
+  changed_when: false
+  until: amf_pod_ip.stdout != ""
+  retries: 20
+  delay: 3
+
+- name: Update AMF IP in gNB values-rfsim.yaml
+  ansible.builtin.replace:
+    path: "{{ repo_dest_abs }}/charts/srsran-gnb/values-rfsim.yaml"
+    regexp: '(^\s*addr:\s*)\d+\.\d+\.\d+\.\d+'
+    replace: '\g<1>{{ amf_pod_ip.stdout }}'
+
+- name: Debug AMF IP updated
+  ansible.builtin.debug:
+    msg: "AMF IP updated to {{ amf_pod_ip.stdout }} in values-rfsim.yaml"
