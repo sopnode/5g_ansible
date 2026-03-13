@@ -72,12 +72,12 @@
     mode: '0755'
     content: |
       #!/bin/bash
+      set -euo pipefail
       UE_COUNT=${1:-${UE_COUNT:-1}}
       LOG=/var/log/gnu_multi_ue.log
       mkdir -p /var/log
-      echo "[$(date -u +%FT%TZ)] Starting GNU Radio broker for ${UE_COUNT} UE(s)..." | tee -a "$LOG"
-      python3 /srsran/config/multi_ue_scenario.py --nof-ues "${UE_COUNT}" >> "$LOG" 2>&1
-      echo "[$(date -u +%FT%TZ)] GNU Radio exited." | tee -a "$LOG"
+      echo "[$(date -u +%FT%TZ)] Starting GNU Radio broker for ${UE_COUNT} UE(s)..." | tee "$LOG"
+      exec python3 /srsran/config/multi_ue_scenario.py --nof-ues "${UE_COUNT}" >> "$LOG" 2>&1
 
 - name: Write add_route.sh
   ansible.builtin.copy:
@@ -105,7 +105,7 @@
     mode: '0644'
     content: "{{ lookup('template', 'srsue_configmap.yaml.j2') }}"
 
-# --- Rewrite deployment.yaml complet ---
+# --- Rewrite deployment.yaml complet (evite les patches fragiles) ---
 
 - name: Rewrite srsue deployment.yaml
   ansible.builtin.copy:
@@ -130,7 +130,6 @@
             annotations:
               k8s.v1.cni.cncf.io/networks: "[{ \"name\": \"{{ '{{' }} .Values.n3networkName {{ '}}' }}\", \"interface\": \"n3\", \"ips\": [ \"{{ '{{' }} .Values.ueIp {{ '}}' }}/24\" ] }]"
           spec:
-            nodeName: "{{ hostvars[groups['ran_node'][0]].inventory_hostname }}"
             containers:
               - name: ue
                 image: "{{ '{{' }} .Values.image.repository {{ '}}' }}:{{ '{{' }} .Values.image.tag {{ '}}' }}"
@@ -179,3 +178,18 @@
     path: "{{ repo_dest_abs }}/charts/srsran-gnb/values-rfsim.yaml"
     regexp: 'all_level:\s*warning'
     replace: 'all_level: info'
+
+- name: Patch gNB values-rfsim.yaml with correct IPs (open5gs rfsim)
+  ansible.builtin.replace:
+    path: "{{ repo_dest_abs }}/charts/srsran-gnb/values-rfsim.yaml"
+    regexp: "{{ item.regexp }}"
+    replace: "{{ item.replace }}"
+  loop:
+    - regexp: 'gnbIp:.*'
+      replace: 'gnbIp: {{ srsran_network.n3.gnb_ip }}'
+    - regexp: '(^\s*bind_addr:\s*)10\.\d+\.\d+\.\d+'
+      replace: '\g<1>{{ srsran_network.n3.gnb_ip }}'
+    - regexp: '^\s*#?tx_port.*base_srate=23\.04e6'
+      replace: '      tx_port=tcp://{{ srsran_network.n3.gnb_ip }}:2000,rx_port=tcp://{{ srsran_network.n3.ue_ips[0] }}:2001,base_srate=23.04e6'
+  when: rru == 'rfsim' and core == 'open5gs'
+

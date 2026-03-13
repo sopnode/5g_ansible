@@ -30,11 +30,6 @@
   delay: 2
   until: gnu_log_wait.rc == 0
 
-- name: Warn if GNU Radio did not start
-  ansible.builtin.debug:
-    msg: "WARNING: GNU Radio broker did not start"
-  when: gnu_log_wait.rc != 0
-
 - name: Get gNB pod name
   ansible.builtin.command: >
     {{ kubectl_bin }} get pod -n {{ ran_ns }} -l app=srsran,component=gnb
@@ -42,33 +37,33 @@
   register: gnb_pod_name_result
   changed_when: false
 
-- name: Wait for gNB cell stable - no AMF reconnection for 20s (open5gs only)
-  ansible.builtin.shell: |
-    CELL=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} \
-      -c gnb-logs -- grep -c "Cell was activated" /var/log/gnb.log 2>/dev/null || echo 0)
-    RECON=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} \
-      -c gnb-logs -- grep "AMF Reconnection Routine.*started" /var/log/gnb.log 2>/dev/null \
-      | tail -1 | awk '{print $1}')
-    [ "$CELL" -lt 1 ] && exit 1
-    [ -z "$RECON" ] && exit 0
-    RECON_S=$(date -d "$RECON" +%s 2>/dev/null) || exit 1
-    NOW=$(date +%s)
-    DIFF=$((NOW - RECON_S))
-    echo "Last AMF reconnection ${DIFF}s ago"
-    test "$DIFF" -gt 20
-  register: gnb_stable
+- name: Wait for gNB cell to be activated
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} -c gnb-logs -- /bin/sh -lc
+    "grep -q 'Cell was activated' /var/log/gnb.log 2>/dev/null"
+  register: gnb_cell_wait
   changed_when: false
   failed_when: false
   retries: 60
   delay: 5
-  until: gnb_stable.rc == 0
-  when: core == 'open5gs'
+  until: gnb_cell_wait.rc == 0
 
-- name: Fail if gNB cell never stabilized
-  ansible.builtin.fail:
-    msg: "gNB cell never stabilized - AMF keeps reconnecting"
-  when: core == 'open5gs' and gnb_stable.rc != 0
-  
+- name: Warn if gNB cell did not activate
+  ansible.builtin.debug:
+    msg: "WARNING: gNB cell did not activate within timeout"
+  when: gnb_cell_wait.rc != 0
+
+- name: Warn if gNB cell did not activate
+  ansible.builtin.debug:
+    msg: "WARNING: gNB cell did not activate within timeout"
+  when: gnb_cell_wait.rc != 0
+
+- name: Warn if GNU Radio did not start
+  ansible.builtin.debug:
+    msg: "WARNING: GNU Radio broker did not start"
+  when: gnu_log_wait.rc != 0
+
+
 - name: Start each UE in its own tmux window
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
@@ -87,7 +82,7 @@
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
     'ok=1;
      for i in {{ ue_indices | join(" ") }}; do
-       if ! pgrep -af "srsue.*ue_${i}\.conf" >/dev/null 2>&1; then
+       if ! pgrep -af "srsue .*ue_${i}\.conf" >/dev/null 2>&1; then
          ok=0; break;
        fi;
      done;
