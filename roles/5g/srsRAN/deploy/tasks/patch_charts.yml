@@ -65,6 +65,7 @@
               tb.wait()
           except KeyboardInterrupt:
               _stop()
+  when: rru == 'rfsim' and core == 'free5gc' # @@
 
 - name: Write start_gnu.sh
   ansible.builtin.copy:
@@ -78,6 +79,7 @@
       mkdir -p /var/log
       echo "[$(date -u +%FT%TZ)] Starting GNU Radio broker for ${UE_COUNT} UE(s)..." | tee "$LOG"
       exec python3 /srsran/config/multi_ue_scenario.py --nof-ues "${UE_COUNT}" >> "$LOG" 2>&1
+  when: rru == 'rfsim' and core == 'free5gc' # @@
 
 - name: Write add_route.sh
   ansible.builtin.copy:
