@@ -158,3 +158,21 @@
       retries: 60
       delay: 5
       changed_when: false
+
+    - name: Wait for AMF reconnection to settle
+      ansible.builtin.shell: |
+        RECON=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name }} \
+          -c gnb-logs -- grep "AMF Reconnection Routine.*started" /var/log/gnb.log 2>/dev/null \
+          | tail -1 | awk '{print $1}')
+        [ -z "$RECON" ] && exit 0
+        RECON_S=$(date -d "$RECON" +%s 2>/dev/null) || exit 1
+        NOW=$(date +%s)
+        DIFF=$((NOW - RECON_S))
+        echo "Last AMF reconnection ${DIFF}s ago"
+        test "$DIFF" -gt 20
+      register: amf_reconnect_stable
+      changed_when: false
+      failed_when: false
+      retries: 30
+      delay: 5
+      until: amf_reconnect_stable.rc == 0
