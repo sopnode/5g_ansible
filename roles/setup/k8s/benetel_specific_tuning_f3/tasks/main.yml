@@ -4,7 +4,8 @@
   ansible.builtin.lineinfile:
     path: /etc/systemd/system.conf
     regexp: '^CPUAffinity='
-    line: 'CPUAffinity=0-3'
+    # FIX: align with reservedSystemCPUs 0-5 in kubelet config
+    line: 'CPUAffinity=0-5'
     state: present
 
 - name: Reload systemd config
@@ -21,7 +22,10 @@
       ## For kubernetes
       fs.inotify.max_user_instances=65536
       ## Realtime kernel settings
-      kernel.sched_rt_runtime_us=-1
+      # FIX: -1 disables RT throttling entirely — kernel watchdog cannot preempt
+      # a runaway RT thread → livelock → kernel panic → reboot.
+      # 950000 = 95% RT budget, leaving 5% for kernel housekeeping.
+      kernel.sched_rt_runtime_us=950000
       kernel.timer_migration=0
     marker: "# {mark} RAN tuning"
 
@@ -31,7 +35,6 @@
     cmd: sysctl -p
   changed_when: false
 
-# Ensure python & PyYAML for safe merge
 - name: Ensure python3 and PyYAML are installed
   apt:
     name:
@@ -41,16 +44,12 @@
     update_cache: yes
   become: true
 
-# Merge CPU settings ONLY — never touch DNS or networking keys
 - name: Merge CPU-only kubelet config safely
   become: true
   shell: |
     python3 - <<'EOF'
     import yaml, os
-
     cfg = "/var/lib/kubelet/config.yaml"
-
-    # CPU tuning patch — ONLY these fields will be enforced
     patch = {
       "cgroupDriver": "systemd",
       "cpuManagerPolicy": "static",
@@ -63,22 +62,15 @@
         "CPUManagerPolicyOptions": True,
       }
     }
-
     if not os.path.exists(cfg):
       exit(0)
-
     with open(cfg) as f:
       data = yaml.safe_load(f) or {}
-
-    # Deep merge featureGates only
     data.setdefault("featureGates", {})
     data["featureGates"].update(patch["featureGates"])
-
-    # Shallow merge non-dict keys
     for k, v in patch.items():
       if k != "featureGates":
         data[k] = v
-
     with open(cfg + ".tmp", "w") as f:
       yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
     os.replace(cfg + ".tmp", cfg)
@@ -87,14 +79,12 @@
   register: merge_result
   changed_when: "'APPLIED' in merge_result.stdout"
 
-# Force kubelet to apply new CPU allocations
 - name: Remove kubelet CPU manager checkpoint
   become: true
   file:
     path: /var/lib/kubelet/cpu_manager_state
     state: absent
 
-# Restart kubelet safely
 - name: Restart kubelet
   become: true
   systemd:
