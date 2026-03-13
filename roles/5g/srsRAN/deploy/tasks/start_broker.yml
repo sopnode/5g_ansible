@@ -1,11 +1,15 @@
 ---
 
-- name: Kill existing processes if any
+# For free5gc: kill any existing processes before restart
+# For open5gs: UEs are already running (launched in deploy_srsues.yml),
+#              do NOT kill them here.
+- name: Kill existing processes if any (free5gc only)
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
     /bin/sh -lc "pkill -9 srsue; pkill -9 python3; true"
   changed_when: true
   failed_when: false
+  when: core != 'open5gs'
 
 - name: Start GNU Radio broker in tmux window 'gnu'
   ansible.builtin.command: >
@@ -30,6 +34,11 @@
   delay: 2
   until: gnu_log_wait.rc == 0
 
+- name: Warn if GNU Radio did not start
+  ansible.builtin.debug:
+    msg: "WARNING: GNU Radio broker did not start"
+  when: gnu_log_wait.rc != 0
+
 - name: Get gNB pod name
   ansible.builtin.command: >
     {{ kubectl_bin }} get pod -n {{ ran_ns }} -l app=srsran,component=gnb
@@ -53,18 +62,9 @@
     msg: "WARNING: gNB cell did not activate within timeout"
   when: gnb_cell_wait.rc != 0
 
-- name: Warn if gNB cell did not activate
-  ansible.builtin.debug:
-    msg: "WARNING: gNB cell did not activate within timeout"
-  when: gnb_cell_wait.rc != 0
-
-- name: Warn if GNU Radio did not start
-  ansible.builtin.debug:
-    msg: "WARNING: GNU Radio broker did not start"
-  when: gnu_log_wait.rc != 0
-
-
-- name: Start each UE in its own tmux window
+# For free5gc: UEs are launched here AFTER broker (original working order)
+# For open5gs: UEs are already running since deploy_srsues.yml
+- name: Start each UE in its own tmux window (free5gc only)
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
     /bin/sh -lc "
@@ -76,8 +76,9 @@
   loop: "{{ ue_list }}"
   changed_when: true
   failed_when: false
+  when: core != 'open5gs'
 
-- name: Wait until each UE process is up
+- name: Wait until each UE process is up (free5gc only)
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
     'ok=1;
@@ -93,14 +94,14 @@
   retries: 60
   delay: 2
   until: ue_up_check.rc == 0
+  when: core != 'open5gs'
 
 - name: Warn if UE processes did not start
   ansible.builtin.debug:
     msg: "WARNING: not all UE processes started"
-  when: ue_up_check.rc != 0
+  when: core != 'open5gs' and ue_up_check.rc != 0
 
 # --- Routes ---
-
 - name: Add routes in UE pod
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/bash -lc
@@ -109,7 +110,6 @@
   failed_when: false
 
 # --- Show UE IPs ---
-
 - name: Extract UE IP addresses from logs
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc

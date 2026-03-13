@@ -17,35 +17,7 @@
   when: gnb_release_exists.stdout | trim | int > 0
   failed_when: false
 
-# open5gs only: restart AMF AFTER gNB uninstall to clear stale UE contexts from RAM
-# This fixes open5gs v2.7.0 bug: Assertion 'gnb' failed at amf-sm.c:815
-- name: Restart AMF to clear stale UE contexts (open5gs rfsim only)
-  ansible.builtin.command: >
-    {{ kubectl_bin }} -n {{ ran_ns }} rollout restart deployment open5gs-amf
-  changed_when: true
-  when: core == 'open5gs' and rru == 'rfsim'
-
-- name: Wait for AMF rollout complete (open5gs rfsim only)
-  ansible.builtin.command: >
-    {{ kubectl_bin }} -n {{ ran_ns }} rollout status deployment open5gs-amf --timeout=60s
-  changed_when: false
-  when: core == 'open5gs' and rru == 'rfsim'
-
-- name: Wait for AMF SCTP port 38412 to be ready (open5gs rfsim only)
-  ansible.builtin.shell: |
-    {{ kubectl_bin }} -n {{ ran_ns }} exec \
-      $({{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf \
-        -o jsonpath='{.items[0].metadata.name}') -- \
-      ss -lnp | grep -q ':38412'
-  register: amf_port_ready
-  changed_when: false
-  failed_when: false
-  retries: 40
-  delay: 3
-  until: amf_port_ready.rc == 0
-  when: core == 'open5gs' and rru == 'rfsim'
-
-# Use stable ClusterIP service instead of unstable pod IP
+# Use stable ClusterIP service instead of unstable pod IP.
 # Pod IPs change at every restart; the ClusterIP survives AMF pod restarts.
 - name: Ensure AMF NGAP ClusterIP service exists (open5gs rfsim only)
   kubernetes.core.k8s:
@@ -88,9 +60,10 @@
 
 - name: Debug AMF service IP updated
   ansible.builtin.debug:
-    msg: "AMF NGAP ClusterIP {{ amf_svc_ip.stdout }} written to values-rfsim.yaml (stable across AMF restarts)"
+    msg: "AMF NGAP ClusterIP {{ amf_svc_ip.stdout }} written to values-rfsim.yaml"
   when: core == 'open5gs' and rru == 'rfsim'
 
+# --- Non-rfsim (hardware RRU) deployment ---
 - name: Deploy srsRAN gNB (only when not rfsim)
   when: rru != 'rfsim'
   block:
@@ -118,15 +91,8 @@
         msg: "srsRAN gNB is running successfully!"
       when: gnb_startup_success
 
-- name: Kill broker during gNB deploy to prevent SIGBUS (open5gs rfsim only)
-  ansible.builtin.command: >
-    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
-    /bin/sh -lc "pkill -9 python3; true"
-  changed_when: true
-  failed_when: false
-  when: core == 'open5gs' and rru == 'rfsim'
-
-- name: Deploy srsRAN gNB using Helm
+# --- rfsim deployment ---
+- name: Deploy srsRAN gNB using Helm (rfsim)
   when: rru == 'rfsim'
   kubernetes.core.helm:
     name: srsran-gnb
@@ -139,8 +105,8 @@
     atomic: True
     timeout: 180s
 
-- name: Wait for gNB to be ready before starting UEs (open5gs rfsim only)
-  when: core == 'open5gs' and rru == 'rfsim'
+- name: Wait for gNB to be ready (rfsim only)
+  when: rru == 'rfsim'
   block:
     - name: Get gNB pod name
       ansible.builtin.command: >
@@ -167,20 +133,3 @@
       delay: 5
       changed_when: false
 
-    - name: Wait for AMF reconnection to settle
-      ansible.builtin.shell: |
-        RECON=$({{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name }} \
-          -c gnb-logs -- grep "AMF Reconnection Routine.*started" /var/log/gnb.log 2>/dev/null \
-          | tail -1 | awk '{print $1}')
-        [ -z "$RECON" ] && exit 0
-        RECON_S=$(date -d "$RECON" +%s 2>/dev/null) || exit 1
-        NOW=$(date +%s)
-        DIFF=$((NOW - RECON_S))
-        echo "Last AMF reconnection ${DIFF}s ago"
-        test "$DIFF" -gt 20
-      register: amf_reconnect_stable
-      changed_when: false
-      failed_when: false
-      retries: 30
-      delay: 5
-      until: amf_reconnect_stable.rc == 0

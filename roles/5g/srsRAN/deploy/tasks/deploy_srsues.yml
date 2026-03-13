@@ -1,9 +1,10 @@
 ---
 # ------------------------------
 # Deploy srsRAN UE pod (single pod, tmux session)
-# RFSIM only - broker and UEs started in start_broker.yml
+# RFSIM only - broker started in start_broker.yml
+# For open5gs: UEs are launched here BEFORE gNB (same order as reference role)
+# For free5gc: UEs are launched in start_broker.yml AFTER gNB+broker
 # ------------------------------
-
 - name: Assert ue_list is defined (must be set by config role)
   ansible.builtin.assert:
     that:
@@ -16,7 +17,6 @@
     msg: "Deploying {{ ue_list | length }} UE(s): {{ ue_list | map(attribute='name') | list }}"
 
 - block:
-
     - name: Uninstall existing srsran-ue Helm release
       kubernetes.core.helm:
         name: srsran-ue
@@ -78,6 +78,48 @@
         /bin/sh -lc "tmux has-session -t ran 2>/dev/null || tmux new-session -d -s ran"
       changed_when: true
       failed_when: false
+
+    # For open5gs: launch UEs here BEFORE gNB deploy.
+    # This matches the working order from the reference role:
+    #   UEs -> gNB -> broker
+    # The broker's req_source connects to gNB only after gNB is stable,
+    # preventing ZMQ REQ/REP deadlock (SIGBUS exit 136).
+    - name: Start each UE in its own tmux window (open5gs only)
+      ansible.builtin.command: >
+        {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
+        /bin/sh -lc "
+          tmux list-windows -t ran | grep -q 'ue{{ item.index }}' \
+            && tmux kill-window -t ran:ue{{ item.index }} || true;
+          tmux new-window -t ran -n ue{{ item.index }} \
+            'bash -lc \"/srsran/config/start_ue.sh {{ item.index }} 2>&1 | tee /var/log/ue{{ item.index }}.log\"'
+        "
+      loop: "{{ ue_list }}"
+      changed_when: true
+      failed_when: false
+      when: core == 'open5gs'
+
+    - name: Wait until each UE process is up (open5gs only)
+      ansible.builtin.command: >
+        {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
+        'ok=1;
+         for i in {{ ue_indices | join(" ") }}; do
+           if ! pgrep -af "srsue.*ue_${i}\.conf" >/dev/null 2>&1; then
+             ok=0; break;
+           fi;
+         done;
+         test "$ok" = "1"'
+      register: ue_up_check
+      changed_when: false
+      failed_when: false
+      retries: 60
+      delay: 2
+      until: ue_up_check.rc == 0
+      when: core == 'open5gs'
+
+    - name: Warn if UE processes did not start (open5gs only)
+      ansible.builtin.debug:
+        msg: "WARNING: not all UE processes started"
+      when: core == 'open5gs' and ue_up_check.rc != 0
 
   when: rru == 'rfsim'
 
