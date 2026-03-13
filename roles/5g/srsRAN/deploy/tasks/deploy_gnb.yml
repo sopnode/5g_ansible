@@ -45,14 +45,37 @@
   until: amf_port_ready.rc == 0
   when: core == 'open5gs' and rru == 'rfsim'
 
-- name: Get current AMF pod IP (open5gs rfsim only)
+# Use stable ClusterIP service instead of unstable pod IP
+# Pod IPs change at every restart; the ClusterIP survives AMF pod restarts.
+- name: Ensure AMF NGAP ClusterIP service exists (open5gs rfsim only)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: amf-ngap
+        namespace: "{{ ran_ns }}"
+        labels:
+          app: open5gs
+      spec:
+        selector:
+          nf: amf
+        ports:
+          - protocol: SCTP
+            port: 38412
+            targetPort: 38412
+        type: ClusterIP
+  when: core == 'open5gs' and rru == 'rfsim'
+
+- name: Get AMF NGAP service ClusterIP (open5gs rfsim only)
   ansible.builtin.command: >
-    {{ kubectl_bin }} get pod -n {{ ran_ns }} -l nf=amf
-    -o jsonpath='{.items[0].status.podIP}'
-  register: amf_pod_ip
+    {{ kubectl_bin }} get svc -n {{ ran_ns }} amf-ngap
+    -o jsonpath='{.spec.clusterIP}'
+  register: amf_svc_ip
   changed_when: false
-  until: amf_pod_ip.stdout != ""
-  retries: 20
+  until: amf_svc_ip.stdout != ""
+  retries: 10
   delay: 3
   when: core == 'open5gs' and rru == 'rfsim'
 
@@ -60,12 +83,12 @@
   ansible.builtin.replace:
     path: "{{ repo_dest_abs }}/charts/srsran-gnb/values-rfsim.yaml"
     regexp: '(^\s*addr:\s*)\d+\.\d+\.\d+\.\d+'
-    replace: '\g<1>{{ amf_pod_ip.stdout }}'
+    replace: '\g<1>{{ amf_svc_ip.stdout }}'
   when: core == 'open5gs' and rru == 'rfsim'
 
-- name: Debug AMF IP updated
+- name: Debug AMF service IP updated
   ansible.builtin.debug:
-    msg: "AMF IP updated to {{ amf_pod_ip.stdout }}"
+    msg: "AMF NGAP ClusterIP {{ amf_svc_ip.stdout }} written to values-rfsim.yaml (stable across AMF restarts)"
   when: core == 'open5gs' and rru == 'rfsim'
 
 - name: Deploy srsRAN gNB (only when not rfsim)
