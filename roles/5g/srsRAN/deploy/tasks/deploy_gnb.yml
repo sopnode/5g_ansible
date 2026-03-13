@@ -17,52 +17,6 @@
   when: gnb_release_exists.stdout | trim | int > 0
   failed_when: false
 
-# Use stable ClusterIP service instead of unstable pod IP.
-# Pod IPs change at every restart; the ClusterIP survives AMF pod restarts.
-- name: Ensure AMF NGAP ClusterIP service exists (open5gs rfsim only)
-  kubernetes.core.k8s:
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: amf-ngap
-        namespace: "{{ ran_ns }}"
-        labels:
-          app: open5gs
-      spec:
-        selector:
-          nf: amf
-        ports:
-          - protocol: SCTP
-            port: 38412
-            targetPort: 38412
-        type: ClusterIP
-  when: core == 'open5gs' and rru == 'rfsim'
-
-- name: Get AMF NGAP service ClusterIP (open5gs rfsim only)
-  ansible.builtin.command: >
-    {{ kubectl_bin }} get svc -n {{ ran_ns }} amf-ngap
-    -o jsonpath='{.spec.clusterIP}'
-  register: amf_svc_ip
-  changed_when: false
-  until: amf_svc_ip.stdout != ""
-  retries: 10
-  delay: 3
-  when: core == 'open5gs' and rru == 'rfsim'
-
-- name: Update AMF IP in gNB values-rfsim.yaml (open5gs rfsim only)
-  ansible.builtin.replace:
-    path: "{{ repo_dest_abs }}/charts/srsran-gnb/values-rfsim.yaml"
-    regexp: '(^\s*addr:\s*)\d+\.\d+\.\d+\.\d+'
-    replace: '\g<1>{{ amf_svc_ip.stdout }}'
-  when: core == 'open5gs' and rru == 'rfsim'
-
-- name: Debug AMF service IP updated
-  ansible.builtin.debug:
-    msg: "AMF NGAP ClusterIP {{ amf_svc_ip.stdout }} written to values-rfsim.yaml"
-  when: core == 'open5gs' and rru == 'rfsim'
-
 # --- Non-rfsim (hardware RRU) deployment ---
 - name: Deploy srsRAN gNB (only when not rfsim)
   when: rru != 'rfsim'
@@ -92,6 +46,8 @@
       when: gnb_startup_success
 
 # --- rfsim deployment ---
+# Order matters: gNB first, then UEs, then broker (matching reference role)
+# AMF addr uses stable Multus N3 IP (srsran_network.n3.amf_ip) - no ClusterIP service needed
 - name: Deploy srsRAN gNB using Helm (rfsim)
   when: rru == 'rfsim'
   kubernetes.core.helm:
@@ -101,11 +57,11 @@
     values_files:
       - "{{ values_file }}"
     state: present
-    wait: False
-    atomic: True
+    wait: true
+    atomic: true
     timeout: 180s
 
-- name: Wait for gNB to be ready (rfsim only)
+- name: Wait for gNB pod to be ready (rfsim only)
   when: rru == 'rfsim'
   block:
     - name: Get gNB pod name
@@ -133,3 +89,6 @@
       delay: 5
       changed_when: false
 
+    - name: Wait 15s for gNB to stabilize (matching reference role)
+      ansible.builtin.pause:
+        seconds: 15

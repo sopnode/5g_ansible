@@ -31,7 +31,7 @@ srsran_network_map:
         - "10.100.50.237"
   open5gs:
     n2:
-      amf_ip: "{{ hostvars[groups['core_node'][0]].ip }}"
+      amf_ip: "10.10.3.200"
       amf_port: 38412
     n3:
       gnb_ip: "10.10.3.234"

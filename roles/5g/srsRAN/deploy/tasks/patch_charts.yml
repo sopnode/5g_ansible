@@ -65,7 +65,7 @@
               tb.wait()
           except KeyboardInterrupt:
               _stop()
-  when: rru == 'rfsim' and core == 'free5gc' # @@
+  when: rru == 'rfsim' and core == 'free5gc'
 
 - name: Write start_gnu.sh
   ansible.builtin.copy:
@@ -79,7 +79,7 @@
       mkdir -p /var/log
       echo "[$(date -u +%FT%TZ)] Starting GNU Radio broker for ${UE_COUNT} UE(s)..." | tee "$LOG"
       exec python3 /srsran/config/multi_ue_scenario.py --nof-ues "${UE_COUNT}" >> "$LOG" 2>&1
-  when: rru == 'rfsim' and core == 'free5gc' # @@
+  when: rru == 'rfsim' and core == 'free5gc'
 
 - name: Write add_route.sh
   ansible.builtin.copy:
@@ -167,7 +167,7 @@
                   name: {{ '{{' }} include "srsran-ue.fullname" . {{ '}}' }}-{{ '{{' }} .Release.Name {{ '}}' }}-ue-config
                   defaultMode: 0755
 
-# --- Patch gNB deployment - n3network name ---
+# --- Patch gNB values-rfsim.yaml - n3network name (tous scénarios) ---
 
 - name: Patch gNB deployment - parameterize n3network name
   ansible.builtin.replace:
@@ -181,6 +181,12 @@
     regexp: 'all_level:\s*warning'
     replace: 'all_level: info'
 
+# --- Patch gNB values-rfsim.yaml IPs (open5gs rfsim only) ---
+# Use Multus N3 IPs directly (stable, no ClusterIP service needed):
+#   - AMF addr    : srsran_network.n3.amf_ip  (e.g. 10.10.3.200, fixed Multus IP)
+#   - gNB bind    : srsran_network.n3.gnb_ip  (e.g. 10.10.3.234)
+#   - gNB tx/rx   : gnb_ip:2000 / ue_ip:2001
+#   - gnbIp field : srsran_network.n3.gnb_ip
 - name: Patch gNB values-rfsim.yaml with correct IPs (open5gs rfsim)
   ansible.builtin.replace:
     path: "{{ repo_dest_abs }}/charts/srsran-gnb/values-rfsim.yaml"
@@ -189,9 +195,12 @@
   loop:
     - regexp: 'gnbIp:.*'
       replace: 'gnbIp: {{ srsran_network.n3.gnb_ip }}'
-    - regexp: '(^\s*bind_addr:\s*)10\.\d+\.\d+\.\d+'
+    - regexp: '(^\s*addr:\s*)10\.\d+\.\d+\.\d+'
+      replace: '\g<1>{{ srsran_network.n3.amf_ip }}'
+    - regexp: '(^\s*bind_addr:\s*)10\.\d+\.\d+\.\d+(\s*)$'
+      replace: '\g<1>{{ srsran_network.n3.gnb_ip }}\g<2>'
+    - regexp: 'tx_port=tcp://[0-9.]+:2000,rx_port=tcp://[0-9.]+:2001'
+      replace: 'tx_port=tcp://{{ srsran_network.n3.gnb_ip }}:2000,rx_port=tcp://{{ srsran_network.n3.ue_ips[0] }}:2001'
+    - regexp: '(^\s*- bind_addr:\s*)10\.\d+\.\d+\.\d+'
       replace: '\g<1>{{ srsran_network.n3.gnb_ip }}'
-    - regexp: '^\s*#?tx_port.*base_srate=23\.04e6'
-      replace: '      tx_port=tcp://{{ srsran_network.n3.gnb_ip }}:2000,rx_port=tcp://{{ srsran_network.n3.ue_ips[0] }}:2001,base_srate=23.04e6'
   when: rru == 'rfsim' and core == 'open5gs'
-
