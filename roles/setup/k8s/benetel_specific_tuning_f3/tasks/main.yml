@@ -24,8 +24,8 @@
       ## Realtime kernel settings
       # FIX: -1 disables RT throttling entirely — kernel watchdog cannot preempt
       # a runaway RT thread → livelock → kernel panic → reboot.
-      # 950000 = 95% RT budget, leaving 5% for kernel housekeeping.
-      kernel.sched_rt_runtime_us=950000
+      # 900000 = 90% RT budget, leaving 5% for kernel housekeeping.
+      kernel.sched_rt_runtime_us=900000
       kernel.timer_migration=0
     marker: "# {mark} RAN tuning"
 

@@ -7,6 +7,10 @@
     update_cache: yes
   become: true
 
+- name: Disable adaptive-interrupts (Prevent TX Timeouts)
+  command: ethtool -C {{ nic_interface }} adaptive-rx off adaptive-tx off
+  become: true
+
 - name: Increase NIC ring buffers on {{ nic_interface }}
   command: ethtool -G {{ nic_interface }} tx 8160 rx 8160
   become: true
@@ -72,10 +76,15 @@
         content: |
           [Unit]
           Description=Pin IRQs for ens15f0np0 and ens15f1np1
-          After=multi-user.target
+          After=network-online.target
           [Service]
           Type=oneshot
-          ExecStart=/bin/sh -c 'for i in {{ (ovs_irq_list.stdout_lines + sriov_pf_irq_list.stdout_lines) | join(" ") }}; do echo 14-31 > /proc/irq/$i/smp_affinity_list; done'
+          # Le script recalcule les IRQs à chaque démarrage du service
+          ExecStart=/bin/bash -c 'for iface in ens15f0np0 ens15f1np1; do \
+            for irq in $(grep $iface /proc/interrupts | cut -d: -f1); do \
+              echo 14-31 > /proc/irq/$irq/smp_affinity_list; \
+            done; \
+          done'
           [Install]
           WantedBy=multi-user.target
       become: true
