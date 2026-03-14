@@ -36,7 +36,7 @@
 
 - name: Show GNU status (process + log tail)
   ansible.builtin.command: >
-    {{ kubectl_bin }} -n {{ open5gs_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
     "echo '== ps =='; pgrep -af 'python3 .*srsran/config/multi_ue_scenario.py' || true;
      echo '== gnu log tail =='; tail -n 50 /var/log/gnu_multi_ue.log || true"
   register: gnu_status
