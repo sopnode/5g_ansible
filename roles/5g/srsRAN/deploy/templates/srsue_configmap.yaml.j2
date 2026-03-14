@@ -9,9 +9,8 @@ data:
     #!/bin/bash
     ## Bash file to start the UE using /opt/srsRAN_4G/build/srsue/src/srsue /srsran/config/ue1.conf
     ## The UE number is passed as an argument to the script
-
     python3 /srsran/config/generate_ue_conf.py $1 /tmp/
-    ip netns add ue$1
+    ip netns add ue$1 2>/dev/null || true
     /opt/srsRAN_4G/build/srsue/src/srsue /tmp/ue_$1.conf
 
   start_gnu.sh: |
@@ -20,98 +19,103 @@ data:
 
   generate_ue_conf.py: |
     #!/usr/bin/env python3
-    import argparse
-    import os
+    import argparse, os
 
-    K_HEX = "fec86ba6eb707ed08905757b1bb44b8f"
-    OPC_HEX = "C42449363BBAD02B66D16BC975D77CC1"
+    UE_CONFIGS = {
+      1: {
+        "imsi":      "001010000001121",
+        "k":         "fec86ba6eb707ed08905757b1bb44b8f",
+        "opc":       "C42449363BBAD02B66D16BC975D77CC1",
+        "apn":       "internet",
+        "ue_ip":     "{{ srsran_network.n3.ue_ips[0] }}",
+        "tx_port":   2101,
+        "rx_port":   2201,
+      },
+      2: {
+        "imsi":      "001010000001122",
+        "k":         "fec86ba6eb707ed08905757b1bb44b8f",
+        "opc":       "C42449363BBAD02B66D16BC975D77CC1",
+        "apn":       "streaming",
+        "ue_ip":     "{{ srsran_network.n3.ue_ips[0] }}",
+        "tx_port":   2102,
+        "rx_port":   2202,
+      },
+      3: {
+        "imsi":      "001010000001123",
+        "k":         "fec86ba6eb707ed08905757b1bb44b8f",
+        "opc":       "C42449363BBAD02B66D16BC975D77CC1",
+        "apn":       "internet",
+        "ue_ip":     "{{ srsran_network.n3.ue_ips[0] }}",
+        "tx_port":   2103,
+        "rx_port":   2203,
+      },
+    }
 
-    UE_TEMPLATE = """[rf]
-    freq_offset = 0
-    tx_gain = 80
-    rx_gain = 40
-    srate = 23.04e6
-    nof_antennas = 1
+    UE_TEMPLATE = (
+        "[rf]\n"
+        "freq_offset = 0\n"
+        "tx_gain = 80\n"
+        "rx_gain = 40\n"
+        "srate = 23.04e6\n"
+        "nof_antennas = 1\n"
+        "device_name = zmq\n"
+        "device_args = tx_port={tx_port},rx_port={rx_port},base_srate=23.04e6\n"
+        "[rat.eutra]\n"
+        "nof_carriers = 0\n"
+        "[rat.nr]\n"
+        "bands = 3\n"
+        "nof_carriers = 1\n"
+        "max_nof_prb = 106\n"
+        "nof_prb = 106\n"
+        "dl_nr_arfcn = 368500\n"
+        "ssb_nr_arfcn = 368410\n"
+        "[log]\n"
+        "all_level = info\n"
+        "phy_lib_level = none\n"
+        "all_hex_limit = 32\n"
+        "filename = {log_file}\n"
+        "file_max_size = 1000\n"
+        "[usim]\n"
+        "mode = soft\n"
+        "algo = milenage\n"
+        "opc  = {opc}\n"
+        "k    = {k}\n"
+        "imsi = {imsi}\n"
+        "imei = 356938035643803\n"
+        "[rrc]\n"
+        "release = 15\n"
+        "ue_category = 4\n"
+        "[nas]\n"
+        "apn = {apn}\n"
+        "apn_protocol = ipv4\n"
+        "[gw]\n"
+        "netns = ue{ue_number}\n"
+        "ip_devname = tun_srsue\n"
+        "ip_netmask = 255.255.255.0\n"
+        "[gui]\n"
+        "enable = false\n"
+    )
 
-    device_name = zmq
-    device_args = tx_port={tx_port},rx_port={rx_port},base_srate=23.04e6
-
-    [rat.eutra]
-    dl_earfcn = 2850
-    nof_carriers = 0
-
-    [rat.nr]
-    bands = 3
-    nof_carriers = 1
-    max_nof_prb = 106
-    nof_prb = 106
-
-    [log]
-    all_level = warning
-    phy_lib_level = none
-    all_hex_limit = 32
-    filename = {log_file}
-    file_max_size = 1000
-
-    [usim]
-    mode = soft
-    algo = milenage
-    opc  = {opc}
-    k    = {k}
-    imsi = {imsi}
-    imei = 356938035643803
-
-    [rrc]
-    release = 15
-    ue_category = 4
-
-    [nas]
-    apn = {apn}
-    apn_protocol = ipv4
-
-    [gw]
-    netns = {netns}
-    ip_devname = tun_srsue
-    ip_netmask = 255.255.255.0
-
-    [gui]
-    enable = false
-    """
-
-    def imsi_for(ue_number: int) -> str:
-        base_imsi = "001010000001121"
-        return str(int(base_imsi) + ue_number - 1)
-
-    def apn_for(ue_number: int) -> str:
-        apns = ["internet", "streaming", "internet"]
-        return apns[(ue_number - 1) % len(apns)]
-
-    def generate_ue_config(ue_number: int, output_directory: str) -> str:
+    def generate_ue_config(ue_number, output_directory):
         os.makedirs(output_directory, exist_ok=True)
-
-        ue_ip = "{{ srsran_network.n3.ue_ips[0] }}"
-
-        cfg = UE_TEMPLATE.format(
-            tx_port=f"tcp://{ue_ip}:{2100 + ue_number}",
-            rx_port=f"tcp://{ue_ip}:{2200 + ue_number}",
-            log_file=os.path.join(output_directory, f"ue{ue_number}.log"),
-            opc=OPC_HEX,
-            k=K_HEX,
-            imsi=imsi_for(ue_number),
-            apn=apn_for(ue_number),
-            netns=f"ue{ue_number}",
+        cfg = UE_CONFIGS.get(ue_number, UE_CONFIGS[1])
+        content = UE_TEMPLATE.format(
+            tx_port="tcp://{}:{}".format(cfg['ue_ip'], cfg['tx_port']),
+            rx_port="tcp://{}:{}".format(cfg['ue_ip'], cfg['rx_port']),
+            log_file=os.path.join(output_directory, "ue{}.log".format(ue_number)),
+            opc=cfg["opc"], k=cfg["k"],
+            imsi=cfg["imsi"], apn=cfg["apn"], ue_number=ue_number,
         )
-
-        path = os.path.join(output_directory, f"ue_{ue_number}.conf")
+        path = os.path.join(output_directory, "ue_{}.conf".format(ue_number))
         with open(path, "w") as f:
-            f.write(cfg)
-        print(f"Wrote {path}")
+            f.write(content)
+        print("Wrote {}".format(path))
         return path
 
-    if __name__ == '__main__':
-        parser = argparse.ArgumentParser(description='Generate hardcoded UE configuration files.')
-        parser.add_argument('ue_number', type=int, help='UE number')
-        parser.add_argument('output_directory', type=str, help='Directory to save the UE configuration')
+    if __name__ == "__main__":
+        parser = argparse.ArgumentParser()
+        parser.add_argument("ue_number", type=int)
+        parser.add_argument("output_directory", type=str)
         args = parser.parse_args()
         generate_ue_config(args.ue_number, args.output_directory)
 
@@ -119,7 +123,7 @@ data:
     #!/usr/bin/env python3
     # -*- coding: utf-8 -*-
     from gnuradio import blocks, gr, zeromq
-    import sys, signal
+    import sys, signal, os
     from argparse import ArgumentParser
 
     class multi_ue_scenario(gr.top_block):
@@ -130,34 +134,37 @@ data:
             zmq_hwm = -1
             samp_rate = 23040000
 
-            gnb_ip = "{{ srsran_network.n3.gnb_ip }}"
-            ue_ip  = "{{ srsran_network.n3.ue_ips[0] }}"
+            gnb_ip = os.environ.get("GNB_IP", "{{ srsran_network.n3.gnb_ip }}")
+            ue_ip  = os.environ.get("UE_IPS", "{{ srsran_network.n3.ue_ips[0] }}").split(",")[0]
 
+            # DL: gNB TX -> broker -> UE RX (rep_sink per UE on 2201+i)
             self.zeromq_req_source_0 = zeromq.req_source(gr.sizeof_gr_complex, 1,
                 f'tcp://{gnb_ip}:2000', zmq_timeout, False, zmq_hwm)
-            self.zeromq_rep_sink_0_1 = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
+            self.blocks_throttle = blocks.throttle(gr.sizeof_gr_complex*1, samp_rate, True)
+            self.connect((self.zeromq_req_source_0, 0), (self.blocks_throttle, 0))
+
+            # UL: UE TX (req_source on 2101+i) -> adder -> gNB RX rep_sink on 2001
+            self.zeromq_rep_sink_ul = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
                 f'tcp://{ue_ip}:2001', zmq_timeout, False, zmq_hwm)
+            self.blocks_add_xx = blocks.add_vcc(1)
+            self.connect((self.blocks_add_xx, 0), (self.zeromq_rep_sink_ul, 0))
 
             self.zeromq_req_sources = []
             self.zeromq_rep_sinks = []
-            self.blocks_throttle = blocks.throttle(gr.sizeof_gr_complex*1, samp_rate, True)
-            self.blocks_add_xx = blocks.add_vcc(1)
 
-            # Ports match generate_ue_conf.py: tx=2100+i+1, rx=2200+i+1
             for i in range(num_ues):
-                req_port = 2101 + i
-                rep_port = 2201 + i
+                # UE TX port: 2101+i (UE sends UL here)
+                # UE RX port: 2201+i (UE receives DL here)
+                ul_port = 2101 + i
+                dl_port = 2201 + i
                 req_source = zeromq.req_source(gr.sizeof_gr_complex, 1,
-                    f'tcp://{ue_ip}:{req_port}', zmq_timeout, False, zmq_hwm)
+                    f'tcp://{ue_ip}:{ul_port}', zmq_timeout, False, zmq_hwm)
                 rep_sink = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
-                    f'tcp://{ue_ip}:{rep_port}', zmq_timeout, False, zmq_hwm)
+                    f'tcp://{ue_ip}:{dl_port}', zmq_timeout, False, zmq_hwm)
                 self.zeromq_req_sources.append(req_source)
                 self.zeromq_rep_sinks.append(rep_sink)
                 self.connect((req_source, 0), (self.blocks_add_xx, i))
                 self.connect((self.blocks_throttle, 0), (rep_sink, 0))
-
-            self.connect((self.blocks_add_xx, 0), (self.zeromq_rep_sink_0_1, 0))
-            self.connect((self.zeromq_req_source_0, 0), (self.blocks_throttle, 0))
 
     def main():
         parser = ArgumentParser(description='srsRAN_multi_UE setup')
