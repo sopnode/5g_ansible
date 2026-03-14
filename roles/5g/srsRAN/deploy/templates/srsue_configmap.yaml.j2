@@ -30,11 +30,96 @@ data:
     done
     wait $UE_PID
   start_gnu.sh: |
-{{ '{{' }} .Files.Get "files/start_gnu.sh" | indent 4 {{ '}}' }}
+    #!/bin/bash
+    set -euo pipefail
+    UE_COUNT=${1:-${UE_COUNT:-1}}
+    LOG=/var/log/gnu_multi_ue.log
+    mkdir -p /var/log
+    echo "[$(date -u +%FT%TZ)] Starting GNU Radio broker for ${UE_COUNT} UE(s)..." | tee "$LOG"
+    exec python3 /srsran/config/multi_ue_scenario.py -n "${UE_COUNT}" >> "$LOG" 2>&1
   multi_ue_scenario.py: |
-{{ '{{' }} .Files.Get "files/multi_ue_scenario.py" | indent 4 {{ '}}' }}
+    #!/usr/bin/env python3
+    # -*- coding: utf-8 -*-
+    from gnuradio import blocks, gr, zeromq
+    import sys, signal
+    from argparse import ArgumentParser
+
+    class multi_ue_scenario(gr.top_block):
+        def __init__(self, num_ues):
+            gr.top_block.__init__(self, "srsRAN_multi_UE")
+
+            zmq_timeout = 100
+            zmq_hwm = -1
+            samp_rate = 23040000
+
+            import os
+            gnb_ip = os.environ.get("GNB_IP", "{{ srsran_network.n3.gnb_ip }}")
+            ue_ip  = os.environ.get("UE_IPS", "{{ srsran_network.n3.ue_ips[0] }}").split(",")[0]
+
+            self.zeromq_req_source_0 = zeromq.req_source(gr.sizeof_gr_complex, 1,
+                f'tcp://{gnb_ip}:2000', zmq_timeout, False, zmq_hwm)
+            self.zeromq_rep_sink_0_1 = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
+                f'tcp://{ue_ip}:2001', zmq_timeout, False, zmq_hwm)
+
+            self.zeromq_req_sources = []
+            self.zeromq_rep_sinks = []
+            self.blocks_throttle = blocks.throttle(gr.sizeof_gr_complex*1, samp_rate, True)
+            self.blocks_add_xx = blocks.add_vcc(1)
+
+            # Ports: UE TX=2101+i*100, UE RX=2100+i*100 (matches generate_ue_conf.py)
+            for i in range(num_ues):
+                tx_port = 2101 + i * 100  # UE TX -> gNB UL
+                rx_port = 2100 + i * 100  # UE RX <- gNB DL
+                req_source = zeromq.req_source(gr.sizeof_gr_complex, 1,
+                    f'tcp://{ue_ip}:{tx_port}', zmq_timeout, False, zmq_hwm)
+                rep_sink = zeromq.rep_sink(gr.sizeof_gr_complex, 1,
+                    f'tcp://{ue_ip}:{rx_port}', zmq_timeout, False, zmq_hwm)
+                self.zeromq_req_sources.append(req_source)
+                self.zeromq_rep_sinks.append(rep_sink)
+                self.connect((req_source, 0), (self.blocks_add_xx, i))
+                self.connect((self.blocks_throttle, 0), (rep_sink, 0))
+
+            self.connect((self.blocks_add_xx, 0), (self.zeromq_rep_sink_0_1, 0))
+            self.connect((self.zeromq_req_source_0, 0), (self.blocks_throttle, 0))
+
+    def main():
+        parser = ArgumentParser(description='srsRAN_multi_UE setup')
+        parser.add_argument('-n', '--num-ues', type=int, required=True, help='Number of UEs')
+        args = parser.parse_args()
+        tb = multi_ue_scenario(args.num_ues)
+
+        def sig_handler(sig=None, frame=None):
+            tb.stop()
+            tb.wait()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, sig_handler)
+        signal.signal(signal.SIGTERM, sig_handler)
+
+        tb.start()
+
+        try:
+            input('Press Enter to quit: ')
+        except EOFError:
+            pass
+        tb.stop()
+        tb.wait()
+
+    if __name__ == '__main__':
+        main()
   add_route.sh: |
-{{ '{{' }} .Files.Get "files/add_route.sh" | indent 4 {{ '}}' }}
+    #!/bin/bash
+    UE_COUNT=${UE_COUNT:-1}
+    for i in $(seq 1 "$UE_COUNT"); do
+      iface="tun_srsue${i}"
+      if ip link show "$iface" >/dev/null 2>&1; then
+        ip route add 12.1.0.0/16 dev "$iface" 2>/dev/null || true
+        ip route add 14.1.0.0/16 dev "$iface" 2>/dev/null || true
+        echo "Routes added for $iface"
+      else
+        echo "Interface $iface not found, skipping"
+      fi
+    done
   generate_ue_conf.py: |
     #!/usr/bin/env python3
     import argparse, os
