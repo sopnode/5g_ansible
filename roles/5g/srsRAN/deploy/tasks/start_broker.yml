@@ -75,10 +75,23 @@
     "
   loop: "{{ ue_list }}"
   loop_control:
-    pause: 5  # add 5s delay between each UE, else Open5gs AMF will fail !
     label: "{{ item.index }}"
   changed_when: true
   failed_when: false
+
+- name: Wait 5s before next UE (active sleep with display)
+  ansible.builtin.command: >
+    /bin/sh -c "
+      for i in 5 4 3 2 1; do
+        echo \"Waiting \$i s before launching next UE (after ue{{ item.index }})\";
+        sleep 1;
+      done
+    "
+  loop: "{{ ue_list }}"
+  loop_control:
+    label: "Pause after ue{{ item.index }}"
+  changed_when: false
+  when: not loop.last
 
 - name: Wait until each UE process is up
   ansible.builtin.command: >
