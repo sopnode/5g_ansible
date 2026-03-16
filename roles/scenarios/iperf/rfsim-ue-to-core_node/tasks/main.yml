@@ -262,10 +262,16 @@
   become: true
   when: ran == 'srsRAN'
 
+- name: Get timestamp
+  command: date +"%Y%m%d_%H%M%S"
+  register: iperf_R_timestamp
+  changed_when: false
+
+
 - name: Restart iperf3 servers between uplink and downlink (srsRAN only)
   shell: >
-    /usr/bin/iperf3 -s -p {{ 5201 + item }} -D
-    --logfile /root/IPERF/iperf_{{ 5201 + item }}_dl.log
+    /usr/bin/iperf3 -s -B {{ core_ip }} -p {{ 5201 + item }} -D
+    --logfile /root/IPERF/iperf_R_{{ 5201 + item }}_{{ iperf_R_timestamp.stdout }}.log
   loop: "{{ range(0, valid_ues | length) | list }}"
   loop_control:
     label: "Starting iperf3 server on port {{ 5201 + item }}"
