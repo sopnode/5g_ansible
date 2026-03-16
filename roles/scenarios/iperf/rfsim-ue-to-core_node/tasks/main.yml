@@ -7,6 +7,8 @@
     core_ns: "{{ core }}"
     valid_ues: []
     free5gc_srsran: "{{ core == 'free5gc' and ran == 'srsRAN' }}"
+    open5gs_srsran: "{{ core == 'open5gs' and ran == 'srsRAN' }}"
+    single_pod_srsran: "{{ (core == 'free5gc' or core == 'open5gs') and ran == 'srsRAN' }}"
     ue_name: >-
       {{ 'srsran-ue-srsran-ue' if ran == 'srsRAN'
          else 'oai-nr-ue' if ran == 'oai'
@@ -81,10 +83,37 @@
     - item | trim != ''
 
 # ============================================================
-# Build valid_ues - open5gs+srsRAN (and others): one pod per UE
+# Build valid_ues - open5gs+srsRAN: single pod, numbered tuns
 # ============================================================
 
-- name: Get tun IP per pod (open5gs+srsRAN and others)
+- name: Get tun IPs from single UE pod (open5gs+srsRAN)
+  shell: |
+    kubectl exec -n {{ core_ns }} {{ ue_resources[0].metadata.name }} -- bash -c "
+    for i in \$(seq 1 {{ nb_ues }}); do
+      ip -4 addr show tun_srsue\${i} 2>/dev/null \
+        | awk -v tun=\"tun_srsue\${i}\" '/inet / {print tun, \$2}'
+    done"
+  register: open5gs_tun_raw
+  changed_when: false
+  when: open5gs_srsran | bool
+
+- name: Build valid_ues (open5gs+srsRAN)
+  set_fact:
+    valid_ues: "{{ valid_ues + [{'pod': ue_resources[0].metadata.name,
+                                 'ip': item.split()[1] | regex_replace('/.*', ''),
+                                 'tun': item.split()[0]}] }}"
+  loop: "{{ open5gs_tun_raw.stdout_lines | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - open5gs_srsran | bool
+    - item | trim != ''
+
+# ============================================================
+# Build valid_ues - others: one pod per UE
+# ============================================================
+
+- name: Get tun IP per pod (others)
   shell: |
     kubectl exec -n {{ core_ns }} {{ item.metadata.name }} -- \
     /bin/bash -c "ip -4 addr show {{ tun_name }} | awk '/inet / {print \$2}' | cut -d/ -f1"
@@ -93,21 +122,19 @@
     label: "Getting IP for {{ item.metadata.name }}"
   register: ue_ip_results
   changed_when: false
-  when: not (free5gc_srsran | bool)
+  when: not (single_pod_srsran | bool)
 
-- name: Build valid_ues (open5gs+srsRAN and others)
+- name: Build valid_ues (others)
   set_fact:
     valid_ues: "{{ valid_ues + [{'pod': item.item.metadata.name,
                                  'ip': item.stdout | trim,
-                                 'tun': 'tun_srsue' ~ (loop_idx + 1)
-                                        if (ran == 'srsRAN')
-                                        else tun_name}] }}"
+                                 'tun': tun_name}] }}"
   loop: "{{ ue_ip_results.results | default([]) }}"
   loop_control:
     index_var: loop_idx
     label: "{{ item.item.metadata.name if item.item is defined else 'skipped' }}"
   when:
-    - not (free5gc_srsran | bool)
+    - not (single_pod_srsran | bool)
     - item.skipped is not defined or not item.skipped
     - item.stdout is defined
     - item.stdout | trim is search('^[0-9.]+$')
@@ -126,10 +153,10 @@
   failed_when: false
 
 # ============================================================
-# Routing setup - open5gs+srsRAN and others
+# Routing setup - others (not single_pod_srsran)
 # ============================================================
 
-- name: Add ip route to target_server (open5gs+srsRAN and others)
+- name: Add ip route to target_server (others)
   shell: |
     kubectl exec -n {{ core_ns }} {{ item.pod }} -- \
     ip route add {{ target_server }} via {{ item.ip.split('.')[:2] | join('.') }}.1.1 dev {{ item.tun }} 2>/dev/null || true
@@ -137,7 +164,7 @@
   loop_control:
     label: "Setting route on {{ item.pod }} via {{ item.tun }}"
   failed_when: false
-  when: not (free5gc_srsran | bool)
+  when: not (single_pod_srsran | bool)
 
 # ============================================================
 # Routing setup - free5gc+srsRAN: PSA-UPF routes on core node
