@@ -44,43 +44,6 @@
         msg: "srsRAN gNB is running successfully!"
       when: gnb_startup_success
 
-- name: Restart Open5GS AMF to clear stale gNB contexts
-  kubernetes.core.k8s:
-    api_version: apps/v1
-    kind: Deployment
-    namespace: "{{ core }}"
-    name: open5gs-amf
-    definition:
-      spec:
-        template:
-          metadata:
-            annotations:
-              kubectl.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
-  when: core == 'open5gs' and rru == 'rfsim'
-
-- name: Wait for AMF pod to be ready
-  ansible.builtin.command: >
-    {{ kubectl_bin }} wait --for=condition=Ready pod
-    -l nf=amf
-    -n {{ core }}
-    --timeout=60s
-  changed_when: false
-  when: core == 'open5gs' and rru == 'rfsim'
-
-- name: Wait for AMF to complete SCTP initialization
-  ansible.builtin.command: >
-    {{ kubectl_bin }} logs
-    -n {{ core }}
-    -l nf=amf
-    -c amf
-    --since=30s
-  register: amf_log
-  until: "'AMF initialize...done' in amf_log.stdout"
-  retries: 20
-  delay: 3
-  changed_when: false
-  when: core == 'open5gs' and rru == 'rfsim'
-
 - name: Deploy srsRAN gNB using Helm
   when: rru == 'rfsim'
   kubernetes.core.helm:
