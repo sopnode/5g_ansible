@@ -64,24 +64,28 @@
   when: gnu_log_wait.rc != 0
 
 
-- name: Start each UE in its own tmux window with 5s delay between each
+- name: "Start ue{{ item.index }} in tmux window"
   ansible.builtin.command: >
     {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
     /bin/sh -lc "
       tmux list-windows -t ran | grep -q 'ue{{ item.index }}' \
         && tmux kill-window -t ran:ue{{ item.index }} || true;
       tmux new-window -t ran -n ue{{ item.index }} \
-        'bash -lc \"/srsran/config/start_ue.sh {{ item.index }} 2>&1 | tee /var/log/ue{{ item.index }}.log\"';
-      for i in 5 4 3 2 1; do
-        echo \"Waiting \$i s before launching next UE (after ue{{ item.index }})\";
-        sleep 1;
-      done
+        'bash -lc \"/srsran/config/start_ue.sh {{ item.index }} 2>&1 | tee /var/log/ue{{ item.index }}.log\"'
     "
   loop: "{{ ue_list }}"
   loop_control:
     label: "ue{{ item.index }}"
   changed_when: true
   failed_when: false
+
+- name: "Sleep 20s after ue{{ item.index }}"
+  ansible.builtin.pause:
+    seconds: 20
+    prompt: "Sleeping 20s after ue{{ item.index }} before next UE..."
+  loop: "{{ ue_list[:-1] }}"
+  loop_control:
+    label: "ue{{ item.index }}"
 
 - name: Wait until each UE process is up
   ansible.builtin.command: >
