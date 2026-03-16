@@ -62,7 +62,7 @@
   ansible.builtin.command: >
     {{ kubectl_bin }} wait --for=condition=Ready pod
     -l app=open5gs-amf
-    -n {{ core_ns }}
+    -n {{ core }}
     --timeout=60s
   changed_when: false
   when: core == 'open5gs' and rru == 'rfsim'
@@ -70,7 +70,7 @@
 - name: Wait for AMF to complete SCTP initialization
   ansible.builtin.command: >
     {{ kubectl_bin }} logs
-    -n {{ core_ns }}
+    -n {{ core }}
     -l app=open5gs-amf
     -c amf
     --since=30s
