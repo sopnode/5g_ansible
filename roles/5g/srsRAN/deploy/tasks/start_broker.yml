@@ -63,27 +63,9 @@
     msg: "WARNING: GNU Radio broker did not start"
   when: gnu_log_wait.rc != 0
 
-
-- name: "Start ue{{ item.index }} in tmux window"
-  ansible.builtin.command: >
-    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
-    /bin/sh -lc "
-      tmux list-windows -t ran | grep -q 'ue{{ item.index }}' \
-        && tmux kill-window -t ran:ue{{ item.index }} || true;
-      tmux new-window -t ran -n ue{{ item.index }} \
-        'bash -lc \"/srsran/config/start_ue.sh {{ item.index }} 2>&1 | tee /var/log/ue{{ item.index }}.log\"'
-    "
+- name: Start UEs with pause between them
+  ansible.builtin.include_tasks: start_one_ue.yml
   loop: "{{ ue_list }}"
-  loop_control:
-    label: "ue{{ item.index }}"
-  changed_when: true
-  failed_when: false
-
-- name: "Sleep 20s after ue{{ item.index }}"
-  ansible.builtin.pause:
-    seconds: 20
-    prompt: "Sleeping 20s after ue{{ item.index }} before next UE..."
-  loop: "{{ ue_list[:-1] }}"
   loop_control:
     label: "ue{{ item.index }}"
 
