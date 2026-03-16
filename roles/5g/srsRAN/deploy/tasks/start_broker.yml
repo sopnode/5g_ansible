@@ -68,6 +68,9 @@
   loop: "{{ ue_list }}"
   loop_control:
     label: "ue{{ item.index }}"
+    extended: true
+  vars:
+    is_last_ue: "{{ ansible_loop.last }}"
 
 - name: Wait until each UE process is up
   ansible.builtin.command: >
