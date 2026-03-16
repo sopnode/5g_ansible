@@ -71,7 +71,7 @@
   ansible.builtin.command: >
     {{ kubectl_bin }} logs
     -n {{ core }}
-    -l app=open5gs-amf
+    -l nf=amf
     -c amf
     --since=30s
   register: amf_log
