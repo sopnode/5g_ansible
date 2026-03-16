@@ -48,7 +48,7 @@
   kubernetes.core.k8s:
     api_version: apps/v1
     kind: Deployment
-    namespace: "{{ core_ns }}"
+    namespace: "{{ core }}"
     name: open5gs-amf
     definition:
       spec:
