@@ -216,6 +216,32 @@
   failed_when: false
   ignore_errors: yes
 
+- name: Run iperf uplink
+  shell: >
+    kubectl exec -n {{ core_ns }} {{ item.pod }} --
+    iperf3 --bind-dev tun_srsue{{ (1 + idx | int) }} -c {{ target_server }} -p {{ (5201 + idx | int) }} -t {{ duration | int }}
+  loop: "{{ valid_ues }}"
+  loop_control:
+    index_var: idx
+    label: "Uplink: {{ item.pod }} {{ item.tun }} (Port: {{ 5201 + idx | int }})"
+  register: iperf_results
+  failed_when: false
+  ignore_errors: yes
+  when: core == 'open5gs'
+
+- name: Run iperf uplink
+  shell: >
+    kubectl exec -n {{ core_ns }} {{ item.pod }} --
+    iperf3 -B {{ item.ip }} -c {{ target_server }} -p {{ (5201 + idx | int) }} -t {{ duration | int }}
+  loop: "{{ valid_ues }}"
+  loop_control:
+    index_var: idx
+    label: "Uplink: {{ item.pod }} {{ item.tun }} (Port: {{ 5201 + idx | int }})"
+  register: iperf_results
+  failed_when: false
+  ignore_errors: yes
+  when: core != 'open5gs'
+
 # wait 1s to prevent Bad file descriptor error
 - pause:
     seconds: 1
@@ -258,9 +284,21 @@
 - name: Run iperf downlink
   shell: >
     kubectl exec -n {{ core_ns }} {{ item.pod }} --
+    iperf3 --bind-dev tun_srsue{{ (1 + idx | int) }} -c {{ target_server }} -p {{ (5201 + idx | int) }} -t {{ duration | int }} -R
+  loop: "{{ valid_ues }}"
+  loop_control:
+    index_var: idx
+    label: "Downlink: {{ item.pod }} {{ item.tun }} (Port: {{ 5201 + idx | int }})"
+  ignore_errors: yes
+  when: core == 'open5gs'
+
+- name: Run iperf downlink
+  shell: >
+    kubectl exec -n {{ core_ns }} {{ item.pod }} --
     iperf3 -B {{ item.ip }} -c {{ target_server }} -p {{ (5201 + idx | int) }} -t {{ duration | int }} -R
   loop: "{{ valid_ues }}"
   loop_control:
     index_var: idx
     label: "Downlink: {{ item.pod }} {{ item.tun }} (Port: {{ 5201 + idx | int }})"
   ignore_errors: yes
+  when: core != 'open5gs'
