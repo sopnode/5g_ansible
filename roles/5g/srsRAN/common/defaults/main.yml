@@ -23,6 +23,9 @@ srsran_network_map:
     n2:
       amf_ip: "{{ hostvars[groups['core_node'][0]].ip }}" # "10.100.50.249"
       amf_port: 31412
+      amf_direct_ip: "10.100.50.234"    # IP AMF sur n2 (OVS, stable) - when bridge_enabled
+      amf_direct_port: 38412            # port direct AMF - when bridge_enabled
+      gnb_bind_ip: "10.100.50.250"      # IP gNB sur n3 (OVS, stable) - when bridge_enabled
     n3:
       gnb_ip: "10.100.50.250" # "10.100.50.234"
       ue_ips:
