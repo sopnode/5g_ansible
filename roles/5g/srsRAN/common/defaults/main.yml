@@ -21,14 +21,17 @@ yq_url: "https://github.com/mikefarah/yq/releases/download/{{ yq_version }}/yq_l
 srsran_network_map:
   free5gc:
     n2:
-      amf_ip: "{{ hostvars[groups['core_node'][0]].ip }}"
+      amf_ip: "{{ hostvars[groups['core_node'][0]].ip }}" # "10.100.50.249"
       amf_port: 31412
+      amf_direct_ip: "10.100.50.234"    # IP AMF sur n2 (OVS, stable) - when bridge_enabled
+      amf_direct_port: 38412            # port direct AMF - when bridge_enabled
+      gnb_bind_ip: "10.100.50.250"      # IP gNB sur n3 (OVS, stable) - when bridge_enabled
     n3:
-      gnb_ip: "10.100.50.234"
+      gnb_ip: "10.100.50.250" # "10.100.50.234"
       ue_ips:
-        - "10.100.50.235"
-        - "10.100.50.236"
-        - "10.100.50.237"
+        - "10.100.50.251" # "10.100.50.235"
+        - "10.100.50.252" # "10.100.50.236"
+        - "10.100.50.253" # "10.100.50.237"
   open5gs:
     n2:
       amf_ip: "10.10.3.200"
