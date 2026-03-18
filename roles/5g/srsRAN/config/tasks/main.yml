@@ -87,50 +87,17 @@
 - name: Apply 5G profile to gNB and UE configs
   include_tasks: apply_5g_profile.yaml
 
-- name: Update AMF address, gNB N3 IP, namespace and n3networkName (free5gc, split nodes)
-  ansible.builtin.shell: >
-    {{ yq_bin_path }} eval -i '
-      .gnbConfig.cu_cp.amf.addr = "{{ srsran_network.n2.amf_direct_ip }}" |
-      .gnbConfig.cu_cp.amf.port = {{ srsran_network.n2.amf_direct_port }} |
-      .gnbConfig.cu_cp.amf.bind_addr = "{{ srsran_network.n2.gnb_ip }}" |
-      .gnbConfig.cu_up.ngu.socket = [{"bind_addr": "{{ srsran_network.n3.gnb_ip }}"}] |
-      .gnbIp = "{{ srsran_network.n3.gnb_ip }}" |
-      .n3networkName = "{{ n3networkName }}" |
-      .namespace = "{{ ran_ns }}"
-    ' "{{ values_file }}"
-  when:
-    - rru != 'rfsim'
-    - core == 'free5gc'
-    - core_node_name != ran_node_name
-
 - name: Update AMF address, gNB N3 IP, namespace and n3networkName
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
       .gnbConfig.cu_cp.amf.addr = "{{ srsran_network.n2.amf_ip }}" |
       .gnbConfig.cu_cp.amf.port = {{ srsran_network.n2.amf_port }} |
-      .gnbConfig.cu_cp.amf.bind_addr = "0.0.0.0" |
+      .gnbConfig.cu_cp.amf.bind_addr = "{{ "0.0.0.0" if core_node_name == ran_node_name else srsran_network.n3.gnb_ip }}" |
       .gnbConfig.cu_up.ngu.socket = [{"bind_addr": "{{ srsran_network.n3.gnb_ip }}"}] |
       .gnbIp = "{{ srsran_network.n3.gnb_ip }}" |
       .n3networkName = "{{ n3networkName }}" |
       .namespace = "{{ ran_ns }}"
     ' "{{ values_file }}"
-  when:
-    - not (rru == 'rfsim' and core == 'open5gs')
-    - not (core == 'free5gc' and core_node_name != ran_node_name)
-
-- name: Update AMF address, gNB N3 IP and n3networkName
-  ansible.builtin.shell: >
-    {{ yq_bin_path }} eval -i '
-      .gnbConfig.cu_cp.amf.addr = "{{ srsran_network.n2.amf_ip }}" |
-      .gnbConfig.cu_cp.amf.port = {{ srsran_network.n2.amf_port }} |
-      .gnbConfig.cu_cp.amf.bind_addr = "{{ srsran_network.n2.gnb_ip }}" |
-      .gnbConfig.cu_up.ngu.socket = [{"bind_addr": "{{ srsran_network.n3.gnb_ip }}"}] |
-      .gnbIp = "{{ srsran_network.n3.gnb_ip }}" |
-      .n3networkName = "{{ n3networkName }}" |
-      .namespace = "{{ ran_ns }}"
-    ' "{{ values_file }}"
-  when: rru == 'rfsim'
-
 
 - name: Fix device_args for rfsim GNU Radio single-channel multi-UE
   ansible.builtin.shell: >

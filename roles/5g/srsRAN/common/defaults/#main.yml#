@@ -33,7 +33,6 @@ srsran_network_map:
         {% else %}
         38412
         {% endif %}
-      gnb_ip: "10.100.50.250"           # IP gNB sur n3 - when bridge_enabled
     n3:
       gnb_ip: "10.100.50.250"
       ue_ips:
