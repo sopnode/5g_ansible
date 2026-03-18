@@ -21,18 +21,8 @@ yq_url: "https://github.com/mikefarah/yq/releases/download/{{ yq_version }}/yq_l
 srsran_network_map:
   free5gc:
     n2:
-      amf_ip: >-
-        {% if core_node_name == ran_node_name %}
-        {{ hostvars[groups['core_node'][0]].ip }}
-        {% else %}
-        10.100.50.234
-        {% endif %}
-      amf_port: >-
-        {% if core_node_name == ran_node_name %}
-        31412
-        {% else %}
-        38412
-        {% endif %}
+      amf_ip: "{% if core_node_name == ran_node_name %}{{ hostvars[groups['core_node'][0]].ip }}{% else %}10.100.50.234{% endif %}"
+      amf_port: "{% if core_node_name == ran_node_name %}31412{% else %}38412{% endif %}"
     n3:
       gnb_ip: "10.100.50.250"
       ue_ips:

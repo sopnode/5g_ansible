@@ -87,6 +87,12 @@
 - name: Apply 5G profile to gNB and UE configs
   include_tasks: apply_5g_profile.yaml
 
+- name: Debug amf ip/port
+  debug:
+    msg:
+      - "amf_ip={{ srsran_network.n2.amf_ip | quote }}"
+      - "amf_port={{ srsran_network.n2.amf_port | quote }}"
+
 - name: Update AMF address, gNB N3 IP, namespace and n3networkName
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
