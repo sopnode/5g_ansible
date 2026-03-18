@@ -23,11 +23,16 @@ srsran_network_map:
     n2:
       amf_ip: >-
         {% if core_node_name == ran_node_name %}
-        {{ hostvars[groups['core_node'][0]].ip }} # as ipvlan multus is used, this allows to avoid create n2 multus interfcae in the gnb pod
+        {{ hostvars[groups['core_node'][0]].ip }}
         {% else %}
         10.100.50.234
         {% endif %}
-      amf_port: 38412 # 31412
+      amf_port: >-
+        {% if core_node_name == ran_node_name %}
+        31412
+        {% else %}
+        38412
+        {% endif %}
       gnb_ip: "10.100.50.250"           # IP gNB sur n3 - when bridge_enabled
       amf_direct_ip: "10.100.50.234"    # IP AMF sur n2 (OVS, stable) - when bridge_enabled
       amf_direct_port: 38412            # port direct AMF - when bridge_enabled
