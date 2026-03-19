@@ -126,6 +126,14 @@
   vars:
     profile: "{{ fiveg }}"
 
+- name: Add iupf1 n3 route for gNB subnet (same-node only)
+  ansible.builtin.shell: >
+    {{ yq_bin_path }} eval -i '
+      .iupf1.configmap.wrapperAdditionalCommands = ["ip route add 10.100.50.248/29 dev n3 2>/dev/null || true"]
+    ' "{{ free5gc_repo_dest }}/charts/free5gc/values.yaml"
+  when:
+    - core_node_name == ran_node_name
+
 - name: Generate add_subscribers.py for free5gc
   ansible.builtin.template:
     src: add_subscribers.py.j2
