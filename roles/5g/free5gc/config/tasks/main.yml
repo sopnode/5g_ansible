@@ -133,6 +133,14 @@
     replace: '\1\n    ip route add 10.100.50.248/29 dev n3 2>/dev/null || true'
   when: core_node_name == ran_node_name
 
+- name: Enable CoreDNS cache for cluster.local
+  ansible.builtin.shell: |
+    kubectl patch cm coredns -n kube-system --type merge -p \
+      '{"data":{"Corefile":".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    prometheus :9153\n    forward . /etc/resolv.conf {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}\n"}}'
+    kubectl rollout restart deployment/coredns -n kube-system
+    kubectl rollout status deployment/coredns -n kube-system
+  when: core == 'free5gc'
+
 - name: Generate add_subscribers.py for free5gc
   ansible.builtin.template:
     src: add_subscribers.py.j2
