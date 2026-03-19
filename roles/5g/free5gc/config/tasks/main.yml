@@ -111,6 +111,13 @@
   loop_control:
     loop_var: ue
 
+- name: Remove n2 default gateway when core and RAN are on the same node
+  ansible.builtin.shell: >
+    {{ yq_bin_path }} eval -i '
+      .global.n2network.gatewayIP = ""
+    ' "{{ free5gc_repo_dest }}/charts/free5gc/values.yaml"
+  when: core_node_name == ran_node_name
+
 - name: Generate free5gc Helm values override
   ansible.builtin.template:
     src: free5gc-values-override.yaml.j2
