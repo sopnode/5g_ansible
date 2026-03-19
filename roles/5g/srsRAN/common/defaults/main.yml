@@ -35,6 +35,7 @@ srsran_network_map:
       amf_ip: "10.10.3.200"
       gnb_ip: "10.10.3.234"
       amf_port: 38412
+      gnb_bind_ip: "0.0.0.0"
     n3:
       amf_ip: "10.10.3.200"
       gnb_ip: "10.10.3.234"
