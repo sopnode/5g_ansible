@@ -49,6 +49,12 @@ security:
   opc: "C42449363BBAD02B66D16BC975D77CC1"
 
 ues:
+  phone01:
+    imsi_suffix: "0000000001"
+    slice: slice1
+  phone02:
+    imsi_suffix: "0000000002"
+    slice: slice1
   qhat01:
     imsi_suffix: "0000000006"
     slice: slice1
@@ -77,12 +83,12 @@ ues:
     imsi_suffix: "0000000014"
     slice: slice1
   UE18:
-    imsi_suffix: "0000001121"  # used for OAI RFSIM UE
+    imsi_suffix: "0000001121"  # used for RFSIM UE1
     slice: slice1
   UE19:
-    imsi_suffix: "0000001122"  # used for OAI RFSIM UE2
+    imsi_suffix: "0000001122"  # used for RFSIM UE2
     slice: slice2
   UE20:
-    imsi_suffix: "0000001123"  # used for OAI RFSIM UE3
+    imsi_suffix: "0000001123"  # used for RFSIM UE3
     slice: slice1
 
