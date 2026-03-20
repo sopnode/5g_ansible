@@ -57,7 +57,6 @@
   gather_facts: false
   vars:
     target_server_ip: "{{ hostvars[target_server_host]['ip'] }}"
-    target_server_host: "{{ target_server_host }}"
     nb_ues: "{{ 3 if rru == 'rfsim' else groups['qhats'] | length }}"
     ignore_task_errors: yes
   tasks:
@@ -72,7 +71,6 @@
     ignore_task_errors: yes
     nb_ues: "{{ groups['qhats'] | length }}"
     target_server_ip: "{{ hostvars[target_server_host]['ip'] }}"
-    target_server_host: "{{ target_server_host }}"
   roles:
     - role: scenarios/iperf/ue-to-target_server
       when: rru != "rfsim"
