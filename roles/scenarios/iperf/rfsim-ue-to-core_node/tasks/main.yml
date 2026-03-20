@@ -3,7 +3,8 @@
   set_fact:
     duration: "{{ iperf_duration | default(30) }}"
     sleep: "{{ iperf_sleep | default(5) }}"
-    target_server: "{{ hostvars[groups['core_node'][0]].ip }}"
+    # Use target_server_ip if provided, else core_node IP
+    target_server: "{{ target_server_ip | default(hostvars[groups['core_node'][0]].ip) }}"
     core_ns: "{{ core }}"
     valid_ues: []
     free5gc_srsran: "{{ core == 'free5gc' and ran == 'srsRAN' }}"
@@ -17,6 +18,16 @@
       {{ 'tun_srsue1' if ran == 'srsRAN'
          else 'oaitun_ue1' if ran == 'oai'
          else 'uesimtun0' }}
+
+- name: Display RFSIM iperf configuration
+  debug:
+    msg: |
+      ✓ RFSIM UE-to-Server Configuration:
+        Target Server IP: {{ target_server }}
+        Core Namespace: {{ core_ns }}
+        RAN: {{ ran }}
+        Duration: {{ duration }}s
+        Sleep: {{ sleep }}s
 
 # ============================================================
 # Get UE pods
@@ -270,7 +281,7 @@
 
 - name: Restart iperf3 servers between uplink and downlink (srsRAN only)
   shell: >
-    /usr/bin/iperf3 -s -B {{ core_ip }} -p {{ 5201 + item }} -D
+    /usr/bin/iperf3 -s -B {{ target_server }} -p {{ 5201 + item }} -D
     --logfile /root/IPERF/iperf_R_{{ 5201 + item }}_{{ iperf_R_timestamp.stdout }}.log
   loop: "{{ range(0, valid_ues | length) | list }}"
   loop_control:
