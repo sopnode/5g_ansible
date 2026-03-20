@@ -63,8 +63,8 @@
     ue_data: "{{ item.value }}"
     slice_data: "{{ fiveg.slices | selectattr('name', 'equalto', item.value.slice) | first }}"
     curr_sd: "{{ lookup('template', 'slice_sd.j2', template_vars={'sl_item': slice_data}) | trim }}"
-    ue_num: "{{ '1' if item.key == 'ue01' else '2' if item.key == 'ue02' else '3' }}"
-  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['ue01', 'ue02', 'ue03']) | list }}"
+    ue_num: "{{ '1' if item.key == 'uesim01' else '2' if item.key == 'uesim02' else '3' }}"
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['uesim01', 'uesim02', 'uesim03']) | list }}"
 
 - name: Set replicas to 0 for all UE deployments
   ansible.builtin.shell: >

@@ -26,7 +26,7 @@
 
 - name: Sequential UE deployment
   include_tasks: sequential_ue_deploy_open5gs.yml
-  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['ue01', 'ue02', 'ue03']) | list }}"
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['uesim01', 'uesim02', 'uesim03']) | list }}"
   loop_control:
     loop_var: ue_item
     index_var: ue_idx

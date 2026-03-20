@@ -141,22 +141,22 @@
     ue_list_full:
       - name: ue1
         index: 1
-        imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.ue01.imsi_suffix }}"
-        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.ue01.slice) | map(attribute='dnn') | first }}"
+        imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.uesim01.imsi_suffix }}"
+        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.uesim01.slice) | map(attribute='dnn') | first }}"
         tx_port: 2101
         rx_port: 2100
         ue_ip: "{{ srsran_network.n3.ue_ips[0] }}"
       - name: ue2
         index: 2
-        imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.ue02.imsi_suffix }}"
-        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.ue02.slice) | map(attribute='dnn') | first }}"
+        imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.uesim02.imsi_suffix }}"
+        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.uesim02.slice) | map(attribute='dnn') | first }}"
         tx_port: 2201
         rx_port: 2200
         ue_ip: "{{ srsran_network.n3.ue_ips[0] }}"
       - name: ue3
         index: 3
-        imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.ue03.imsi_suffix }}"
-        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.ue03.slice) | map(attribute='dnn') | first }}"
+        imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ fiveg.ues.uesim03.imsi_suffix }}"
+        dnn: "{{ fiveg.slices | selectattr('name','equalto',fiveg.ues.uesim03.slice) | map(attribute='dnn') | first }}"
         tx_port: 2301
         rx_port: 2300
         ue_ip: "{{ srsran_network.n3.ue_ips[0] }}"
