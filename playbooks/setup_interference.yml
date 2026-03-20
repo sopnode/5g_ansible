@@ -52,6 +52,6 @@
         current_ue: "{{ groups['qhats'][0] }}"
         fiveg_profile: default
         ignore_task_errors: true
-        target_server: "{{ hostvars[groups['core_node'][0]] }}"
+        target_server: "{{ core_node }}"
         target_server: "{{ hostvars[groups['core_node'][0]].ip }}"
 

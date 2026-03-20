@@ -15,7 +15,8 @@
   tasks:
     - name: Determine target server host
       set_fact:
-        target_server_host: "{{ target_server_host | default(groups['core_node'][0]) }}"
+        target_server_host: "{{ target_server_host | default('core_node', true) }}"
+        cacheable: yes
       run_once: true
 
     - name: Get target server IP
