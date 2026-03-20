@@ -51,7 +51,7 @@
   roles:
     - role: scenarios/iperf_server
 
-- name: Run RFSIM and UE iperf tests
+- name: Run RFSIM UE iperf tests (only if rru=rfsim)
   hosts: core_node
   become: true
   gather_facts: false
@@ -60,8 +60,8 @@
     target_server_host: "{{ target_server_host }}"
     nb_ues: "{{ 3 if rru == 'rfsim' else groups['qhats'] | length }}"
     ignore_task_errors: yes
-  block:
-    - name: Run RFSIM UE iperf tests (only if rru=rfsim)
+  tasks:
+    - name: Run RFSIM role
       include_role:
         name: scenarios/iperf/rfsim-ue-to-core_node
       when: rru == "rfsim"
