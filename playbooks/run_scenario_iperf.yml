@@ -52,8 +52,8 @@
     - role: scenarios/iperf_server
 
 - name: Run RFSIM UE iperf tests (only if rru=rfsim)
-  hosts: core_node
-  become: true
+  hosts: "{{ groups['core_node'][0] if rru == 'rfsim' else 'localhost' }}"
+  become: "{{ true if rru == 'rfsim' else false }}"
   gather_facts: false
   vars:
     target_server_ip: "{{ hostvars[target_server_host].ip }}"
@@ -62,7 +62,6 @@
     ignore_task_errors: yes
   roles:
     - role: scenarios/iperf/rfsim-ue-to-target_server
-    when: rru == "rfsim"
 
 - name: Optionally run UE to target_server iperf tests from Faraday
   hosts: faraday
