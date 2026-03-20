@@ -239,7 +239,7 @@
   debug:
     msg: >
       kubectl exec -n {{ core_ns }} {{ item.pod }} --
-      iperf3 --bind-dev {{ item.tun }}
+      iperf3 -B {{ item.ip }}
       -c {{ target_server }}
       -p {{ 5201 + idx }}
       -t {{ duration | int }}
@@ -251,7 +251,7 @@
 - name: Run iperf uplink
   shell: >
     kubectl exec -n {{ core_ns }} {{ item.pod }} --
-    iperf3 --bind-dev {{ item.tun }}
+    iperf3 -B {{ item.ip }}
     -c {{ target_server }}
     -p {{ 5201 + idx }}
     -t {{ duration | int }}
@@ -278,7 +278,6 @@
   register: iperf_R_timestamp
   changed_when: false
 
-
 - name: Restart iperf3 servers between uplink and downlink (srsRAN only)
   shell: >
     /usr/bin/iperf3 -s -B {{ target_server }} -p {{ 5201 + item }} -D
@@ -302,7 +301,7 @@
   debug:
     msg: >
       kubectl exec -n {{ core_ns }} {{ item.pod }} --
-      iperf3 --bind-dev {{ item.tun }}
+      iperf3 -B {{ item.ip }}
       -c {{ target_server }}
       -p {{ 5201 + idx }}
       -t {{ duration | int }} -R
@@ -314,7 +313,7 @@
 - name: Run iperf downlink
   shell: >
     kubectl exec -n {{ core_ns }} {{ item.pod }} --
-    iperf3 --bind-dev {{ item.tun }}
+    iperf3 -B {{ item.ip }}
     -c {{ target_server }}
     -p {{ 5201 + idx }}
     -t {{ duration | int }} -R
