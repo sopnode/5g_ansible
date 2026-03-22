@@ -1,0 +1,22 @@
+---
+# vars/main.yml - derived, not overridable by group_vars
+
+# free5gc network config for ueransim (matches free5gc NADs)
+ueransim_free5gc_network:
+  n2:
+    subnet_ip: "10.100.50.248"
+    cidr: 29
+    gateway: "10.100.50.254"
+    gnb_ip: "10.100.50.250"
+    amf_ip: "free5gc-free5gc-amf-amf-n2"  # NGAP NodePort service DNS name
+    amf_ngap_port: 38412
+  n3:
+    subnet_ip: "10.100.50.232"
+    cidr: 29
+    gateway: "10.100.50.238"
+    gnb_ip: "10.100.50.236"
+
+# open5gs network config for ueransim (OVS n3br)
+ueransim_open5gs_network:
+  gnb_ip: "10.10.3.231"
+  amf_ip: "10.10.3.200"

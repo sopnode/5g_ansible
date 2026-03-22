@@ -97,11 +97,6 @@
     - role: setup/k8s/k8s_setup
     - role: setup/k8s/k8s_env
     - role: setup/optimization/cpu
-
-# not for monitor_node
-- name: Common sopnodes setup
-  hosts: core_node,ran_node,monitor_node
-  roles:
     - role: setup/ovs
       when: not fhi72
 
@@ -162,7 +157,7 @@
   roles:
     - role: setup/cni
     - role: setup/storage
-      when: core == 'open5gs'
+      when: core == 'open5gs' or core == 'free5gc'
 
 - name: Apply specific tuning on RAN Node
   hosts: ran_node
@@ -247,6 +242,19 @@
     - role: setup/gre_tunnel
       when: bridge_enabled
 
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
+
 - name: Deploy Open5GS CN
   hosts: core_node
   pre_tasks:
@@ -258,6 +266,20 @@
       when: core == 'open5gs'
     - role: 5g/open5gs/deploy
       when: core == 'open5gs'
+
+- name: Deploy Free5gc
+  hosts: core_node
+  pre_tasks:
+    - name: Load 5G profile
+      include_vars:
+        file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+  roles:
+    - role: 5g/free5gc/node
+      when: core == 'free5gc'
+    - role: 5g/free5gc/config
+      when: core == 'free5gc'
+    - role: 5g/free5gc/deploy
+      when: core == 'free5gc'
 
 - name: Deploy OAI CN/RAN
   hosts: ran_node
@@ -278,7 +300,7 @@
 - name: Deploy srsRAN
   hosts: ran_node
   vars:
-    ue_count: 4
+    ue_count: 3
   pre_tasks:
     - name: Load 5G profile
       include_vars:
@@ -290,17 +312,17 @@
       when: ran == 'srsRAN'
 
 - name: Deploy ueransim
-  hosts: core_node # ueransim included on open5gs_k8s on core_node
+  hosts: core_node # use ueransim repo included within open5gs_k8s|free5gc-helm already on core_node
   pre_tasks:
     - name: Load 5G profile
       include_vars:
         file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+        name: fiveg
   roles:
     - role: 5g/ueransim/config
       when: ran == 'ueransim'
     - role: 5g/ueransim/deploy
       when: ran == 'ueransim'
-
 
 - name: Remove NoSchedule taint on Monitor node
   hosts: core_node

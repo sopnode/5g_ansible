@@ -1,0 +1,345 @@
+---
+- name: Load common variables
+  include_vars:
+    file: "../config/defaults/main.yml"
+
+- name: Ensure free5gc namespace exists
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ core_ns }}"
+    state: present
+
+- name: Check if yq is already installed
+  ansible.builtin.stat:
+    path: "{{ yq_bin_path }}"
+  register: yq_bin
+
+- name: Download yq binary using curl or wget
+  ansible.builtin.shell: |
+    set -e
+    if command -v curl >/dev/null 2>&1; then
+      curl -L --fail "{{ yq_url }}" -o "{{ yq_bin_path }}"
+    elif command -v wget >/dev/null 2>&1; then
+      wget -O "{{ yq_bin_path }}" "{{ yq_url }}"
+    else
+      echo "Neither curl nor wget found" >&2
+      exit 1
+    fi
+  args:
+    creates: "{{ yq_bin_path }}"
+  when: not yq_bin.stat.exists
+  become: true
+
+- name: Ensure yq is executable
+  ansible.builtin.file:
+    path: "{{ yq_bin_path }}"
+    mode: '0755'
+    state: file
+  become: true
+
+# ============================================================
+# Step 1: Clean up any existing Helm release (including stuck)
+# ============================================================
+
+- name: Check if free5gc Helm release exists (including pending/failed states)
+  shell: helm list -n "{{ core_ns }}" -a -q | grep -w "^free5gc$" | wc -l
+  register: helm_release_exists
+  changed_when: false
+  failed_when: false
+
+- name: Uninstall existing free5gc Helm release (handles pending-install/upgrade/failed)
+  shell: helm uninstall free5gc -n "{{ core_ns }}" --no-hooks --timeout 120s
+  when: helm_release_exists.stdout | trim | int > 0
+  failed_when: false
+  register: helm_uninstall_result
+
+- name: Debug Helm uninstall result
+  debug:
+    msg: "{{ helm_uninstall_result.stderr | default('no output') }}"
+  when:
+    - helm_release_exists.stdout | trim | int > 0
+    - helm_uninstall_result is defined
+
+- name: Wait for Helm release to be fully removed
+  shell: helm list -n "{{ core_ns }}" -a -q | grep -w "^free5gc$" | wc -l
+  register: helm_gone
+  until: helm_gone.stdout | trim | int == 0
+  retries: 24
+  delay: 5
+  changed_when: false
+  failed_when: false
+  when: helm_release_exists.stdout | trim | int > 0
+
+- name: Wait after Helm uninstall before cleaning resources
+  pause:
+    seconds: 10
+  when: helm_release_exists.stdout | trim | int > 0
+
+# ============================================================
+# Step 2: Clean up static cert-pv
+# ============================================================
+
+- name: Delete static cert-pv if exists
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: PersistentVolume
+    name: cert-pv
+  failed_when: false
+
+- name: Wait for cert-pv to be fully deleted
+  shell: kubectl get pv cert-pv --no-headers 2>/dev/null | wc -l
+  register: pv_static_check
+  until: pv_static_check.stdout | trim | int == 0
+  retries: 20
+  delay: 5
+  changed_when: false
+  failed_when: false
+
+# ============================================================
+# Step 3: Clean up cert-pvc and any dynamically bound PV
+# ============================================================
+
+- name: Check if cert-pvc exists
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: PersistentVolumeClaim
+    name: cert-pvc
+    namespace: "{{ core_ns }}"
+  register: cert_pvc_info
+  failed_when: false
+
+- name: Patch cert-pvc finalizers to unblock deletion
+  shell: >
+    kubectl patch pvc cert-pvc -n "{{ core_ns }}"
+    -p '{"metadata":{"finalizers":null}}' --type=merge
+  when: cert_pvc_info.resources | length > 0
+  failed_when: false
+
+- name: Delete cert-pvc
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: PersistentVolumeClaim
+    name: cert-pvc
+    namespace: "{{ core_ns }}"
+  when: cert_pvc_info.resources | length > 0
+  failed_when: false
+
+- name: Wait for cert-pvc to be fully deleted
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: PersistentVolumeClaim
+    name: cert-pvc
+    namespace: "{{ core_ns }}"
+  register: pvc_check
+  until: pvc_check.resources | length == 0
+  retries: 30
+  delay: 5
+  failed_when: false
+
+- name: Find any remaining PV bound to cert-pvc
+  shell: kubectl get pv --no-headers | grep "{{ core_ns }}/cert-pvc" | awk '{print $1}'
+  register: cert_pv_dynamic
+  changed_when: false
+  failed_when: false
+
+- name: Patch dynamic PV finalizers to unblock deletion
+  shell: >
+    kubectl patch pv {{ cert_pv_dynamic.stdout | trim }}
+    -p '{"metadata":{"finalizers":null}}' --type=merge
+  when: cert_pv_dynamic.stdout | trim | length > 0
+  failed_when: false
+
+- name: Force delete dynamic PV bound to cert-pvc
+  shell: kubectl delete pv {{ cert_pv_dynamic.stdout | trim }} --force --grace-period=0
+  when: cert_pv_dynamic.stdout | trim | length > 0
+  failed_when: false
+
+- name: Wait for dynamic PV to be fully deleted
+  shell: kubectl get pv --no-headers | grep "{{ core_ns }}/cert-pvc" | wc -l
+  register: pv_dynamic_check
+  until: pv_dynamic_check.stdout | trim | int == 0
+  retries: 30
+  delay: 5
+  changed_when: false
+  failed_when: false
+  when: cert_pv_dynamic.stdout | trim | length > 0
+
+# ============================================================
+# Step 4: Create static PV for cert-pvc
+# ============================================================
+
+- name: Ensure cert hostpath directory exists on core node
+  delegate_to: "{{ core_node_name }}"
+  file:
+    path: /var/lib/free5gc/cert
+    state: directory
+    mode: '0755'
+
+- name: Create static PV for cert-pvc
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata:
+        name: cert-pv
+        labels:
+          project: free5gc
+      spec:
+        capacity:
+          storage: 1Mi
+        accessModes:
+          - ReadOnlyMany
+        persistentVolumeReclaimPolicy: Delete
+        storageClassName: openebs-hostpath
+        hostPath:
+          path: /var/lib/free5gc/cert
+          type: DirectoryOrCreate
+        nodeAffinity:
+          required:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - "{{ core_node_name }}"
+
+- name: Wait for cert-pv to be Available
+  shell: kubectl get pv cert-pv --no-headers | awk '{print $5}'
+  register: pv_status
+  until: pv_status.stdout | trim == "Available"
+  retries: 20
+  delay: 5
+  changed_when: false
+
+
+# ============================================================
+# Step 4b: Clean up orphan resources not managed by Helm
+# ============================================================
+
+- name: Remove orphan NGAP service if not owned by Helm
+  shell: |
+    if kubectl get svc free5gc-free5gc-amf-amf-n2 -n {{ core_ns }}        -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}' 2>/dev/null | grep -q "Helm"; then
+      echo "owned by Helm, skipping"
+    else
+      kubectl delete svc free5gc-free5gc-amf-amf-n2 -n {{ core_ns }} --ignore-not-found
+      echo "deleted orphan service"
+    fi
+  register: cleanup_ngap_svc
+  changed_when: "'deleted' in cleanup_ngap_svc.stdout"
+
+
+# ============================================================
+# Step 5: Deploy Free5GC via Helm
+# ============================================================
+
+- name: Deploy free5gc using Helm
+  kubernetes.core.helm:
+    name: free5gc
+    chart_ref: "{{ [free5gc_repo_dest, 'charts', 'free5gc'] | path_join }}"
+    release_namespace: "{{ core_ns }}"
+    state: present
+    wait: true
+    atomic: true
+    timeout: 1200s
+    values_files:
+      - "{{ free5gc_repo_dest }}/values-profile-override.yaml"
+    values:
+      nodeSelector:
+        kubernetes.io/hostname: "{{ core_node_name }}"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - "{{ core_node_name }}"
+      upf:
+        privileged: true
+        capabilities:
+          add:
+            - NET_ADMIN
+            - SYS_MODULE
+
+
+# ============================================================
+# Step 6: Provision MongoDB subscribers from 5G profile
+# ============================================================
+
+- name: Wait for dbpython pod to be Running
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ core_ns }}"
+    label_selectors:
+      - app.kubernetes.io/name=free5gc-dbpython
+  register: dbpython_pod
+  until:
+    - dbpython_pod.resources | length > 0
+    - dbpython_pod.resources[0].status.phase == "Running"
+    - dbpython_pod.resources[0].status.containerStatuses |
+      selectattr('ready', 'equalto', true) | list | length ==
+      dbpython_pod.resources[0].status.containerStatuses | length
+  retries: 30
+  delay: 10
+
+- name: Wait for MongoDB to be ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ core_ns }}"
+    label_selectors:
+      - app.kubernetes.io/name=mongodb
+  register: mongodb_pod
+  until:
+    - mongodb_pod.resources | length > 0
+    - mongodb_pod.resources[0].status.phase == "Running"
+    - mongodb_pod.resources[0].status.containerStatuses |
+      selectattr('ready', 'equalto', true) | list | length ==
+      mongodb_pod.resources[0].status.containerStatuses | length
+  retries: 30
+  delay: 10
+
+- name: Find add_subscribers.py path in dbpython pod
+  shell: |
+    kubectl exec -n {{ core_ns }} deployment/free5gc-free5gc-dbpython-dbpython -- \
+      find / -name "add_subscribers.py" 2>/dev/null | head -1
+  register: subscribers_script_path
+  changed_when: false
+
+- name: Copy generated add_subscribers.py into dbpython pod
+  shell: |
+    kubectl cp {{ free5gc_repo_dest }}/docker/free5gc/free5gc-dbpython/add_subscribers.py \
+      {{ core_ns }}/$(kubectl get pod -n {{ core_ns }} -l app.kubernetes.io/name=free5gc-dbpython \
+      -o jsonpath='{.items[0].metadata.name}'):/free5gc/add_subscribers.py
+  changed_when: true
+
+- name: Clean existing MongoDB subscribers
+  shell: |
+    kubectl exec -n {{ core_ns }} deployment/free5gc-free5gc-dbpython-dbpython -- \
+      python3 {{ subscribers_script_path.stdout | trim }} -a clean
+  changed_when: true
+
+- name: Add subscribers from 5G profile to MongoDB
+  shell: |
+    kubectl exec -n {{ core_ns }} deployment/free5gc-free5gc-dbpython-dbpython -- \
+      python3 {{ subscribers_script_path.stdout | trim }} -a add
+  register: add_subscribers_result
+  changed_when: true
+
+- name: Show add_subscribers output
+  debug:
+    msg: "{{ add_subscribers_result.stdout_lines }}"
+
+# ============================================================
+# Step 7: Verify deployment matches the 5G profile
+# ============================================================
+
+- name: Run free5gc profile verification
+  ansible.builtin.include_role:
+    name: 5g/free5gc/verify

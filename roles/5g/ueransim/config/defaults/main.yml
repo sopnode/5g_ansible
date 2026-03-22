@@ -1,0 +1,8 @@
+---
+# defaults/main.yml - low priority, can be overridden by group_vars
+
+# open5gs
+ueransim_root: "/root/open5gs-k8s/ueransim"
+
+# free5gc
+ueransim_chart_path: "/root/free5gc-helm/charts/ueransim"

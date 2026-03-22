@@ -1,0 +1,32 @@
+---
+- name: "Deploy ueransim-{{ ue_item.key | lower }} via Helm"
+  kubernetes.core.helm:
+    name: "ueransim-{{ ue_item.key | lower }}"
+    chart_ref: "{{ ueransim_chart_path }}"
+    release_namespace: "{{ ran_ns | default('free5gc') }}"
+    state: present
+    wait: true
+    timeout: 120s
+    values_files:
+      - "{{ ueransim_chart_path }}/overrides/values-{{ ue_item.key | lower }}-override.yaml"
+
+- name: "Wait for {{ ue_item.key }} pod to be Ready"
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ ran_ns | default('free5gc') }}"
+    label_selectors:
+      - "app.kubernetes.io/instance=ueransim-{{ ue_item.key | lower }}"
+  register: ue_pod
+  until:
+    - ue_pod.resources | length > 0
+    - ue_pod.resources[0].status.phase == 'Running'
+    - ue_pod.resources[0].status.containerStatuses |
+      selectattr('ready', 'equalto', true) | list | length ==
+      ue_pod.resources[0].status.containerStatuses | length
+  retries: 12
+  delay: 10
+
+- name: "Delay before next UE"
+  ansible.builtin.pause:
+    seconds: 5

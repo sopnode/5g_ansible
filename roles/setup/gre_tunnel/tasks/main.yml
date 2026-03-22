@@ -1,5 +1,5 @@
 ---
-- name: Define GRE bridges configuration
+- name: Define GRE bridges configuration for non-free5gc core
   ansible.builtin.set_fact:
     gre_bridges:
       - name: n3br
@@ -8,6 +8,18 @@
       - name: n4br
         local_ip_core: 192.168.4.254/24
         local_ip_ran:  192.168.4.253/24
+  when: core != 'free5gc'
+
+- name: Define GRE bridges configuration for free5gc core
+  ansible.builtin.set_fact:
+    gre_bridges:
+      - name: n3br
+        local_ip_core: 10.100.50.238/29
+        local_ip_ran:  10.100.50.237/29
+      - name: n4br
+        local_ip_core: 192.168.4.254/24
+        local_ip_ran:  192.168.4.253/24
+  when: core == 'free5gc'
 
 - name: Configure GRE tunnels for N3 and N4
   ansible.builtin.include_tasks: gre_loop.yml

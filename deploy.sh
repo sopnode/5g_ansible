@@ -152,13 +152,15 @@ echo ""
 echo "Which CORE do you want to deploy? (default: ${DEFAULT_CORE})"
 echo "1) OAI"
 echo "2) Open5Gs"
-read -rp "Enter choice [1-2]: " core_choice
+echo "3) Free5gc"
+read -rp "Enter choice [1-3]: " core_choice
 if [[ -z "$core_choice" ]]; then
   core=${DEFAULT_CORE}
 else
   case "${core_choice}" in
     1) core="oai" ;;
     2) core="open5gs" ;;
+    3) core="free5gc" ;;
     *) echo "❌ Invalid choice"; exit 1 ;;
   esac
 fi
@@ -217,7 +219,8 @@ echo "Select the node to deploy RAN ($ran) on (default: ${DEFAULT_RAN_NODE}):"
 echo "1) sopnode-f1"
 echo "2) sopnode-f2"
 echo "3) sopnode-f3"
-read -rp "Enter choice [1-3]: " ran_node_choice
+echo "4) sopnode-w3"
+read -rp "Enter choice [1-4]: " ran_node_choice
 if [[ -z "${ran_node_choice}" ]]; then
   ran_node=${DEFAULT_RAN_NODE}
 else
@@ -225,6 +228,7 @@ else
     1) ran_node="sopnode-f1" ;;
     2) ran_node="sopnode-f2" ;;
     3) ran_node="sopnode-f3" ;;
+    4) ran_node="sopnode-w3" ;;
     *) echo "❌ Invalid RAN node"; exit 1 ;;
   esac
 fi
@@ -861,7 +865,6 @@ reserve_nodes() {
   reservation_output=$(pos calendar create -d "${duration_minutes}" -s "now" "${nodes_to_reserve[@]}" 2>&1)
   reservation_exit_code=$?
 
-  echo "DEBUG:: just after pos calendar create, before if"
   if [[ $reservation_exit_code -ne 0 || "$reservation_output" == "-1" || -z "${reservation_output}" ]]; then
     # If it fails, try with 60 minutes
     echo "❌ Reservation for ${duration_minutes} minutes failed. Trying to reserve for 60 minutes..."
@@ -897,49 +900,56 @@ reserve_nodes() {
 
 
 reserve_r2lab() {
-[[ "$NO_RESERVATION" == true ]] && return
+    [[ "$NO_RESERVATION" == true ]] && return
 
-## ========== Reserve R2Lab if needed ==========
-# If R2Lab platform is selected, reserve the testbed with the command:
-# rhubarbe book <start(HH:MM)> <end(HH:MM)> -e <email> -p <password> -s <slice name> -v
-# Reserve only if slices were reserved successfully and use the same duration.
-if [[ "$platform" == "r2lab" && "$slices_reserved" == true ]]; then
-  echo "Reserving R2Lab testbed..."
-  start_time=$(date +"%Y-%m-%dT%H:%M")
-  end_time=$(date -d "+$duration_minutes minutes" +"%Y-%m-%dT%H:%M")
-  rhubarbe_output=$(ssh "${R2LAB_USERNAME}"@faraday.inria.fr "rhubarbe book '${start_time}' '${end_time}' -e '${R2LAB_EMAIL}' -p '${R2LAB_PASSWORD}' -s '${R2LAB_USERNAME}' -v; echo EXIT_CODE:\$?" 2>&1)
+    ## ========== Reserve R2Lab if needed ==========
+    # If R2Lab platform is selected, reserve the testbed with the command:
+    # rhubarbe book <start(HH:MM)> <end(HH:MM)> -e <email> -p <password> -s <slice name> -v
+    # Reserve only if slices were reserved successfully and use the same duration.
+    if [[ "$platform" == "r2lab" && "$slices_reserved" == true ]]; then
+	echo "Reserving R2Lab testbed..."
+	# Round current time down to nearest 10 minutes
+	S=$(date +'%H%M')
+	START="${S:0:2}:${S:2:1}0"
+	# Start time in ISO format
+	start_time=$(date +"%Y-%m-%dT$START")
+	# Convert start_time to epoch timestamp (portable code)
+	start_epoch=$(date -j -f "%Y-%m-%dT%H:%M" "$start_time" "+%s" 2>/dev/null || date -d "$start_time" "+%s")
+	# Calculate end epoch by adding duration in minutes
+	end_epoch=$((start_epoch + duration_minutes * 60))
+	# Convert end epoch back to ISO format (portable)
+	end_time=$(date -r "$end_epoch" "+%Y-%m-%dT%H:%M" 2>/dev/null || date -d "@$end_epoch" "+%Y-%m-%dT%H:%M")
+	rhubarbe_output=$(ssh "${R2LAB_USERNAME}"@faraday.inria.fr "rhubarbe book '${start_time}' '${end_time}' -e '${R2LAB_EMAIL}' -p '${R2LAB_PASSWORD}' -s '${R2LAB_USERNAME}' -v; echo EXIT_CODE:\$?" 2>&1)
+	# Extract the exit code from the output
+	exit_code=$(echo "$rhubarbe_output" | grep "EXIT_CODE:" | cut -d: -f2)
+	rhubarbe_output=$(echo "$rhubarbe_output" | grep -v "EXIT_CODE:")
 
-  # Extract the exit code from the output
-  exit_code=$(echo "$rhubarbe_output" | grep "EXIT_CODE:" | cut -d: -f2)
-  rhubarbe_output=$(echo "$rhubarbe_output" | grep -v "EXIT_CODE:")
-
-  if [[ "$exit_code" -ne 0 ]]; then
-    echo "❌ R2Lab reservation failed."
-    echo "Error details: $rhubarbe_output"
-    read -rp "Do you want to ignore the R2Lab reservation failure and continue? [y/N]: " ignore_r2lab_choice
-    if [[ ! "$ignore_r2lab_choice" =~ ^[Yy]$ ]]; then
-      # If R2Lab reservation fails and the user does not want to ignore, exit the script and delete the slices reservation
-      # Using the command: pos calendar delete --id <reservation_id> <node/nodes separated by space>
-      echo "Deleting sopnodes reservation with ID: $reservation_id ..."
-      delete_output=$(pos calendar delete --id "$reservation_id" "${nodes_to_reserve[@]}" 2>&1)
-      if [[ $? -ne 0 ]]; then
-        echo "❌ Failed to delete sopnodes reservation."
-        echo "Error details: $delete_output"
-      else
-        echo "Sopnodes reservation deleted successfully."
-      fi
-      echo "Exiting script."
-      exit 1
-    else
-      echo "Ignoring R2Lab reservation failure and continuing..."
+	if [[ "$exit_code" -ne 0 ]]; then
+	    echo "❌ R2Lab reservation failed."
+	    echo "Error details: $rhubarbe_output"
+	    read -rp "Do you want to ignore the R2Lab reservation failure and continue? [y/N]: " ignore_r2lab_choice
+	    if [[ ! "$ignore_r2lab_choice" =~ ^[Yy]$ ]]; then
+		# If R2Lab reservation fails and the user does not want to ignore, exit the script and delete the slices reservation
+		# Using the command: pos calendar delete --id <reservation_id> <node/nodes separated by space>
+		echo "Deleting sopnodes reservation with ID: $reservation_id ..."
+		delete_output=$(pos calendar delete --id "$reservation_id" "${nodes_to_reserve[@]}" 2>&1)
+		if [[ $? -ne 0 ]]; then
+		    echo "❌ Failed to delete sopnodes reservation."
+		    echo "Error details: $delete_output"
+		else
+		    echo "Sopnodes reservation deleted successfully."
+		fi
+		echo "Exiting script."
+		exit 1
+	    else
+		echo "Ignoring R2Lab reservation failure and continuing..."
+	    fi
+	else
+	    echo "✅ R2Lab reservation successful from $start_time to $end_time."
+	fi
     fi
-  else
-    echo "✅ R2Lab reservation successful from $start_time to $end_time."
-  fi
-fi
-
-
 }
+
 
 ############################
 # DEPLOYMENT
@@ -949,31 +959,32 @@ deploy() {
 
     ANSIBLE_EXTRA_ARGS=()
     local vars="fiveg_profile=${PROFILE_5G}"
-  
+
     for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
-	# Clean argument if it starts by -- so that ansible handles it as a variable
-	clean_ev=$(echo "$ev" | sed 's/^--//')
-	vars="$vars $clean_ev"
+        # Clean argument if it starts by -- so that ansible handles it as a variable
+        clean_ev=$(echo "$ev" | sed 's/^--//')
+        vars="$vars $clean_ev"
     done
 
     ANSIBLE_EXTRA_ARGS+=(-e "$vars")
 
     echo "Launching deployment..."
-  
+
     run_cmd ansible-galaxy install -r collections/requirements.yml
 
     if [[ "$platform" == "r2lab" ]]; then
-	echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[@]} playbooks/deploy_r2lab.yml &"
-	run_cmd ansible-playbook -i "$INVENTORY" \
-		"${ANSIBLE_EXTRA_ARGS[@]}" \
-		playbooks/deploy_r2lab.yml 2>&1 | tee ${DIR_LOGS}/logs-r2lab.txt &
+        echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[@]} playbooks/deploy_r2lab.yml &"
+        run_cmd ansible-playbook -i "$INVENTORY" \
+            "${ANSIBLE_EXTRA_ARGS[@]}" \
+            playbooks/deploy_r2lab.yml 2>&1 | tee ${DIR_LOGS}/logs-r2lab.txt &
     fi
 
     echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[@]} playbooks/deploy.yml"
 
     run_cmd ansible-playbook -i "$INVENTORY" \
-	    "${ANSIBLE_EXTRA_ARGS[@]}" \
-	    playbooks/deploy.yml 2>&1 | tee ${DIR_LOGS}/logs.txt
+        "${ANSIBLE_EXTRA_ARGS[@]}" \
+        playbooks/deploy.yml 2>&1 | tee ${DIR_LOGS}/logs.txt
+
 
     echo ""
     echo "=========================================="
@@ -981,6 +992,7 @@ deploy() {
     echo "=========================================="
     echo ""
 }
+
 
 ############################
 # SCENARIOS

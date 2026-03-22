@@ -1,0 +1,5 @@
+---
+free5gc_prepare_node: true
+free5gc_gtp5g_repo: "https://github.com/free5gc/gtp5g.git"
+free5gc_gtp5g_dest: "/usr/local/src/gtp5g"
+free5gc_gtp5g_version: "v0.9.16"

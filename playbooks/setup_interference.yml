@@ -47,10 +47,11 @@
   gather_facts: false
   tasks:
     - name: Connect first UE via connect_ue tasks
-      include_tasks: ../roles/scenarios/iperf/ue-to-core_node/tasks/connect_ue.yml
+      include_tasks: ../roles/scenarios/iperf/ue-to-target_server/tasks/connect_ue.yml
       vars:
         current_ue: "{{ groups['qhats'][0] }}"
         fiveg_profile: default
         ignore_task_errors: true
+        target_server: "{{ core_node }}"
         target_server: "{{ hostvars[groups['core_node'][0]].ip }}"
 

@@ -1,0 +1,189 @@
+---
+- name: Check if yq is already installed
+  ansible.builtin.stat:
+    path: "{{ yq_bin_path }}"
+  register: yq_bin
+
+- name: Download yq binary using curl or wget
+  ansible.builtin.shell: |
+    set -e
+    if command -v curl >/dev/null 2>&1; then
+      curl -L --fail "{{ yq_url }}" -o "{{ yq_bin_path }}"
+    elif command -v wget >/dev/null 2>&1; then
+      wget -O "{{ yq_bin_path }}" "{{ yq_url }}"
+    else
+      echo "Neither curl nor wget found" >&2
+      exit 1
+    fi
+  args:
+    creates: "{{ yq_bin_path }}"
+  when: not yq_bin.stat.exists
+  become: true
+
+- name: Ensure yq is executable
+  ansible.builtin.file:
+    path: "{{ yq_bin_path }}"
+    mode: '0755'
+    state: file
+  become: true
+
+- name: Remove existing free5gc directory to ensure clean state
+  ansible.builtin.file:
+    path: "{{ free5gc_repo_dest }}"
+    state: absent
+
+- name: Clone free5gc repo
+  ansible.builtin.git:
+    repo: "{{ free5gc_repo_url }}"
+    dest: "{{ free5gc_repo_dest }}"
+    version: "{{ free5gc_repo_branch }}"
+    update: yes
+    force: yes
+
+- name: Copy NAD patch script
+  ansible.builtin.copy:
+    src: patch_nads.py
+    dest: /tmp/patch_nads.py
+    mode: '0755'
+
+- name: Copy AMF N2 NAD patch script
+  ansible.builtin.copy:
+    src: patch_amf_n2_nad.py
+    dest: /tmp/patch_amf_n2_nad.py
+    mode: '0755'
+
+- name: Patch AMF N2 NAD to support OVS CNI
+  ansible.builtin.command: python3 /tmp/patch_amf_n2_nad.py "{{ free5gc_repo_dest }}"
+  changed_when: true
+
+- name: Copy UPF N3 NAD OVS patch script
+  ansible.builtin.copy:
+    src: patch_iupf_n3_nad.py
+    dest: /tmp/patch_iupf_n3_nad.py
+    mode: '0755'
+
+- name: Patch UPF N3 NAD to support OVS CNI (multinode)
+  ansible.builtin.command: python3 /tmp/patch_iupf_n3_nad.py "{{ free5gc_repo_dest }}"
+  changed_when: true
+
+- name: Patch NAD templates to make gateway route conditional
+  ansible.builtin.command: python3 /tmp/patch_nads.py "{{ free5gc_repo_dest }}"
+  changed_when: true
+
+- name: Patch UPF wrapper.sh to create /etc/iproute2 if missing (upf only)
+  ansible.builtin.replace:
+    path: "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/upf/upf-configmap.yaml"
+    regexp: 'echo "1200 n6if" >> /etc/iproute2/rt_tables'
+    replace: 'mkdir -p /etc/iproute2 && echo "1200 n6if" >> /etc/iproute2/rt_tables'
+  ignore_errors: true
+
+- name: Patch iupf1 N3 addr to 0.0.0.0 so gtp5g listens on all interfaces (N3 + N9)
+  ansible.builtin.replace:
+    path: "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/iupf1/iupf1-configmap.yaml"
+    regexp: '(\s*)- addr: \{\{[^}]*\.n3if\.ipAddress[^}]*\}\}(\s*\n\s*type: N3)'
+    replace: '\1- addr: 0.0.0.0\2'
+
+- name: Patch iupf1 wrapper.sh to remove spurious default routes and fix N9 routing
+  ansible.builtin.replace:
+    path: "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/iupf1/iupf1-configmap.yaml"
+    regexp: '(    iptables -A FORWARD -j ACCEPT)'
+    replace: '\1\n    ip route del default dev n3 2>/dev/null || true\n    ip route | grep "^default" | grep -v "eth0" | while read -r gw via ip dev iface rest; do ip route del default via $ip dev $iface 2>/dev/null || true; done\n    ip route add 10.100.50.224/29 dev n9 2>/dev/null || true'
+
+- name: Patch UPF securityContext to add SYS_ADMIN capability
+  ansible.builtin.replace:
+    path: "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/values.yaml"
+    regexp: 'add: \["NET_ADMIN"\]'
+    replace: 'add: ["NET_ADMIN", "SYS_ADMIN"]'
+
+- name: Copy UPF wrapper patch script
+  ansible.builtin.copy:
+    src: patch_upf_wrapper.py
+    dest: /tmp/patch_upf_wrapper.py
+    mode: '0755'
+
+- name: Patch UPF psaupf wrapper.sh to use eth0 instead of n6
+  ansible.builtin.command: python3 /tmp/patch_upf_wrapper.py "{{ free5gc_repo_dest }}"
+  changed_when: true
+
+# Then apply the 5G profile settings on the repo
+
+- name: Load active 5G profile
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+    name: fiveg
+
+- name: Validate PLMN
+  assert:
+    that:
+      - fiveg.plmn.mcc is defined
+      - fiveg.plmn.mnc is defined
+      - fiveg.plmn.tac is defined
+
+- name: Validate slices
+  assert:
+    that:
+      - slice.name is defined
+      - slice.sst is defined
+      - slice.dnn is defined
+      - slice.sd is defined
+      - slice.ip_prefix is defined
+  loop: "{{ fiveg.slices }}"
+  loop_control:
+    loop_var: slice
+
+- name: Validate UE slice references
+  assert:
+    that:
+      - ue.value.slice in fiveg.slices | map(attribute='name') | list
+  loop: "{{ fiveg.ues | dict2items }}"
+  loop_control:
+    loop_var: ue
+
+- name: Remove n2 default gateway when core and RAN are on the same node
+  ansible.builtin.shell: >
+    {{ yq_bin_path }} eval -i '
+      .global.n2network.gatewayIP = ""
+    ' "{{ free5gc_repo_dest }}/charts/free5gc/values.yaml"
+  when: core_node_name == ran_node_name
+
+- name: Generate free5gc Helm values override
+  ansible.builtin.template:
+    src: free5gc-values-override.yaml.j2
+    dest: "{{ free5gc_repo_dest }}/values-profile-override.yaml"
+    mode: "0644"
+  vars:
+    profile: "{{ fiveg }}"
+
+- name: Add iupf1 n3 route for gNB subnet (same-node only)
+  ansible.builtin.replace:
+    path: "{{ free5gc_repo_dest }}/charts/free5gc/charts/free5gc-upf/templates/iupf1/iupf1-configmap.yaml"
+    regexp: '(    ip route add 10\.100\.50\.224/29 dev n9 2>/dev/null \|\| true)'
+    replace: '\1\n    ip route add 10.100.50.248/29 dev n3 2>/dev/null || true'
+  when: core_node_name == ran_node_name
+
+- name: Enable CoreDNS cache for cluster.local
+  ansible.builtin.shell: |
+    kubectl patch cm coredns -n kube-system --type merge -p \
+      '{"data":{"Corefile":".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    prometheus :9153\n    forward . /etc/resolv.conf {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}\n"}}'
+    kubectl rollout restart deployment/coredns -n kube-system
+    kubectl rollout status deployment/coredns -n kube-system
+  when: core == 'free5gc'
+
+- name: Generate add_subscribers.py for free5gc
+  ansible.builtin.template:
+    src: add_subscribers.py.j2
+    dest: "{{ free5gc_repo_dest }}/docker/free5gc/free5gc-dbpython/add_subscribers.py"
+    mode: "0755"
+  vars:
+    profile: "{{ fiveg }}"
+
+- name: Generate free5gc profile check file
+  ansible.builtin.template:
+    src: profile-check.j2
+    dest: /root/free5gc_profile_check.txt
+    owner: root
+    mode: '0644'
+  vars:
+    profile: "{{ fiveg }}"
+
+

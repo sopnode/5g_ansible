@@ -1,5 +1,22 @@
 ---
 
+- name: Load common variables
+  include_vars:
+    file: "../../common/defaults/main.yml"
+
+- name: Uninstall existing srsran-gnb release if present
+  shell: >
+    helm list -n {{ ran_ns }} -a -q |
+    grep -w "^srsran-gnb$" | wc -l
+  register: gnb_release_exists
+  changed_when: false
+  failed_when: false
+
+- name: Uninstall srsran-gnb
+  shell: helm uninstall srsran-gnb -n {{ ran_ns }} --no-hooks
+  when: gnb_release_exists.stdout | trim | int > 0
+  failed_when: false
+
 - name: Deploy srsRAN gNB (only when not rfsim)
   when: rru != 'rfsim'
   block:
@@ -36,6 +53,6 @@
     values_files:
       - "{{ values_file }}"
     state: present
-    wait: True
+    wait: False # True # False for debug
     atomic: True
-    timeout: 120s
+    timeout: 180s

@@ -83,6 +83,17 @@
   ansible.builtin.set_fact:
     host_amf_upf_value: "{{ '10.10.3.200' if core == 'open5gs' else (ran_node_name if fhi72 | bool else core_node_name) }}"
 
+- name: Determine HOST_AMF_UPF value
+  ansible.builtin.set_fact:
+    host_amf_upf_value: >-
+      {%- if core == 'open5gs' -%}
+        10.10.3.200
+      {%- elif core == 'free5gc' -%}
+        10.100.50.234
+      {%- else -%}
+        {{ ran_node_name if fhi72 | bool else core_node_name }}
+      {%- endif -%}
+
 - name: Update HOST_AMF_UPF variable in prepare-demo-oai.sh
   ansible.builtin.lineinfile:
     path: "{{ prepare_demo_script }}"

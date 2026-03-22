@@ -1,10 +1,11 @@
 ---
+
 - name: Load common variables
   include_vars:
     file: "../../common/defaults/main.yml"
 
 - name: Deploy Telegraf using Helm
-  when: mon_enabled
+  when: monitoring_enabled
   kubernetes.core.helm:
     name: telegraf
     chart_ref: "{{ [repo_dest_abs, 'charts', 'telegraf'] | path_join }}"

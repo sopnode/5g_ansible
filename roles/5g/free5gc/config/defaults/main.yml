@@ -1,0 +1,12 @@
+---
+free5gc_repo_url: "https://github.com/sopnode/free5gc-helm.git"
+free5gc_repo_dest: "/root/free5gc-helm"
+free5gc_repo_branch: "main"
+free5gc_root: "{{ repo_dest }}/charts/free5gc"
+core_ns: "free5gc"
+free5gc_prepare_node: true
+fiveg_profile: "default"
+
+yq_version: "v4.45.1"
+yq_bin_path: "/usr/local/bin/yq"
+yq_url: "https://github.com/mikefarah/yq/releases/download/{{ yq_version }}/yq_linux_amd64"

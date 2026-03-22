@@ -76,13 +76,13 @@ ues:
   qhat23:
     imsi_suffix: "0000000014"
     slice: slice1
-  UE18:
-    imsi_suffix: "0000001121"  # used for OAI RFSIM UE
+  ue01:
+    imsi_suffix: "0000001121"
     slice: slice1
-  UE19:
-    imsi_suffix: "0000001122"  # used for OAI RFSIM UE2
+  ue02:
+    imsi_suffix: "0000001122"
     slice: slice2
-  UE20:
-    imsi_suffix: "0000001123"  # used for OAI RFSIM UE3
+  ue03:
+    imsi_suffix: "0000001123"
     slice: slice1
 

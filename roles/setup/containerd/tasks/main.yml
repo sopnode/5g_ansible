@@ -114,6 +114,31 @@
     replace: 'sandbox_image = "registry.k8s.io/pause:3.10"'
   become: true
 
+# ---- Create containerd registry and Docker Hub authentication for containerd
+#- name: Create containerd registry config directory for docker.io
+#  ansible.builtin.file:
+#    path: /etc/containerd/certs.d/docker.io
+#    state: directory
+#    mode: '0755'
+#  become: true
+#
+#- name: Configure Docker Hub authentication for containerd
+#  ansible.builtin.copy:
+#    dest: /etc/containerd/certs.d/docker.io/hosts.toml
+#    owner: root
+#    group: root
+#    mode: '0644'
+#    content: |
+#      server = "https://registry-1.docker.io"
+#
+#      [host."https://registry-1.docker.io"]
+#        capabilities = ["pull", "resolve"]
+#
+#        [host."https://registry-1.docker.io".auth]
+#          username = "{{ docker_username }}"
+#          password = "{{ docker_pat }}"
+#  become: true
+
 # ---- Restart and enable
 - name: Restart & enable containerd
   ansible.builtin.systemd:
@@ -140,6 +165,11 @@
 
 - ansible.builtin.debug:
     var: cgroup_check.stdout
+
+#- name: Fail if docker_pat is not set
+#  ansible.builtin.fail:
+#    msg: "docker_pat is not defined. Cannot configure containerd auth."
+#  when: docker_pat | length == 0
 
 # FIX: added snapshotter verification — catch any residual "native" entry that
 #      the replace above may have missed (e.g. plugin-specific overrides).

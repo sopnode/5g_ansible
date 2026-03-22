@@ -1,0 +1,32 @@
+---
+# ============================================================
+# ueransim deploy for open5gs (kustomize)
+# ============================================================
+
+- name: Apply ueransim base configurations
+  ansible.builtin.shell: |
+    kubectl apply -k {{ ueransim_root }}/ueransim-gnb -n {{ ran_ns | default('open5gs') }}
+    kubectl apply -k {{ ueransim_root }}/ueransim-ue  -n {{ ran_ns | default('open5gs') }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig | default('/root/.kube/config') }}"
+
+- name: Force scale down all UEs
+  ansible.builtin.shell: >
+    kubectl scale deployment -n {{ ran_ns | default('open5gs') }} -l component=ue --replicas=0
+  failed_when: false
+
+- name: Wait for gNB to be Ready
+  ansible.builtin.shell: >
+    kubectl wait --for=condition=Ready pod -l component=gnb
+    -n {{ ran_ns | default('open5gs') }} --timeout=60s
+
+- name: Delay for gNB stability
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Sequential UE deployment
+  include_tasks: sequential_ue_deploy_open5gs.yml
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['uesim01', 'uesim02', 'uesim03']) | list }}"
+  loop_control:
+    loop_var: ue_item
+    index_var: ue_idx

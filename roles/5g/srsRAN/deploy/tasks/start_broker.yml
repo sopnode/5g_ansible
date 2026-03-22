@@ -1,0 +1,137 @@
+---
+
+- name: Kill existing processes if any
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
+    /bin/sh -lc "pkill -9 srsue; pkill -9 python3; true"
+  changed_when: true
+  failed_when: false
+
+- name: Start GNU Radio broker in tmux window 'gnu'
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
+    /bin/sh -lc "
+      tmux list-windows -t ran | grep -q '^\s*[0-9]\+: gnu\b' \
+        && tmux kill-window -t ran:gnu || true;
+      tmux new-window -t ran -n gnu \
+        'bash -lc \"/srsran/config/start_gnu.sh {{ ue_count }} 2>&1 | tee /var/log/gnu_multi_ue.log\"'
+    "
+  changed_when: true
+  failed_when: false
+
+- name: Wait for GNU Radio broker to be ready
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
+    "grep -q 'Press Enter to quit' /var/log/gnu_multi_ue.log 2>/dev/null"
+  register: gnu_log_wait
+  changed_when: false
+  failed_when: false
+  retries: 30
+  delay: 2
+  until: gnu_log_wait.rc == 0
+
+- name: Get gNB pod name
+  ansible.builtin.command: >
+    {{ kubectl_bin }} get pod -n {{ ran_ns }} -l app=srsran,component=gnb
+    -o jsonpath='{.items[0].metadata.name}'
+  register: gnb_pod_name_result
+  changed_when: false
+
+- name: Wait for gNB cell to be activated
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ gnb_pod_name_result.stdout }} -c gnb-logs -- /bin/sh -lc
+    "grep -q 'Cell was activated' /var/log/gnb.log 2>/dev/null"
+  register: gnb_cell_wait
+  changed_when: false
+  failed_when: false
+  retries: 60
+  delay: 5
+  until: gnb_cell_wait.rc == 0
+
+- name: Warn if gNB cell did not activate
+  ansible.builtin.debug:
+    msg: "WARNING: gNB cell did not activate within timeout"
+  when: gnb_cell_wait.rc != 0
+
+- name: Warn if gNB cell did not activate
+  ansible.builtin.debug:
+    msg: "WARNING: gNB cell did not activate within timeout"
+  when: gnb_cell_wait.rc != 0
+
+- name: Warn if GNU Radio did not start
+  ansible.builtin.debug:
+    msg: "WARNING: GNU Radio broker did not start"
+  when: gnu_log_wait.rc != 0
+
+- name: Start each UE in its own tmux window
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} --
+    /bin/sh -lc "
+      tmux list-windows -t ran | grep -q 'ue{{ item.index }}' \
+        && tmux kill-window -t ran:ue{{ item.index }} || true;
+      tmux new-window -t ran -n ue{{ item.index }} \
+        'bash -lc \"/srsran/config/start_ue.sh {{ item.index }} 2>&1 | tee /var/log/ue{{ item.index }}.log\"'
+    "
+  loop: "{{ ue_list }}"
+  loop_control:
+    label: "ue{{ item.index }}"
+  changed_when: true
+  failed_when: false
+
+- name: Wait until each UE process is up
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
+    'ok=1;
+     for i in {{ ue_indices | join(" ") }}; do
+       if ! pgrep -af "srsue .*ue_${i}\.conf" >/dev/null 2>&1; then
+         ok=0; break;
+       fi;
+     done;
+     test "$ok" = "1"'
+  register: ue_up_check
+  changed_when: false
+  failed_when: false
+  retries: 60
+  delay: 2
+  until: ue_up_check.rc == 0
+
+- name: Warn if UE processes did not start
+  ansible.builtin.debug:
+    msg: "WARNING: not all UE processes started"
+  when: ue_up_check.rc != 0
+
+# --- Routes ---
+
+- name: Add routes in UE pod
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/bash -lc
+    'UE_COUNT={{ ue_count }} /srsran/config/add_route.sh'
+  changed_when: false
+  failed_when: false
+
+# --- Show UE IPs ---
+
+- name: Extract UE IP addresses from logs
+  ansible.builtin.command: >
+    {{ kubectl_bin }} -n {{ ran_ns }} exec {{ ue_pod_name }} -- /bin/sh -lc
+    "grep -m1 'PDU Session Establishment successful' /var/log/ue{{ item.index }}.log 2>/dev/null | awk '{print \$NF}'"
+  loop: "{{ ue_list }}"
+  register: ue_ips
+  changed_when: false
+  failed_when: false
+
+- name: Show UE IP addresses
+  ansible.builtin.debug:
+    msg: "{{ item.item.name }} ({{ item.item.imsi }}) → {{ item.stdout | default('N/A') }}"
+  loop: "{{ ue_ips.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Summary
+  ansible.builtin.debug:
+    msg:
+      - "UEs started in tmux session 'ran': windows ue1..ue{{ ue_count }}"
+      - "GNU Radio broker in tmux window 'gnu'"
+      - "Logs: /var/log/ue1.log .. /var/log/ue{{ ue_count }}.log"
+      - "GNU Radio log: /var/log/gnu_multi_ue.log"
+      - "Inspect: {{ kubectl_bin }} -n {{ ran_ns }} exec -it {{ ue_pod_name }} -- tmux attach -t ran"

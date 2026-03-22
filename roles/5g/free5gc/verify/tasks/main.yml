@@ -1,0 +1,229 @@
+---
+# ============================================================
+# free5gc profile verification
+# Called at the end of the deploy role via include_role
+# Requires: fiveg (profile vars), core_ns
+# ============================================================
+
+# -- Fetch all configmaps --
+- name: Fetch AMF configmap
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: free5gc-free5gc-amf-configmap
+    namespace: "{{ core_ns }}"
+  register: amf_cm
+
+- name: Fetch SMF configmap
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: free5gc-free5gc-smf-configmap
+    namespace: "{{ core_ns }}"
+  register: smf_cm
+
+- name: Fetch NSSF configmap
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: free5gc-free5gc-nssf-configmap
+    namespace: "{{ core_ns }}"
+  register: nssf_cm
+
+- name: Fetch iupf1 configmap
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: free5gc-free5gc-upf-iupf1-configmap
+    namespace: "{{ core_ns }}"
+  register: iupf1_cm
+
+- name: Fetch psaupf1 configmap
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: free5gc-free5gc-upf-psaupf1-configmap
+    namespace: "{{ core_ns }}"
+  register: psaupf1_cm
+
+- name: Fetch psaupf2 configmap
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: ConfigMap
+    name: free5gc-free5gc-upf-psaupf2-configmap
+    namespace: "{{ core_ns }}"
+  register: psaupf2_cm
+
+# ============================================================
+# AMF
+# ============================================================
+- name: "Verify AMF PLMN (mcc={{ fiveg.plmn.mcc }} mnc={{ fiveg.plmn.mnc }} tac={{ fiveg.plmn.tac }})"
+  assert:
+    that:
+      - "fiveg.plmn.mcc in amf_cm.resources[0].data['amfcfg.yaml']"
+      - "fiveg.plmn.mnc in amf_cm.resources[0].data['amfcfg.yaml']"
+      - "(fiveg.plmn.tac | string) in amf_cm.resources[0].data['amfcfg.yaml']"
+    fail_msg: "AMF configmap PLMN mismatch (expected mcc={{ fiveg.plmn.mcc }} mnc={{ fiveg.plmn.mnc }} tac={{ fiveg.plmn.tac }})"
+
+- name: "Verify AMF slice {{ item.name }} (sst={{ item.sst }} sd={{ item.sd }} dnn={{ item.dnn }})"
+  assert:
+    that:
+      - "(item.sst | string) in amf_cm.resources[0].data['amfcfg.yaml']"
+      - "item.dnn in amf_cm.resources[0].data['amfcfg.yaml']"
+      - >-
+        item.sd == 'EMPTY' or
+        ('%06x' | format(item.sd | int(base=16))) in amf_cm.resources[0].data['amfcfg.yaml']
+    fail_msg: "AMF configmap missing parameters for slice {{ item.name }}"
+  loop: "{{ fiveg.slices }}"
+
+# ============================================================
+# SMF
+# ============================================================
+- name: "Verify SMF PLMN (mcc={{ fiveg.plmn.mcc }} mnc={{ fiveg.plmn.mnc }})"
+  assert:
+    that:
+      - "fiveg.plmn.mcc in smf_cm.resources[0].data['smfcfg.yaml']"
+      - "fiveg.plmn.mnc in smf_cm.resources[0].data['smfcfg.yaml']"
+    fail_msg: "SMF configmap PLMN mismatch"
+
+- name: "Verify SMF slice {{ item.name }} (sst={{ item.sst }} sd={{ item.sd }} dnn={{ item.dnn }} prefix={{ item.ip_prefix }})"
+  assert:
+    that:
+      - "(item.sst | string) in smf_cm.resources[0].data['smfcfg.yaml']"
+      - "item.dnn in smf_cm.resources[0].data['smfcfg.yaml']"
+      - "item.ip_prefix in smf_cm.resources[0].data['smfcfg.yaml']"
+      - >-
+        item.sd == 'EMPTY' or
+        ('%06x' | format(item.sd | int(base=16))) in smf_cm.resources[0].data['smfcfg.yaml']
+    fail_msg: "SMF configmap missing parameters for slice {{ item.name }}"
+  loop: "{{ fiveg.slices }}"
+
+# ============================================================
+# NSSF
+# ============================================================
+- name: "Verify NSSF PLMN (mcc={{ fiveg.plmn.mcc }} mnc={{ fiveg.plmn.mnc }})"
+  assert:
+    that:
+      - "fiveg.plmn.mcc in nssf_cm.resources[0].data['nssfcfg.yaml']"
+      - "fiveg.plmn.mnc in nssf_cm.resources[0].data['nssfcfg.yaml']"
+    fail_msg: "NSSF configmap PLMN mismatch"
+
+- name: "Verify NSSF slice {{ item.name }} (sst={{ item.sst }} sd={{ item.sd }})"
+  assert:
+    that:
+      - "(item.sst | string) in nssf_cm.resources[0].data['nssfcfg.yaml']"
+      - >-
+        item.sd == 'EMPTY' or
+        ('%06x' | format(item.sd | int(base=16))) in nssf_cm.resources[0].data['nssfcfg.yaml']
+    fail_msg: "NSSF configmap missing parameters for slice {{ item.name }}"
+  loop: "{{ fiveg.slices }}"
+
+# ============================================================
+# UPFs
+# ============================================================
+- name: "Verify iupf1 slice {{ item.name }} (dnn={{ item.dnn }} prefix={{ item.ip_prefix }})"
+  assert:
+    that:
+      - "item.dnn in iupf1_cm.resources[0].data['upfcfg.yaml']"
+      - "item.ip_prefix in iupf1_cm.resources[0].data['upfcfg.yaml']"
+    fail_msg: "iupf1 configmap missing dnn/cidr for slice {{ item.name }}"
+  loop: "{{ fiveg.slices }}"
+
+- name: "Verify psaupf1 slice {{ item.name }} (dnn={{ item.dnn }} prefix={{ item.ip_prefix }})"
+  assert:
+    that:
+      - "item.dnn in psaupf1_cm.resources[0].data['upfcfg.yaml']"
+      - "item.ip_prefix in psaupf1_cm.resources[0].data['upfcfg.yaml']"
+    fail_msg: "psaupf1 configmap missing dnn/cidr for slice {{ item.name }}"
+  loop: "{{ fiveg.slices }}"
+
+- name: "Verify psaupf2 slice {{ item.name }} (dnn={{ item.dnn }} prefix={{ item.ip_prefix }})"
+  assert:
+    that:
+      - "item.dnn in psaupf2_cm.resources[0].data['upfcfg.yaml']"
+      - "item.ip_prefix in psaupf2_cm.resources[0].data['upfcfg.yaml']"
+    fail_msg: "psaupf2 configmap missing dnn/cidr for slice {{ item.name }}"
+  loop: "{{ fiveg.slices }}"
+
+# ============================================================
+# Pod status
+# ============================================================
+- name: Fetch all pods in free5gc namespace
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ core_ns }}"
+  register: free5gc_pods
+
+- name: "Verify pod {{ item.metadata.name }} is Running and Ready"
+  assert:
+    that:
+      - "item.status.phase == 'Running'"
+      - >-
+        item.status.containerStatuses |
+        selectattr('ready', 'equalto', true) | list | length ==
+        item.status.containerStatuses | length
+    fail_msg: "Pod {{ item.metadata.name }} is not Running/Ready (phase={{ item.status.phase }})"
+  loop: "{{ free5gc_pods.resources }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+
+# ============================================================
+# MongoDB subscribers
+# ============================================================
+- name: Find add_subscribers.py path in dbpython pod
+  shell: |
+    kubectl exec -n {{ core_ns }} deployment/free5gc-free5gc-dbpython-dbpython -- \
+      find / -name "add_subscribers.py" 2>/dev/null | head -1
+  register: subscribers_script_path
+  failed_when: false
+  changed_when: false
+
+- name: Check MongoDB subscriber count
+  shell: |
+    kubectl exec -n {{ core_ns }} deployment/free5gc-free5gc-dbpython-dbpython -- \
+      python3 {{ subscribers_script_path.stdout | trim }} -a list 2>/dev/null | \
+      tail -10
+  register: mongo_list_output
+  failed_when: false
+  changed_when: false
+  when: subscribers_script_path.stdout | trim | length > 0
+
+- name: Parse MongoDB subscriber count
+  shell: |
+    kubectl exec -n {{ core_ns }} deployment/free5gc-free5gc-dbpython-dbpython -- \
+      python3 {{ subscribers_script_path.stdout | trim }} -a list 2>/dev/null | \
+      grep "^subscriptionData.authenticationData.authenticationSubscription:" | \
+      tail -1 | awk -F': ' '{print $2}'
+  register: mongo_ue_count
+  failed_when: false
+  changed_when: false
+  when: subscribers_script_path.stdout | trim | length > 0
+
+- name: Debug MongoDB list output
+  debug:
+    msg: "MongoDB list output: {{ mongo_list_output.stdout | default('N/A') }}"
+  when: subscribers_script_path.stdout | trim | length > 0
+
+- name: "Verify MongoDB subscriber count (expected={{ fiveg.ues | length }})"
+  assert:
+    that: "mongo_ue_count.stdout | trim | int == fiveg.ues | length"
+    fail_msg: >-
+      MongoDB has '{{ mongo_ue_count.stdout | trim }}' subscribers
+      but profile defines {{ fiveg.ues | length }} UEs
+  when:
+    - subscribers_script_path.stdout | trim | length > 0
+    - mongo_ue_count.stdout | trim | length > 0
+
+- name: Warn if MongoDB subscriber check could not run
+  debug:
+    msg: >-
+      WARNING: Could not verify MongoDB subscribers —
+      {% if subscribers_script_path.stdout | trim | length == 0 %}
+      add_subscribers.py not found in dbpython pod
+      {% else %}
+      script returned empty output
+      {% endif %}
+  when: >-
+    subscribers_script_path.stdout | trim | length == 0 or
+    mongo_ue_count.stdout | trim | length == 0

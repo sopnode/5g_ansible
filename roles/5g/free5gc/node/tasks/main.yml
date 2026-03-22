@@ -1,0 +1,84 @@
+---
+- name: Skip node preparation if disabled
+  meta: end_play
+  when: not free5gc_prepare_node
+
+- name: Check if gtp5g module is loaded
+  become: true
+  shell: lsmod | grep ^gtp5g
+  register: gtp5g_loaded
+  failed_when: false
+  changed_when: false
+
+- name: Install gtp5g for free5gc
+  when: gtp5g_loaded.stdout == ""
+  block:
+
+    - name: Install required packages
+      become: true
+      apt:
+        name:
+          - build-essential
+          - git
+          - make
+          - gcc
+          - linux-headers-{{ ansible_kernel }}
+        state: present
+        update_cache: yes
+
+    - name: Clone gtp5g repository
+      become: true
+      git:
+        repo: "{{ free5gc_gtp5g_repo }}"
+        dest: "{{ free5gc_gtp5g_dest }}"
+        version: "{{ free5gc_gtp5g_version }}"
+        force: yes
+
+    - name: Build gtp5g
+      become: true
+      command:
+        cmd: make
+        chdir: "{{ free5gc_gtp5g_dest }}"
+
+    - name: Install gtp5g
+      become: true
+      command:
+        cmd: make install
+        chdir: "{{ free5gc_gtp5g_dest }}"
+
+    - name: Load gtp5g module
+      become: true
+      modprobe:
+        name: gtp5g
+        state: present
+
+    - name: Persist gtp5g module
+      become: true
+      lineinfile:
+        path: /etc/modules
+        line: gtp5g
+        create: yes
+
+- name: Enable IPv4 forwarding
+  become: true
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    reload: yes
+
+- name: Enable bridge netfilter
+  become: true
+  sysctl:
+    name: net.bridge.bridge-nf-call-iptables
+    value: "1"
+    state: present
+    reload: yes
+
+- name: Ensure iptables can forward bridged packets
+  become: true
+  sysctl:
+    name: net.bridge.bridge-nf-call-iptables
+    value: "1"
+    state: present
+    reload: yes

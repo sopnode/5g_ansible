@@ -1,0 +1,419 @@
+# DO NOT EDIT MANUALLY
+
+{#
+  free5gc-values-override.yaml.j2
+  Generates a Helm values override file from the 5G profile.
+  Inject with: helm upgrade -i free5gc ... -f values-profile-override.yaml
+#}
+{# ── helpers ──────────────────────────────────────────────── #}
+{%- set serving_plmn_id = profile.plmn.mcc ~ profile.plmn.mnc -%}
+
+{# resolve SD: "EMPTY" → "ffffff", otherwise treat as hex and zero-pad to 6 digits #}
+{%- macro resolve_sd(sd) -%}{%- if sd == "EMPTY" -%}ffffff{%- else -%}{{ "%06x" | format(sd | int(base=16)) }}{%- endif -%}{%- endmacro -%}
+
+{# snssai key used in smfSelectionSubscriptionData: 0<sst_hex2><sd6> #}
+{%- macro snssai_key(sst, sd) -%}
+  {{- "0%02x%s" | format(sst | int, resolve_sd(sd)) -}}
+{%- endmacro -%}
+
+
+# ============================================================
+# Global: activate NGAP NodePort service (needed when ipvlan/eth0 is DOWN)
+# ============================================================
+
+{% set multinode = (core_node_name is defined and ran_node_name is defined and core_node_name != ran_node_name) %}
+{% set n2_masterIf = 'n3br' if multinode else nic_interface %}
+{% set n2_type = 'ovs' if multinode else 'ipvlan' %}
+
+global:
+  n2network:
+    enabled: true
+    masterIf: "{{ n2_masterIf }}"
+    type: "{{ n2_type }}"
+{% if multinode %}
+    subnetIP: "10.100.50.0"
+    cidr: "24"
+    gatewayIP: ""
+{% endif %}
+  n3network:
+    enabled: true
+    masterIf: "{{ 'n3br' if multinode else nic_interface }}"
+    type: "{{ 'ovs' if multinode else 'ipvlan' }}"
+{% if multinode %}
+    subnetIP: "10.100.50.0"
+    cidr: "24"
+    gatewayIP: ""
+{% endif %}
+  n4network:
+    masterIf: "{{ nic_interface }}"
+  n6network:
+    masterIf: "{{ nic_interface }}"
+  n9network:
+    masterIf: "{{ nic_interface }}"
+{% if multinode %}
+    subnetIP: "10.100.50.0"
+    cidr: "24"
+    gatewayIP: ""
+{% endif %}
+{% if multinode %}
+  amf:
+    n2if:
+      ipAddress: "10.100.50.234"
+    service:
+      ngap:
+        enabled: true
+        name: amf-n2
+        port: 38412
+        nodeport: 31412
+        protocol: SCTP
+        type: NodePort
+{% else %}
+  amf:
+    service:
+      ngap:
+        enabled: true
+        name: amf-n2
+        port: 38412
+        nodeport: 31412
+        protocol: SCTP
+        type: NodePort
+{% endif %}
+  uesubnet: "{{ (profile.slices | map(attribute='ip_prefix') | first) }}.0/24"
+
+# ============================================================
+# AMF
+# ============================================================
+free5gc-amf:
+  amf:
+    configuration:
+      configuration: |-
+        amfName: AMF
+        serviceNameList:
+          - namf-comm
+          - namf-evts
+          - namf-mt
+          - namf-loc
+          - namf-oam
+        servedGuamiList:
+          - plmnId:
+              mcc: {{ profile.plmn.mcc }}
+              mnc: {{ profile.plmn.mnc }}
+            amfId: cafe00
+        supportTaiList:
+          - plmnId:
+              mcc: {{ profile.plmn.mcc }}
+              mnc: {{ profile.plmn.mnc }}
+            tac: {{ "%06d" | format(profile.plmn.tac | int) }}
+        plmnSupportList:
+          - plmnId:
+              mcc: {{ profile.plmn.mcc }}
+              mnc: {{ profile.plmn.mnc }}
+            snssaiList:
+{% for slice in profile.slices %}
+              - sst: {{ slice.sst | int }}
+                sd: {{ resolve_sd(slice.sd) }}
+{% if slice.sd == "EMPTY" %}
+              - sst: {{ slice.sst | int }}
+                sd: ""
+{% endif %}
+{% endfor %}
+        supportDnnList:
+{% for slice in profile.slices %}
+          - {{ slice.dnn }}
+{% endfor %}
+        security:
+          integrityOrder:
+            - NIA2
+          cipheringOrder:
+            - NEA0
+        networkName:
+          full: free5GC
+          short: free
+        ngapIE:
+          mobilityRestrictionList:
+            enable: true
+          maskedIMEISV:
+            enable: true
+          redirectionVoiceFallback:
+            enable: false
+        nasIE:
+          networkFeatureSupport5GS:
+            enable: true
+            length: 1
+            imsVoPS: 0
+            emc: 0
+            emf: 0
+            iwkN26: 0
+            mpsi: 0
+            emcN3: 0
+            mcsi: 0
+        t3502Value: 720
+        t3512Value: 3600
+        non3gppDeregTimerValue: 3240
+        t3513:
+          enable: true
+          expireTime: 6s
+          maxRetryTimes: 4
+        t3522:
+          enable: true
+          expireTime: 6s
+          maxRetryTimes: 4
+        t3550:
+          enable: true
+          expireTime: 6s
+          maxRetryTimes: 4
+        t3555:
+          enable: true
+          expireTime: 6s
+          maxRetryTimes: 4
+        t3560:
+          enable: true
+          expireTime: 6s
+          maxRetryTimes: 4
+        t3565:
+          enable: true
+          expireTime: 6s
+          maxRetryTimes: 4
+        t3570:
+          enable: true
+          expireTime: 6s
+          maxRetryTimes: 4
+        locality: area1
+        sctp:
+          numOstreams: 3
+          maxInstreams: 5
+          maxAttempts: 2
+          maxInitTimeout: 2
+        defaultUECtxReq: false
+
+# ============================================================
+# SMF
+# ============================================================
+free5gc-smf:
+  smf:
+    configuration:
+      configuration: |-
+        smfName: SMF
+        snssaiInfos:
+{% for slice in profile.slices %}
+          - sNssai:
+              sst: {{ slice.sst | int }}
+              sd: {{ resolve_sd(slice.sd) }}
+            dnnInfos:
+              - dnn: {{ slice.dnn }}
+                dns:
+                  ipv4: 8.8.8.8
+                  ipv6: 2001:4860:4860::8888
+{% if slice.sd == "EMPTY" %}
+          - sNssai:
+              sst: {{ slice.sst | int }}
+              sd: ""
+            dnnInfos:
+              - dnn: {{ slice.dnn }}
+                dns:
+                  ipv4: 8.8.8.8
+                  ipv6: 2001:4860:4860::8888
+{% endif %}
+{% endfor %}
+        plmnList:
+          - mcc: {{ profile.plmn.mcc }}
+            mnc: {{ profile.plmn.mnc }}
+        userplaneInformation:
+          upNodes:
+            gNB1:
+              type: AN
+            BranchingUPF:
+              type: UPF
+              nodeID: 10.100.50.241
+              sNssaiUpfInfos:
+{% for slice in profile.slices %}
+                - sNssai:
+                    sst: {{ slice.sst | int }}
+                    sd: {{ resolve_sd(slice.sd) }}
+                  dnnUpfInfoList:
+                    - dnn: {{ slice.dnn }}
+{% if slice.sd == "EMPTY" %}
+                - sNssai:
+                    sst: {{ slice.sst | int }}
+                    sd: ""
+                  dnnUpfInfoList:
+                    - dnn: {{ slice.dnn }}
+{% endif %}
+{% endfor %}
+              interfaces:
+                - interfaceType: N3
+                  endpoints:
+                    - 10.100.50.233
+                  networkInstances:
+{% for slice in profile.slices %}
+                    - {{ slice.dnn }}
+{% endfor %}
+                - interfaceType: N9
+                  endpoints:
+                    - 10.100.50.225
+                  networkInstances:
+{% for slice in profile.slices %}
+                    - {{ slice.dnn }}
+{% endfor %}
+            AnchorUPF1:
+              type: UPF
+              nodeID: 10.100.50.242
+              sNssaiUpfInfos:
+{% for slice in profile.slices %}
+                - sNssai:
+                    sst: {{ slice.sst | int }}
+                    sd: {{ resolve_sd(slice.sd) }}
+                  dnnUpfInfoList:
+                    - dnn: {{ slice.dnn }}
+                      pools:
+                        - cidr: {{ slice.ip_prefix }}.0/26
+{% if slice.sd == "EMPTY" %}
+                - sNssai:
+                    sst: {{ slice.sst | int }}
+                    sd: ""
+                  dnnUpfInfoList:
+                    - dnn: {{ slice.dnn }}
+                      pools:
+                        - cidr: {{ slice.ip_prefix }}.64/26
+{% endif %}
+{% endfor %}
+              interfaces:
+                - interfaceType: N9
+                  endpoints:
+                    - 10.100.50.226
+                  networkInstances:
+{% for slice in profile.slices %}
+                    - {{ slice.dnn }}
+{% endfor %}
+            AnchorUPF2:
+              type: UPF
+              nodeID: 10.100.50.243
+              sNssaiUpfInfos:
+{% for slice in profile.slices %}
+                - sNssai:
+                    sst: {{ slice.sst | int }}
+                    sd: {{ resolve_sd(slice.sd) }}
+                  dnnUpfInfoList:
+                    - dnn: {{ slice.dnn }}
+                      pools:
+                        - cidr: {{ slice.ip_prefix }}.128/26
+{% if slice.sd == "EMPTY" %}
+                - sNssai:
+                    sst: {{ slice.sst | int }}
+                    sd: ""
+                  dnnUpfInfoList:
+                    - dnn: {{ slice.dnn }}
+                      pools:
+                        - cidr: {{ slice.ip_prefix }}.192/26
+{% endif %}
+{% endfor %}
+              interfaces:
+                - interfaceType: N9
+                  endpoints:
+                    - 10.100.50.227
+                  networkInstances:
+{% for slice in profile.slices %}
+                    - {{ slice.dnn }}
+{% endfor %}
+          links:
+            - A: gNB1
+              B: BranchingUPF
+            - A: BranchingUPF
+              B: AnchorUPF1
+            - A: BranchingUPF
+              B: AnchorUPF2
+        locality: area1
+        t3591:
+          enable: true
+          expireTime: 16s
+          maxRetryTimes: 3
+        t3592:
+          enable: true
+          expireTime: 16s
+          maxRetryTimes: 3
+
+      ueRoutingInfo: |-
+{% for ue_name, ue in profile.ues.items() %}
+        {{ ue_name }}:
+          members:
+            - imsi-{{ profile.plmn.mcc }}{{ profile.plmn.mnc }}{{ ue.imsi_suffix }}
+          topology:
+            - A: gNB1
+              B: BranchingUPF
+            - A: BranchingUPF
+              B: AnchorUPF1
+          specificPath:
+            - dest: 1.0.0.1/32
+              path: [BranchingUPF, AnchorUPF2]
+{% endfor %}
+
+# ============================================================
+# NSSF
+# ============================================================
+free5gc-nssf:
+  nssf:
+    configuration:
+      configuration: |-
+        nssfName: NSSF
+        supportedPlmnList:
+          - mcc: {{ profile.plmn.mcc }}
+            mnc: {{ profile.plmn.mnc }}
+        supportedNssaiInPlmnList:
+          - plmnId:
+              mcc: {{ profile.plmn.mcc }}
+              mnc: {{ profile.plmn.mnc }}
+            supportedSnssaiList:
+{% for slice in profile.slices %}
+              - sst: {{ slice.sst | int }}
+                sd: {{ resolve_sd(slice.sd) }}
+{% if slice.sd == "EMPTY" %}
+              - sst: {{ slice.sst | int }}
+                sd: ""
+{% endif %}
+{% endfor %}
+        amfList: []
+        taList:
+          - tai:
+              plmnId:
+                mcc: {{ profile.plmn.mcc }}
+                mnc: {{ profile.plmn.mnc }}
+              tac: {{ profile.plmn.tac | int }}
+            accessType: 3GPP_ACCESS
+            supportedSnssaiList:
+{% for slice in profile.slices %}
+              - sst: {{ slice.sst | int }}
+                sd: {{ resolve_sd(slice.sd) }}
+{% if slice.sd == "EMPTY" %}
+              - sst: {{ slice.sst | int }}
+                sd: ""
+{% endif %}
+{% endfor %}
+        mappingListFromPlmn: []
+
+# ============================================================
+# UPF (iupf1, psaupf1, psaupf2)
+# ============================================================
+free5gc-upf:
+  iupf1:
+    configuration:
+      dnnList:
+{% for slice in profile.slices %}
+        - dnn: {{ slice.dnn }}
+          cidr: {{ slice.ip_prefix }}.0/24
+{% endfor %}
+
+  psaupf1:
+    configuration:
+      dnnList:
+{% for slice in profile.slices %}
+        - dnn: {{ slice.dnn }}
+          cidr: {{ slice.ip_prefix }}.0/25
+{% endfor %}
+
+  psaupf2:
+    configuration:
+      dnnList:
+{% for slice in profile.slices %}
+        - dnn: {{ slice.dnn }}
+          cidr: {{ slice.ip_prefix }}.128/25
+{% endfor %}
