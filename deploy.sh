@@ -379,10 +379,9 @@ optional_scenarios() {
 
 # ========== Optional Scenarios ==========
 # Available scenarios:
-# 1) Iperf R2lab scenario without interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
-# 2) Parallel Iperf Test without interference. Will run one the first 4 UEs, assumed to be already connected to the network (only if R2Lab platform is used, and at least 4 UEs are selected).
-# 3) Iperf RFSIM scenario without interference. Will run on 2 OAI-NR UEs simulated on RFSIM (only if RFSIM platform is used and RAN is OAI).
-# 4) Iperf R2lab scenario with interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
+# - Iperf R2lab scenario without interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
+# - Iperf RFSIM scenario without interference. Will run on 2 OAI-NR UEs simulated on RFSIM (only if RFSIM platform is used and RAN is OAI).
+# - Iperf R2lab scenario with interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
 
 # Based on the selected variables, ask the user if they want to run one of the optional scenarios after deployment. (Only one scenario can be selected).
 
@@ -397,9 +396,6 @@ if [[ "$scenario_choice" =~ ^[Yy]$ ]]; then
   if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
     options+=("Iperf R2lab scenario without interference")
   fi
-#  if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 4 ]]; then
-#    options+=("Parallel Iperf Test (without interference)")
-#  fi
   if [[ "$platform" == "rfsim" ]]; then
     options+=("Iperf RFSIM scenario without interference")
   fi
@@ -585,13 +581,11 @@ if [[ "$run_iperf_test" == true ]]; then
     "Iperf R2lab scenario without interference")
       echo "Will run iperf in a sequential way on ${R2LAB_UES[0]} for 30 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
       ;;
-    "Parallel Iperf Test (without interference)")
-      echo "Will run a bidirectional iperf on ${R2LAB_UES[0]}, ${R2LAB_UES[1]}, ${R2LAB_UES[2]} and ${R2LAB_UES[3]} respectively for 5 minutes each, with an in-between wait time of 100 seconds (10 minutes in total for the scenario)"
-      ;;
     "Iperf RFSIM scenario without interference")
       echo "Will run iperf sequentially OAI-NR-UE1, OAI-NR-UE2 and OAI-NR-UE3 for 30 seconds each with an in-between wait time of 5 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
       ;;
   esac
+  echo "iperf server will run on the bare-metal ${iperf_server_node} server."
 fi
 
 echo "============================="
