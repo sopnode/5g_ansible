@@ -99,9 +99,9 @@ parse_args() {
 
 init_defaults_and_banner() {
 
-RED="\033[0;31m"
-GREEN="\033[0;32m"
-YELLOW="\033[1;33m"
+#RED="\033[0;31m"
+#GREEN="\033[0;32m"
+#YELLOW="\033[1;33m"
 CYAN="\033[1;36m"
 RESET="\033[0m"
 
@@ -124,6 +124,7 @@ PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
 NAME_INVENTORY="${NAME_INVENTORY:-$DEFAULT_INVENTORY}"
 INVENTORY="${INVENTORY:-./inventory/${NAME_INVENTORY}/hosts.ini}"
 
+DISTINCT_IPERF_SERVER=false
 DIR_LOGS="LOGS"
 mkdir -p ${DIR_LOGS}
 
@@ -378,10 +379,9 @@ optional_scenarios() {
 
 # ========== Optional Scenarios ==========
 # Available scenarios:
-# 1) Iperf R2lab scenario without interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
-# 2) Parallel Iperf Test without interference. Will run one the first 4 UEs, assumed to be already connected to the network (only if R2Lab platform is used, and at least 4 UEs are selected).
-# 3) Iperf RFSIM scenario without interference. Will run on 2 OAI-NR UEs simulated on RFSIM (only if RFSIM platform is used and RAN is OAI).
-# 4) Iperf R2lab scenario with interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
+# - Iperf R2lab scenario without interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
+# - Iperf RFSIM scenario without interference. Will run on 2 OAI-NR UEs simulated on RFSIM (only if RFSIM platform is used and RAN is OAI).
+# - Iperf R2lab scenario with interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
 
 # Based on the selected variables, ask the user if they want to run one of the optional scenarios after deployment. (Only one scenario can be selected).
 
@@ -396,10 +396,7 @@ if [[ "$scenario_choice" =~ ^[Yy]$ ]]; then
   if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
     options+=("Iperf R2lab scenario without interference")
   fi
-#  if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 4 ]]; then
-#    options+=("Parallel Iperf Test (without interference)")
-#  fi
-  if [[ "$platform" == "rfsim" && ( "$ran" == "oai" || "$ran" == "srsRAN" || "$ran" == "ueransim" ) ]]; then
+  if [[ "$platform" == "rfsim" ]]; then
     options+=("Iperf RFSIM scenario without interference")
   fi
   if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
@@ -410,7 +407,7 @@ if [[ "$scenario_choice" =~ ^[Yy]$ ]]; then
     echo "$((i+1))) ${options[$i]}"
   done
 
-  read -rp "Enter your choice: " scenario_choice
+  read -rp "Confirm your choice: " scenario_choice
 
   if [[ "$scenario_choice" =~ ^[0-9]+$ ]] &&
     ((scenario_choice >= 1 && scenario_choice <= ${#options[@]})); then
@@ -420,15 +417,47 @@ if [[ "$scenario_choice" =~ ^[Yy]$ ]]; then
   else
     echo "❌ Invalid choice"
   fi
+ 
 fi
 
 # ========== Iperf Tests Setup (without interference) ==========
-# For the normal iperf tests without interference, we do not need any additional user inputs, since the UEs are assumed to be already connected to the network after deployment.
-# We sill use the run_iperf_test.sh script to run the selected iperf test scenario after deployment.
+
+# Simply use the run_iperf_test.sh script to run the selected iperf test scenario after deployment.
+
 run_iperf_test=false
-if [[ "$run_scenario" == true && ( "$scenario" == "Iperf R2lab scenario without interference" || "$scenario" == "Parallel Iperf Test (without interference)" || "$scenario" == "Iperf RFSIM scenario without interference" ) ]]; then
-  run_iperf_test=true
+if [[ "$run_scenario" == true && ( "$scenario" == "Iperf R2lab scenario without interference" || "$scenario" == "Iperf RFSIM scenario without interference" ) ]]; then
+    run_iperf_test=true
+    DEFAULT_IPERF_SERVER_NODE=${core_node}
+    echo "By default, iperf will run between UEs and the bare-metal server hosting 5G core network pods, i.e., ${DEFAULT_IPERF_SERVER_NODE}"
+    echo ""
+    echo "Select the target node to deploy iperf servers : by default, ${DEFAULT_IPERF_SERVER_NODE}:"
+    echo "1) sopnode-f1"
+    echo "2) sopnode-f2"
+    echo "3) sopnode-f3"
+    echo "4) sopnode-w3"
+    read -rp "Enter choice [1-4]: " iperf_server_choice
+    if [[ -z "${iperf_server_choice}" ]]; then
+	iperf_server_node=${DEFAULT_IPERF_SERVER_NODE}
+    else
+      case "${iperf_server_choice}" in
+        1) iperf_server_node="sopnode-f1" ;;
+        2) iperf_server_node="sopnode-f2" ;;
+        3) iperf_server_node="sopnode-f3" ;;
+        4) iperf_server_node="sopnode-w3" ;;
+        *) echo "❌ Invalid iperf target server choice"; exit 1 ;;
+      esac
+    fi
 fi
+echo "iperf server node: ${iperf_server_node}"
+case "${iperf_server_node}" in
+    "${core_node}"|"${ran_node}"|"${monitor_node}")
+	echo "iperf server already part of inventory, no need to add it."
+	;;
+    *)
+	DISTINCT_IPERF_SERVER=true
+	echo "iperf server ${iperf_server_node} will be added in the inventory."
+	;;
+esac
 }
 
 ############################
@@ -552,13 +581,11 @@ if [[ "$run_iperf_test" == true ]]; then
     "Iperf R2lab scenario without interference")
       echo "Will run iperf in a sequential way on ${R2LAB_UES[0]} for 30 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
       ;;
-    "Parallel Iperf Test (without interference)")
-      echo "Will run a bidirectional iperf on ${R2LAB_UES[0]}, ${R2LAB_UES[1]}, ${R2LAB_UES[2]} and ${R2LAB_UES[3]} respectively for 5 minutes each, with an in-between wait time of 100 seconds (10 minutes in total for the scenario)"
-      ;;
     "Iperf RFSIM scenario without interference")
       echo "Will run iperf sequentially OAI-NR-UE1, OAI-NR-UE2 and OAI-NR-UE3 for 30 seconds each with an in-between wait time of 5 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
       ;;
   esac
+  echo "iperf server will run on the bare-metal ${iperf_server_node} server."
 fi
 
 echo "============================="
@@ -658,9 +685,17 @@ ${ran_node} ansible_user=root nic_interface=$(get_nic "${ran_node}") ip=172.28.2
 [monitor_node]
 EOF
 
-if [[ "$monitoring_enabled" == true ]]; then
+if [[ "${monitoring_enabled}" == true ]]; then
     cat >> "$INVENTORY" <<EOF
 ${monitor_node} ansible_user=root nic_interface=$(get_nic "${monitor_node}") ip=172.28.2.$(get_ip_suffix "${monitor_node}") storage=$(get_storage "${monitor_node}")
+EOF
+fi
+
+if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
+    cat >> "$INVENTORY" <<EOF
+
+[iperf_server_node]
+${iperf_server_node} ansible_user=root nic_interface=$(get_nic "${iperf_server_node}") ip=172.28.2.$(get_ip_suffix "${iperf_server_node}") storage=$(get_storage "${iperf_server_node}")
 EOF
 fi
 
@@ -786,16 +821,18 @@ EOF
 if [[ "$monitoring_enabled" == true ]]; then
   echo "monitor_node" >> "$INVENTORY"
 fi
+if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
+  echo "iperf_server_node" >> "$INVENTORY"
+fi
 
 cat >> "$INVENTORY" <<EOF
 
 [k8s_workers:children]
 ran_node
 EOF
-if [[ "$monitoring_enabled" == true ]]; then
+if [[ "${monitoring_enabled}" == true ]]; then
   echo "monitor_node" >> "$INVENTORY"
 fi
-
 
 # Append useful variables
 cat >> "$INVENTORY" <<EOF
@@ -809,11 +846,19 @@ ran="$ran"
 core_node_name="${core_node}"
 ran_node_name="${ran_node}"
 EOF
+
 if [[ "$monitoring_enabled" == true ]]; then
     cat >> "$INVENTORY" <<EOF
 monitor_node_name="${monitor_node}"
 EOF
 fi
+
+if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
+    cat >> "$INVENTORY" <<EOF
+iperf_server_node_name="${iperf_server_node}"
+EOF
+fi
+
 cat >> "$INVENTORY" <<EOF
 faraday_node_name="faraday.inria.fr"
 
@@ -853,6 +898,9 @@ reserve_nodes() {
   nodes_to_reserve=("${core_node}" "${ran_node}")
   if [[ "$monitoring_enabled" == true ]]; then
     nodes_to_reserve+=("${monitor_node}")
+  fi
+  if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
+    nodes_to_reserve+=("${iperf_server_node}")
   fi
   # Remove duplicates
   nodes_to_reserve=($(printf "%s\n" "${nodes_to_reserve[@]}" | sort -u))

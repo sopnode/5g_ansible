@@ -1,4 +1,5 @@
 ---
+
 - hosts: all
   gather_facts: true
   tasks:
@@ -9,13 +10,22 @@
 # Set global target_server variable (default: core_node)
 # Can be overridden with: ansible-playbook ... -e "target_server_host=hostname"
 # ============================================================
+
 - name: Set target server configuration
   hosts: localhost
   gather_facts: false
   tasks:
     - name: Determine target server host
       set_fact:
-        target_server_host: "{{ target_server_host | default(groups['core_node'][0]) }}"
+        target_server_host: >-
+          {{
+            target_server_host
+            | default(
+                (groups['iperf_server_node'] | default([]) | first),
+                true
+              )
+            | default(groups['core_node'][0])
+          }}
         cacheable: yes
       run_once: true
 
