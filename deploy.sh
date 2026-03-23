@@ -455,14 +455,13 @@ fi
 echo "iperf server node: ${iperf_server_node}"
 case "${iperf_server_node}" in
     "${core_node}"|"${ran_node}"|"${monitor_node}")
-	echo "iperf server already part of inventory"
+	echo "iperf server already part of inventory, no need to add it."
 	;;
     *)
 	DISTINCT_IPERF_SERVER=true
-	echo "iperf server should be added in inventory"
+	echo "iperf server ${iperf_server_node} will be added in the inventory."
 	;;
 esac
-exit 1
 }
 
 ############################
