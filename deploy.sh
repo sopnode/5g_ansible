@@ -124,6 +124,7 @@ PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
 NAME_INVENTORY="${NAME_INVENTORY:-$DEFAULT_INVENTORY}"
 INVENTORY="${INVENTORY:-./inventory/${NAME_INVENTORY}/hosts.ini}"
 
+DISTINCT_IPERF_SERVER=false
 DIR_LOGS="LOGS"
 mkdir -p ${DIR_LOGS}
 
@@ -430,34 +431,35 @@ fi
 run_iperf_test=false
 if [[ "$run_scenario" == true && ( "$scenario" == "Iperf R2lab scenario without interference" || "$scenario" == "Iperf RFSIM scenario without interference" ) ]]; then
     run_iperf_test=true
-    DEFAULT_TARGET_SERVER_NODE=${core_node}
-    echo "By default, iperf will run between UEs and the bare-metal server hosting 5G core network pods, i.e., ${DEFAULT_TARGET_SERVER_NODE}"
+    DEFAULT_IPERF_SERVER_NODE=${core_node}
+    echo "By default, iperf will run between UEs and the bare-metal server hosting 5G core network pods, i.e., ${DEFAULT_IPERF_SERVER_NODE}"
     echo ""
-    echo "Select the target node to deploy iperf servers : by default, ${DEFAULT_TARGET_SERVER_NODE}:"
+    echo "Select the target node to deploy iperf servers : by default, ${DEFAULT_IPERF_SERVER_NODE}:"
     echo "1) sopnode-f1"
     echo "2) sopnode-f2"
     echo "3) sopnode-f3"
     echo "4) sopnode-w3"
     read -rp "Enter choice [1-4]: " iperf_server_choice
     if [[ -z "${iperf_server_choice}" ]]; then
-	target_server_node=${DEFAULT_TARGET_SERVER_NODE}
+	iperf_server_node=${DEFAULT_IPERF_SERVER_NODE}
     else
       case "${iperf_server_choice}" in
-        1) target_server_node="sopnode-f1" ;;
-        2) target_server_node="sopnode-f2" ;;
-        3) target_server_node="sopnode-f3" ;;
-        4) target_server_node="sopnode-w3" ;;
+        1) iperf_server_node="sopnode-f1" ;;
+        2) iperf_server_node="sopnode-f2" ;;
+        3) iperf_server_node="sopnode-f3" ;;
+        4) iperf_server_node="sopnode-w3" ;;
         *) echo "❌ Invalid iperf target server choice"; exit 1 ;;
       esac
     fi
 fi
-echo "target iperf server node: ${target_server_node}"
-case "${target_server_node}" in
+echo "iperf server node: ${iperf_server_node}"
+case "${iperf_server_node}" in
     "${core_node}"|"${ran_node}"|"${monitor_node}")
-	echo "target server already part of inventory"
+	echo "iperf server already part of inventory"
 	;;
     *)
-	echo "target server should be added"
+	DISTINCT_IPERF_SERVER=true
+	echo "iperf server should be added in inventory"
 	;;
 esac
 exit 1
@@ -690,9 +692,17 @@ ${ran_node} ansible_user=root nic_interface=$(get_nic "${ran_node}") ip=172.28.2
 [monitor_node]
 EOF
 
-if [[ "$monitoring_enabled" == true ]]; then
+if [[ "${monitoring_enabled}" == true ]]; then
     cat >> "$INVENTORY" <<EOF
 ${monitor_node} ansible_user=root nic_interface=$(get_nic "${monitor_node}") ip=172.28.2.$(get_ip_suffix "${monitor_node}") storage=$(get_storage "${monitor_node}")
+EOF
+fi
+
+if [[ "$DISTINCT_IPERF_SERVER" == true ]]; then
+    cat >> "$INVENTORY" <<EOF
+
+[iperf_server_node]
+${iperf_server_node} ansible_user=root nic_interface=$(get_nic "${iperf_server_node}") ip=172.28.2.$(get_ip_suffix "${iperf_server_node}") storage=$(get_storage "${iperf_server_node}")
 EOF
 fi
 
@@ -818,16 +828,22 @@ EOF
 if [[ "$monitoring_enabled" == true ]]; then
   echo "monitor_node" >> "$INVENTORY"
 fi
+if [[ "$DISTINCT_IP_SERVER" == true ]]; then
+  echo "iperf_server_node" >> "$INVENTORY"
+fi
 
 cat >> "$INVENTORY" <<EOF
 
 [k8s_workers:children]
 ran_node
 EOF
-if [[ "$monitoring_enabled" == true ]]; then
+if [[ "${monitoring_enabled}" == true ]]; then
   echo "monitor_node" >> "$INVENTORY"
 fi
 
+if [[ "$DISTINCT_IP_SERVER" == true ]]; then
+  echo "iperf_server_node" >> "$INVENTORY"
+fi
 
 # Append useful variables
 cat >> "$INVENTORY" <<EOF
@@ -841,11 +857,19 @@ ran="$ran"
 core_node_name="${core_node}"
 ran_node_name="${ran_node}"
 EOF
+
 if [[ "$monitoring_enabled" == true ]]; then
     cat >> "$INVENTORY" <<EOF
 monitor_node_name="${monitor_node}"
 EOF
 fi
+
+if [[ "$DISTINCT_IP_SERVER" == true ]]; then
+    cat >> "$INVENTORY" <<EOF
+iperf_server_node_name="${iperf_server_node}"
+EOF
+fi
+
 cat >> "$INVENTORY" <<EOF
 faraday_node_name="faraday.inria.fr"
 
@@ -885,6 +909,9 @@ reserve_nodes() {
   nodes_to_reserve=("${core_node}" "${ran_node}")
   if [[ "$monitoring_enabled" == true ]]; then
     nodes_to_reserve+=("${monitor_node}")
+  fi
+  if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
+    nodes_to_reserve+=("${iperf_server_node}")
   fi
   # Remove duplicates
   nodes_to_reserve=($(printf "%s\n" "${nodes_to_reserve[@]}" | sort -u))
