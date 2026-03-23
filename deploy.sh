@@ -827,7 +827,7 @@ EOF
 if [[ "$monitoring_enabled" == true ]]; then
   echo "monitor_node" >> "$INVENTORY"
 fi
-if [[ "${DISTINCT_IP_SERVER}" == true ]]; then
+if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
   echo "iperf_server_node" >> "$INVENTORY"
 fi
 
@@ -859,7 +859,7 @@ monitor_node_name="${monitor_node}"
 EOF
 fi
 
-if [[ "${DISTINCT_IP_SERVER}" == true ]]; then
+if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
     cat >> "$INVENTORY" <<EOF
 iperf_server_node_name="${iperf_server_node}"
 EOF
