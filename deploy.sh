@@ -442,7 +442,7 @@ if [[ "$run_scenario" == true && ( "$scenario" == "Iperf R2lab scenario without 
     if [[ -z "${iperf_server_choice}" ]]; then
 	target_server_node=${DEFAULT_TARGET_SERVER_NODE}
     else
-      case "${monitor_node_choice}" in
+      case "${iperf_server_choice}" in
         1) target_server_node="sopnode-f1" ;;
         2) target_server_node="sopnode-f2" ;;
         3) target_server_node="sopnode-f3" ;;
