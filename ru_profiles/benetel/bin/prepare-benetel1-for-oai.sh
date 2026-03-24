@@ -3,7 +3,7 @@
 # at /usr/local/bin location
 
 CONFIG_DIR="/etc/5g_ansible/ru_profiles/benetel/config"
-CONFIG_FILE="benetel1-ru_config-n78D64G4U.cfg"
+CONFIG_FILE="benetel1-oai-ru_config-n78D64G4U.cfg"
 CONFIG="${CONFIG_DIR}"/"${CONFIG_FILE}"
 
 RU_IP="192.168.233.101"
