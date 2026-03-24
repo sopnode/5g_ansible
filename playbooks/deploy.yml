@@ -185,19 +185,6 @@
         branch: with_data_persistance_for_sopnodes
       when: monitoring_enabled and ran == 'oai'
 
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
-
 - name: Add NoSchedule taint on Monitor node (core/ran pods should not run on monitor_node)
   hosts: core_node
   become: true
@@ -206,19 +193,6 @@
       vars:
         target_node: "{{ monitor_node_name }}"
       when: monitoring_enabled and core_node_name != ran_node_name and core_node_name != monitor_node_name | default('')
-
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
 
 - name: SRIOV setup
   hosts: ran_node
@@ -241,19 +215,6 @@
   roles:
     - role: setup/gre_tunnel
       when: bridge_enabled
-
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
 
 - name: Deploy Open5GS CN
   hosts: core_node
@@ -296,6 +257,19 @@
       when: core == 'oai'
     - role: 5g/oai/ran
       when: ran == 'oai'
+
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
 
 - name: Deploy srsRAN
   hosts: ran_node
