@@ -61,24 +61,24 @@
   loop_control:
     label: "{{ item }}"
 
-- name: Configure rmem buffers on qhat UEs
-  shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 root@{{ item }} '
-      echo "Current values:";
-      sysctl net.core.rmem_max;
-      sysctl net.core.rmem_default;
-
-      sysctl -w net.core.rmem_max=62500000;
-      sysctl -w net.core.rmem_default=62500000;
-
-      echo "New values:";
-      sysctl net.core.rmem_max;
-      sysctl net.core.rmem_default;
-    '
-  delegate_to: faraday.inria.fr
-  loop: "{{ groups['qhats'] }}"
-  loop_control:
-    label: "{{ item }}"
+#- name: Configure rmem buffers on qhat UEs
+#  shell: |
+#    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 root@{{ item }} '
+#      echo "Current values:";
+#      sysctl net.core.rmem_max;
+#      sysctl net.core.rmem_default;
+#
+#      sysctl -w net.core.rmem_max=62500000;
+#      sysctl -w net.core.rmem_default=62500000;
+#
+#      echo "New values:";
+#      sysctl net.core.rmem_max;
+#      sysctl net.core.rmem_default;
+#    '
+#  delegate_to: faraday.inria.fr
+#  loop: "{{ groups['qhats'] }}"
+#  loop_control:
+#    label: "{{ item }}"
     
 - name: Init UEs via jump host using 5G profile from YAML
   vars:
