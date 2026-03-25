@@ -59,7 +59,7 @@
     kind: Deployment
     namespace: cluster-network-addons
     name: cluster-network-addons-operator
-    merge_type: strategic
+    merge_type: strategic-merge
     definition:
       spec:
         template:
