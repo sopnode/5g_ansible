@@ -4,9 +4,6 @@ set -e
 DEFAULT_PROFILE_5G="default"
 DEFAULT_INVENTORY="default"
 
-PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
-INVENTORY="${INVENTORY:-./inventory/${DEFAULT_INVENTORY}/hosts.ini}"
-
 IPERF_PLAYBOOK="playbooks/run_scenario_iperf.yml"
 SETUP_IPERF_PLAYBOOK="playbooks/setup_iperf.yml"
 INTERFERENCE_PLAYBOOK="playbooks/run_scenario_interference.yml"
@@ -51,6 +48,10 @@ while [[ $# -gt 0 ]]; do
             INVENTORY="./inventory/${1#*=}/hosts.ini"
             shift
             ;;
+        -p|--profile5g)
+            PROFILE_5G="$2"
+            shift 2
+            ;;
         --dry-run)
             DRY_RUN=true
             shift
@@ -79,6 +80,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
+INVENTORY="${INVENTORY:-./inventory/${DEFAULT_INVENTORY}/hosts.ini}"
 
 # Validate inventory AFTER parsing
 if [[ ! -f "$INVENTORY" ]]; then
