@@ -4,9 +4,9 @@ plmn:
   tac: "1"
 
 dnns:
-  - name: streaming
-    pdu_type: IPV4
   - name: internet
+    pdu_type: IPV4
+  - name: streaming
     pdu_type: IPV4
   - name: ims
     pdu_type: IPV4V6
@@ -15,7 +15,7 @@ slices:
   - name: slice1
     dnn: internet
     sst: "1"
-    sd: "000001"
+    sd: "EMPTY"
     qos:
       five_qi: "9"
       arp:
@@ -31,7 +31,7 @@ slices:
   - name: slice2
     dnn: streaming
     sst: "1"
-    sd: "000002"
+    sd: "100000"
     qos:
       five_qi: "5"
       arp:
@@ -40,8 +40,8 @@ slices:
         preempt_vuln: "PREEMPTABLE"
       priority_level: "1"
     bandwidth:
-      uplink: "100Mbps"
-      downlink: "200Mbps"
+      uplink: "30Mbps"
+      downlink: "50Mbps"
     ip_prefix: "14.1.1"
 
 security:
@@ -49,12 +49,18 @@ security:
   opc: "C42449363BBAD02B66D16BC975D77CC1"
 
 ues:
+  phone01:
+    imsi_suffix: "0000000001"
+    slice: slice1
+  phone02:
+    imsi_suffix: "0000000002"
+    slice: slice1
   qhat01:
     imsi_suffix: "0000000006"
     slice: slice1
   qhat02:
     imsi_suffix: "0000000007"
-    slice: slice2
+    slice: slice1
   qhat03:
     imsi_suffix: "0000000008"
     slice: slice1
@@ -76,13 +82,13 @@ ues:
   qhat23:
     imsi_suffix: "0000000014"
     slice: slice1
-  ue01:
-    imsi_suffix: "0000001121"
+  uesim01: # used for RFSIM
+    imsi_suffix: "0000001121"  
     slice: slice1
-  ue02:
+  uesim02: # used for RFSIM
     imsi_suffix: "0000001122"
     slice: slice2
-  ue03:
+  uesim03: # used for RFSIM
     imsi_suffix: "0000001123"
     slice: slice1
 
