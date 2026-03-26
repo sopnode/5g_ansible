@@ -9,6 +9,42 @@
     - name: Normalize booleans at playbook start
       import_tasks: ../tasks/reload_booleans.yml
 
+# ============================================================
+# Set global target_server variable (default: iperf_server_node)
+# Can be overridden with: ansible-playbook ... -e "target_server_host=hostname"
+# ============================================================
+- name: Set target server configuration
+  hosts: localhost
+  gather_facts: false
+  run_once: true
+  tasks:
+    - name: Determine target server host
+      set_fact:
+        target_server_host: >-
+          {{
+            target_server_host
+            | default(
+                (groups['iperf_server_node'] | default([]) | first),
+                true
+              )
+            | default(groups['core_node'][0])
+          }}
+        cacheable: yes
+      run_once: true
+    
+    - name: Get target server IP
+      set_fact:
+        target_server_ip: "{{ hostvars[target_server_host]['ip'] }}"
+      run_once: true
+    
+    - name: Display target server configuration
+      debug:
+        msg: |
+          ✓ Target Server Configuration:
+            Host: {{ target_server_host }}
+            IP: {{ target_server_ip }}
+      run_once: true
+
 
 - name: Main Test Sequence on Faraday
   hosts: faraday
@@ -17,6 +53,9 @@
   vars:
     fiveg_profile: default
     duration: 12
+    target_server_host: "{{ hostvars['localhost'].get('target_server_host', groups['iperf_server_node'][0]) }}"
+    target_server_ip: "{{ hostvars[target_server_host]['ip'] }}"
+
     core_ip: "{{ hostvars[groups['core_node'][0]]['ip'] | default(hostvars[groups['core_node'][0]]['ansible_host']) }}"
 
   tasks:
@@ -66,32 +105,34 @@
       delay: 2
       changed_when: false
 
-    - name: Ensure route to core exists
-      shell: ssh root@{{ current_ue }} "ip route get {{ core_ip }}"
+    - name: Ensure route to target_server_host exists
+      shell: ssh root@{{ current_ue }} "ip route get {{ target_server_ip }}"
       register: route_check
       changed_when: false
       ignore_errors: true
 
     - name: Add route if missing
-      shell: ssh root@{{ current_ue }} "ip route add {{ core_ip }} dev wwan0"
+      shell: ssh root@{{ current_ue }} "ip route add {{ target_server_ip }} dev wwan0"
       when: '"dev wwan0" not in route_check.stdout'
       ignore_errors: true
 
     # ---------------- IPERF SERVER ----------------
-    - name: Run iperf server on core
-      delegate_to: "{{ groups['core_node'][0] }}"
+    - name: Run iperf server on target_server_host
+      delegate_to: "{{ target_server_host }}"
       become: true
       block:
         - include_role:
             name: scenarios/iperf_server
           vars:
+	    target_server_host: "{{ hostvars['localhost'].get('target_server_host', groups['iperf_server_node'][0]) }}"
+            target_server_ip: "{{ hostvars[target_server_host]['ip'] }}"
             nb_ues: "1"
 
     # ---------------- START IPERF ----------------
     - name: Start iperf
       shell: >
         ssh root@{{ current_ue }}
-        'iperf3 -B {{ ue_ip_cmd.stdout }} -c {{ core_ip }} --bidir -t 300 -J > /tmp/iperf_test.json'
+        'iperf3 -B {{ ue_ip_cmd.stdout }} -c {{ target_server_ip }} --bidir -t 300 -J > /tmp/iperf_test.json'
       async: 1800
       poll: 0
       register: iperf_job
