@@ -8,18 +8,18 @@
   shell: rhubarbe load -t 600 -i gnuradio {{ fit_number }}
   delegate_to: faraday.inria.fr
 
-#- name: Wait for the node {{ fit_node }} to be SSH accessible
-#  wait_for:
-#    host: "{{ fit_node }}"
-#    port: 22
-#    timeout: 60
-#    sleep: 5
-#  delegate_to: faraday.inria.fr
+- name: Wait for the node {{ fit_node }} to be SSH accessible
+  wait_for:
+    host: "{{ fit_node }}"
+    port: 22
+    timeout: 90
+    sleep: 5
+  delegate_to: faraday.inria.fr
 
 # rhubarbe wait has issues and fails now with non-zero return code now...
-- name: Wait for the node to be ssh ready
-  shell: rhubarbe wait {{ fit_number }}
-  delegate_to: faraday.inria.fr
+#- name: Wait for the node to be ssh ready
+#  shell: rhubarbe wait {{ fit_number }}
+#  delegate_to: faraday.inria.fr
 
 - name: Turn ON USRP {{ fit_usrp }} on node {{ fit_node }}
   shell: rhubarbe usrpon {{ fit_number }}
