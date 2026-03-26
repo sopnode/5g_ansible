@@ -39,10 +39,11 @@
         cacheable: yes
 
     - debug:
-        msg:
-          - "Target host = {{ target_server_host }}"
-          - "Target IP   = {{ target_server_ip }}"
-	  
+        msg: |
+          Target Server Configuration:
+          Host: "{{ target_server_host }}"
+          IP: "{{ target_server_ip }}"
+
 - name: Main Test Sequence on Faraday
   hosts: faraday
   gather_facts: false
