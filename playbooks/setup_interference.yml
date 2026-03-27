@@ -4,18 +4,32 @@
 #
 - name: Setup first fit node on R2Lab
   hosts: faraday
-  vars:
-    fit_node: "{{ groups['fit_nodes'][0] }}"
-    fit_number: "{{ hostvars[fit_node].fit_number }}"
-    fit_usrp: "{{ hostvars[fit_node].fit_usrp }}"
+
+  pre_tasks:
+
+    - name: Check that fit_nodes group exists and is not empty
+      fail:
+        msg: "Group 'fit_nodes' is not defined or empty in inventory"
+      when: groups['fit_nodes'] is not defined or groups['fit_nodes'] | length == 0
+
+    - name: Set fit_node safely
+      set_fact:
+        fit_node: "{{ groups['fit_nodes'][0] }}"
+
+    - name: Check required hostvars for fit_node
+      fail:
+        msg: "Missing fit_number or fit_usrp for {{ fit_node }} in inventory"
+      when:
+        - hostvars[fit_node].fit_number is not defined
+        - hostvars[fit_node].fit_usrp is not defined
+
+    - name: Set fit variables
+      set_fact:
+        fit_number: "{{ hostvars[fit_node].fit_number }}"
+        fit_usrp: "{{ hostvars[fit_node].fit_usrp }}"
+
   roles:
     - role: scenarios/interference/setup
-
-- name: Setup first fit node for spectrum visualization (uhd_fft)
-  hosts: faraday
-  vars:
-    fit_node: "{{ groups['fit_nodes'][0] }}"
-  roles:
     - role: scenarios/interference/watch
 
 #
