@@ -26,7 +26,7 @@
       -f '{{ hostvars[groups['faraday'][0]].freq }}'
       -g '{{ hostvars[groups['faraday'][0]].gain }}'
       -s '{{ hostvars[groups['faraday'][0]].noise_bandwidth }}'
-      {{ usrp_args }}"
+      {{ usrp_args }} < /dev/null"
   when: node == "n300" or node == "n320"
 
 - name: Show uhd_siggen command that will be executed
@@ -37,13 +37,13 @@
   shell: "{{ noise_cmd }}"
   delegate_to: faraday.inria.fr
   ignore_errors: true
-  no_log: true
+  #no_log: true
   when: node != "n300" and node != "n320"
 
 - name: Start Gaussian Noise Emission from {{ target_server_host }}
   shell: "{{ noise_cmd }}"
   delegate_to: "{{ target_server_host }}"
   ignore_errors: true
-  no_log: true
+  #no_log: true
   when: node == "n300" or node == "n320"
 
