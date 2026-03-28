@@ -72,9 +72,9 @@
       debug:
         msg: "Interference node = {{ interference_node }} (type={{ hostvars[faraday_host].interference_usrp }})"
 
-    - name: Install UHD + GNU Radio on target_server_host for n300/n320
+    - name: Install UHD on target_server_host for n300/n320
       include_role:
-        name: setup/uhd-gnuradio
+        name: setup/uhd
         apply:
           delegate_to: "{{ target_server_host }}"
           become: true

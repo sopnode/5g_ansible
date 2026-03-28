@@ -1,0 +1,217 @@
+---
+- name: Check if UHD is installed
+  shell: |
+    export PATH={{ install_prefix }}/bin:$PATH
+    export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+    uhd_config_info --version || echo "none"
+  args:
+    executable: /bin/bash
+  register: uhd_check
+  changed_when: false
+
+- name: Check if GNU Radio is installed
+  shell: |
+    export PATH={{ install_prefix }}/bin:$PATH
+    export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+    gnuradio-config-info --version || echo "none"
+  args:
+    executable: /bin/bash
+  register: gnuradio_check
+  changed_when: false
+
+- name: Display installed UHD/GNU Radio versions
+  debug:
+    msg: |
+      UHD installed: {{ uhd_check.stdout | default('none') }}
+      GNU Radio installed: {{ gnuradio_check.stdout | default('none') }}
+
+# Build UHD + GNU Radio only if versions are missing
+- name: Build UHD + GNU Radio only if target versions not installed
+  block:
+
+    # --- Required packages for minimal GRC + Qt build ---
+    - name: Ensure required packages are installed (Ubuntu/Debian)
+      apt:
+        name:
+          - build-essential
+          - cmake
+          - git
+
+          # Python + minimal dependencies
+          - python3-dev
+          - python3-numpy
+          - python3-mako
+          - python3-yaml
+          - python3-click
+          - python3-click-plugins
+          - python3-zmq
+          - python3-scipy
+          - python3-packaging
+          - python3-jsonschema
+          - python3-pybind11
+
+          # GUI / Qt for GRC
+          - python3-pyqt5
+          - pyqt5-dev-tools
+          - qtbase5-dev
+          - libqt5opengl5-dev
+          - libqt5svg5-dev
+          - libqwt-qt5-dev
+          - python3-gi
+          - python3-gi-cairo
+          - gir1.2-gtk-3.0
+
+          # Core libraries
+          - libboost-all-dev
+          - libgmp-dev
+          - libfftw3-dev
+          - libusb-1.0-0-dev
+
+          # SDR
+          - libuhd-dev
+
+          # Critical runtime dependencies
+          - libvolk2-dev
+          - libspdlog-dev
+
+          # Optional ControlPort
+          - libthrift-dev
+          - thrift-compiler
+
+        state: present
+        update_cache: yes
+
+    # --- Clean old UHD/GNU Radio builds ---
+    - name: Clean previous UHD build
+      file:
+        path: "{{ uhd_src_dir }}"
+        state: absent
+
+    - name: Clean previous GNU Radio build
+      file:
+        path: "{{ gnuradio_src_dir }}"
+        state: absent
+
+    # --- Clone UHD ---
+    - name: Clone UHD sources
+      git:
+        repo: "https://github.com/EttusResearch/uhd.git"
+        version: "{{ uhd_version }}"
+        dest: "{{ uhd_src_dir }}"
+        depth: 1
+        force: yes
+
+    # --- Build UHD ---
+    - name: Build and install UHD
+      shell: |
+        set -e
+        mkdir -p {{ uhd_src_dir }}/host/build
+        cd {{ uhd_src_dir }}/host/build
+        cmake ../ \
+          -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
+          -DENABLE_PYTHON_API=ON \
+          -DENABLE_TESTS=OFF
+        make -j{{ make_jobs }}
+        make install
+        ldconfig
+      args:
+        executable: /bin/bash
+
+    # --- Verify UHD installation ---
+    - name: Verify UHD installation
+      shell: |
+        export PATH={{ install_prefix }}/bin:$PATH
+        export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+        uhd_config_info --version
+      args:
+        executable: /bin/bash
+      register: uhd_verify
+      failed_when: uhd_verify.rc != 0
+
+    - name: Display UHD version
+      debug:
+        msg: "UHD installed: {{ uhd_verify.stdout }}"
+
+    # --- Clone GNU Radio ---
+    - name: Clone GNU Radio sources
+      git:
+        repo: "https://github.com/gnuradio/gnuradio.git"
+        version: "v{{ gnuradio_version }}"
+        dest: "{{ gnuradio_src_dir }}"
+        depth: 1
+        force: yes
+
+    # --- Build GNU Radio minimal + GRC + Qt ---
+    - name: Build and install GNU Radio
+      shell: |
+        set -e
+        mkdir -p {{ gnuradio_src_dir }}/build
+        cd {{ gnuradio_src_dir }}/build
+        cmake ../ \
+          -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
+          -DENABLE_DEFAULT=OFF \
+          -DENABLE_GNURADIO_RUNTIME=ON \
+          -DENABLE_PYTHON=ON \
+          -DENABLE_GRC=ON \
+          -DENABLE_GR_QTGUI=ON \
+          -DENABLE_GR_BLOCKS=ON \
+          -DENABLE_GR_ANALOG=ON \
+          -DENABLE_GR_FFT=ON \
+          -DENABLE_GR_FILTER=ON \
+          -DENABLE_GR_DIGITAL=ON \
+          -DENABLE_GR_UHD=ON \
+          -DENABLE_TESTING=OFF \
+          -DENABLE_DOXYGEN=OFF
+        make -j{{ make_jobs }}
+        make install
+        ldconfig
+      args:
+        executable: /bin/bash
+      register: gnuradio_build
+      failed_when: gnuradio_build.rc != 0
+
+    # --- Library cache & PATH ---
+    - name: Update library cache
+      shell: ldconfig
+      args:
+        executable: /bin/bash
+
+    - name: Ensure /usr/local/bin is in PATH
+      copy:
+        dest: /etc/profile.d/usr_local_bin.sh
+        content: 'export PATH={{ install_prefix }}/bin:$PATH'
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Update LD_LIBRARY_PATH
+      copy:
+        dest: /etc/ld.so.conf.d/usr_local.conf
+        content: '{{ install_prefix }}/lib'
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reload library cache
+      shell: ldconfig
+      args:
+        executable: /bin/bash
+
+    # --- Verify GNU Radio installation ---
+    - name: Verify GNU Radio installation
+      shell: |
+        export PATH={{ install_prefix }}/bin:$PATH
+        export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+        gnuradio-config-info --version
+      args:
+        executable: /bin/bash
+      register: gnuradio_verify
+      failed_when: gnuradio_verify.rc != 0
+
+    - name: Display GNU Radio version
+      debug:
+        msg: "GNU Radio installed: {{ gnuradio_verify.stdout }}"
+
+  when:
+    - uhd_check.stdout | default('none') | trim != uhd_version
+    - gnuradio_check.stdout | default('none') | trim != gnuradio_version

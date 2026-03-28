@@ -1,0 +1,6 @@
+---
+uhd_version: "UHD-4.7"
+install_prefix: "/usr/local"
+uhd_src_dir: "/tmp/uhd"       
+# Determine number of parallel make jobs automatically
+make_jobs: "{{ ansible_processor_vcpus | default(ansible_facts['processor_vcpus'] | default(2)) }}"
