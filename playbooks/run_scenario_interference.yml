@@ -163,7 +163,7 @@
           delegate_to: "{{ target_server_host }}"
           become: true
       run_once: true
-      when: node in ["n300", "n320"]
+      when: interference_node in ["n300", "n320"]
 
     # ---------------- RUN INTERFERENCE ----------------
     - name: Run noise generator
