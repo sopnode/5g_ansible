@@ -102,7 +102,7 @@
     - name: Clone UHD sources
       git:
         repo: "https://github.com/EttusResearch/uhd.git"
-        version: "v{{ uhd_version }}"
+        version: "{{ uhd_version }}"
         dest: "{{ uhd_src_dir }}"
         depth: 1
         force: yes
