@@ -56,6 +56,31 @@
 
   tasks:
 
+    # ---------------- INTERFERENCE NODE INITIALIZATION ----------------
+    - set_fact:
+        faraday_host: "{{ groups['faraday'][0] }}"
+
+    - set_fact:
+        interference_node: "{{ groups['fit_nodes'][0] }}"
+      when: hostvars[faraday_host].interference_usrp == "fit"
+
+    - set_fact:
+        interference_node: "{{ hostvars[faraday_host].interference_usrp }}"
+      when: hostvars[faraday_host].interference_usrp in ["n300","n320"]
+
+    - name: Debug chosen interference node
+      debug:
+        msg: "Interference node = {{ interference_node }} (type={{ hostvars[faraday_host].interference_usrp }})"
+
+    - name: Install UHD + GNU Radio on target_server_host for n300/n320
+      include_role:
+        name: setup/uhd-gnuradio
+        apply:
+          delegate_to: "{{ target_server_host }}"
+          become: true
+      run_once: true
+      when: interference_node in ["n300", "n320"]
+
     # ---------------- UE PREP ----------------
     - name: Initialize UE variable
       set_fact:
@@ -137,35 +162,7 @@
       pause:
         seconds: 100
 
-    # =========================================================
-    #  INTERFERENCE NODE INITIALIZATION 
-    # =========================================================
-
-    - set_fact:
-        faraday_host: "{{ groups['faraday'][0] }}"
-
-    - set_fact:
-        interference_node: "{{ groups['fit_nodes'][0] }}"
-      when: hostvars[faraday_host].interference_usrp == "fit"
-
-    - set_fact:
-        interference_node: "{{ hostvars[faraday_host].interference_usrp }}"
-      when: hostvars[faraday_host].interference_usrp in ["n300","n320"]
-
-    - name: Debug chosen interference node
-      debug:
-        msg: "Interference node = {{ interference_node }} (type={{ hostvars[faraday_host].interference_usrp }})"
-
-    - name: Install UHD + GNU Radio on target_server_host for n300/n320
-      include_role:
-        name: setup/uhd-gnuradio
-        apply:
-          delegate_to: "{{ target_server_host }}"
-          become: true
-      run_once: true
-      when: interference_node in ["n300", "n320"]
-
-    # ---------------- RUN INTERFERENCE ----------------
+    # ---------------- START INTERFERENCE ----------------
     - name: Run noise generator
       become: true
       vars:

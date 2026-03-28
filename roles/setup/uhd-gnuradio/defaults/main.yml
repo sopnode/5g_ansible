@@ -1,5 +1,5 @@
 ---
-uhd_version: "4.7.0"
+uhd_version: "4.7"
 gnuradio_version: "3.10.12.0"
 install_prefix: "/usr/local"
 uhd_src_dir: "/tmp/uhd"       
