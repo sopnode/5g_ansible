@@ -79,6 +79,7 @@
   loop: "{{ groups['qhats'] }}"
   loop_control:
     label: "{{ item }}"
+  when: rru in ['benetel1', 'benetel2']
     
 - name: Init UEs via jump host using 5G profile from YAML
   vars:
