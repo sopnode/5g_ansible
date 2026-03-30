@@ -5,9 +5,15 @@
   when: rru not in ['benetel1', 'benetel2']
 
 - name: "Prepare {{ rru }} RRU (switch on, load conf, reboot)"
-  shell: "prepare-{{ rru }}-for-{{ ran | lower }}.sh"
+  shell: "/usr/local/bin/prepare-{{ rru }}-for-{{ ran | lower }}.sh"
   delegate_to: faraday.inria.fr
   when: rru in ['benetel1', 'benetel2'] and ran in ['srsRAN', 'oai']
+  register: prepare_rru_output
+
+- name: Show prepare RRU output
+  debug:
+    var: prepare_rru_output.stdout
+  when: prepare_rru_output is defined
 
 - name: Verify PDU status
   shell: rhubarbe pdu status "{{ rru }}"
