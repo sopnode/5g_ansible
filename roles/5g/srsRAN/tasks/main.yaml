@@ -51,10 +51,10 @@
     values_filename: "{{ rru_file_map[(rru | default('rfsim') | string | trim | lower)] | default('values.yaml') }}"
   vars:
     rru_file_map:
-      benetel: values-benetel.yaml
+      benetel1: values-benetel1.yaml
+      benete2: values-benetel2.yaml
       liteon:  values-liteon.yaml
-      #n300:    values-n300.yaml
-      n300:    values-n300-n78-20MHz.yaml
+      n300:    values-n300-n78-20MHz.yaml # values-n300.yaml is original FDD, band 3
       n320:    values-n320.yaml
       rfsim:   values-rfsim.yaml
 
