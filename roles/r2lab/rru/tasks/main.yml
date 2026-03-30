@@ -5,10 +5,8 @@
   when: rru not in ['benetel1', 'benetel2']
 
 - name: "Prepare {{ rru }} RRU (switch on, load conf, reboot)"
-  shell: "/usr/local/bin/prepare-{{ rru }}-for-{{ ran | lower }}.sh"
+  shell: "ssh -A -o StrictHostKeyChecking=no sopnode-w1 /usr/local/bin/prepare-{{ rru }}-for-{{ ran | lower }}.sh"
   delegate_to: faraday.inria.fr
-  environment:
-    SSH_AUTH_SOCK: "{{ lookup('env', 'SSH_AUTH_SOCK') }}"
   when: rru in ['benetel1', 'benetel2'] and ran in ['srsRAN', 'oai']
   register: prepare_rru_output
 
