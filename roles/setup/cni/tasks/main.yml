@@ -43,15 +43,14 @@
   become: true
 
 - name: Wait for cluster-network-addons namespace to exist
-  kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Namespace
-    name: cluster-network-addons
-    kubeconfig: /etc/kubernetes/admin.conf
+  ansible.builtin.shell: |
+    kubectl get namespace cluster-network-addons
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
   register: cnano_ns
   retries: 15
   delay: 5
-  until: cnano_ns.resources | length > 0
+  until: cnano_ns.rc == 0
   changed_when: false
 
 - name: Wait for cluster-network-addons-operator to be ready
