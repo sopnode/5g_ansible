@@ -19,6 +19,7 @@ usage() {
   echo "     -e \"oai_gnb_mode=cudu\" -e \"no_boot=true\""
   echo "--dry-run                Only print ansible commands"
   echo "--no-reservation         Skip node/R2lab reservations"
+  echo "--no-auto-start          Only configure iperf scenario, don't start it after 5G deployment"
   echo "-h, --help               Show help"
 }
 
@@ -81,6 +82,10 @@ parse_args() {
 	NO_RESERVATION=true
 	;;
       
+      --no-auto-start)
+	START_SCENARIO=false
+	;;
+      
       -h|--help)
 	usage; exit 0
 	;;
@@ -120,6 +125,8 @@ DEFAULT_RU="n320"
 DEFAULT_LIST_UE="qhat01"
 
 PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
+
+START_SCENARIO="${START_SCENARIO:-true}"
 
 NAME_INVENTORY="${NAME_INVENTORY:-$DEFAULT_INVENTORY}"
 INVENTORY="${INVENTORY:-./inventory/${NAME_INVENTORY}/hosts.ini}"
@@ -1062,26 +1069,33 @@ run_scenario() {
     done
 
     if [[ "$run_scenario" == true ]]; then
-        echo "Running $scenario"
-        case "$scenario" in
-            "Iperf R2lab scenario without interference"|"Iperf RFSIM scenario without interference")
-                run_cmd ./run_scenario.sh -d --inventory="${NAME_INVENTORY}" \
-                    "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_iperf.txt
-                ;;
-            "Iperf R2lab scenario with interference")
-                run_cmd ./run_scenario.sh -i --inventory="${NAME_INVENTORY}" \
-                    "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_interference.txt
-                ;;
-            *)
-                echo "❌ Unknown iperf test scenario: $scenario"
-                exit 1
-                ;;
-        esac
-        echo ""
-        echo "=========================================="
-        echo "========== Scenario Completed =========="
-        echo "=========================================="
-        echo ""
+	if [[ "$START_SCENARIO" == true ]]; then
+            echo "Running $scenario"
+            case "$scenario" in
+		"Iperf R2lab scenario without interference"|"Iperf RFSIM scenario without interference")
+                    run_cmd ./run_scenario.sh -d --inventory="${NAME_INVENTORY}" \
+			    "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_iperf.txt
+                    ;;
+		"Iperf R2lab scenario with interference")
+                    run_cmd ./run_scenario.sh -i --inventory="${NAME_INVENTORY}" \
+			    "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_interference.txt
+                    ;;
+		*)
+                    echo "❌ Unknown iperf test scenario: $scenario"
+                    exit 1
+                    ;;
+            esac
+            echo ""
+            echo "=========================================="
+            echo "========== Scenario Completed =========="
+            echo "=========================================="
+            echo ""
+	else
+	    echo ""
+	    echo "Scenario $scenario with MANUAL start mode selected"
+	    echo "Just launch ./run_scenario.sh to start it !"
+	    echo ""
+	fi
     fi
 }
 
