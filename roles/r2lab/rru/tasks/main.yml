@@ -4,8 +4,8 @@
   delegate_to: faraday.inria.fr
   when rru not in ['benetel1', 'benetel2']
 
-- name: Prepare {{ rru }} RRU (switch on, load conf, reboot)
-  shell: prepare-{{ rru }}-for-{{ ran | lower }}.sh
+- name: "Prepare {{ rru }} RRU (switch on, load conf, reboot)"
+  shell: "prepare-{{ rru }}-for-{{ ran | lower }}.sh"
   delegate_to: faraday.inria.fr
   when: rru in ['benetel1', 'benetel2'] and ran in ['srsRAN', 'oai']
 
