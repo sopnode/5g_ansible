@@ -4,6 +4,10 @@
   delegate_to: faraday.inria.fr
   when: rru not in ['benetel1', 'benetel2']
 
+- name: Wait 210 seconds for the "{{ rru }}" RRU to be ready
+  pause:
+    seconds: 210
+
 - name: "Prepare {{ rru }} RRU (switch on, load conf, reboot)"
   shell: "/usr/local/bin/prepare-{{ rru }}-for-{{ ran | lower }}.sh"
   delegate_to: faraday.inria.fr
