@@ -1,5 +1,5 @@
 ---
-- name: RESTART_OAI_RAN
+- name: OAI_RAN
   ansible.builtin.meta: noop
 
 - name: Launch OAI gNB pod
@@ -52,13 +52,15 @@
   when: rru == "n300" or rru == "n320"
 
 - name: Launch OAI NR-UE pods (conditional)
-  ansible.builtin.command: "{{ demo_oai_script }} {{ item }}"
+  ansible.builtin.command: "{{ demo_oai_script }} {{ ue_cmd }}"
   args:
     chdir: "{{ repo_dest }}"
-  loop:
-    - start-nr-ue
-    - start-nr-ue2
-    - start-nr-ue3
+  loop: "{{ range(1, ue_count + 1) | list }}"
+  loop_control:
+    loop_var: ue_index
+  vars:
+    ue_cmd: >-
+      {{ 'start-nr-ue' if ue_index == 1 else 'start-nr-ue' ~ ue_index }}
   register: nr_ue_scripts
   changed_when: "'condition met' in nr_ue_scripts.stdout"
   when: rru == "rfsim"
