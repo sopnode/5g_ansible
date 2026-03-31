@@ -1,4 +1,8 @@
 ---
+- name: Force Ansible to use venv Python
+  ansible.builtin.set_fact:
+    ansible_python_interpreter: /opt/ansible-venv/bin/python
+    
 - name: Load common variables
   include_vars:
     file: "../../common/defaults/main.yml"
@@ -83,3 +87,8 @@
 
 - name: Apply 5G profile to gNB and UE configs
   include_tasks: apply_5g_profile.yaml
+
+- name: Reset ansible_python_interpreter to system python3
+  ansible.builtin.set_fact:
+    ansible_python_interpreter: /usr/bin/python3
+
