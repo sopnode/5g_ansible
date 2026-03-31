@@ -78,10 +78,23 @@
       when: item.rc != 0
       loop: "{{ job_status.results }}"
 
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
+
 
 # The following task requires all nodes be ssh-reachable
 # so it can't be the first task of the playbook
-- hosts: all
+- hosts: localhost,sopnodes
   gather_facts: true
   tasks:
     - name: Normalize booleans at playbook start
@@ -150,19 +163,6 @@
       vars:
         target_node: "{{ ran_node_name }}"
       when: core_node_name != ran_node_name and not fhi72
-
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
 
 - name: Install Multus / CNAO
   hosts: core_node
