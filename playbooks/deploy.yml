@@ -98,19 +98,6 @@
     - role: setup/k8s/k8s_env
     - role: setup/optimization/cpu
 
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
-
 # not for monitor_node
 - name: Common sopnodes setup
   hosts: core_node,ran_node,monitor_node
@@ -261,6 +248,19 @@
       when: core == 'oai'
     - role: 5g/oai/ran
       when: ran == 'oai'
+
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
 
 - name: Deploy srsRAN
   hosts: ran_node
