@@ -19,6 +19,7 @@ usage() {
   echo "     -e \"oai_gnb_mode=cudu\" -e \"no_boot=true\""
   echo "--dry-run                Only print ansible commands"
   echo "--no-reservation         Skip node/R2lab reservations"
+  echo "--no-auto-start          Only configure iperf scenario, don't start it after 5G deployment"
   echo "-h, --help               Show help"
 }
 
@@ -81,6 +82,10 @@ parse_args() {
 	NO_RESERVATION=true
 	;;
       
+      --no-auto-start)
+	START_SCENARIO=false
+	;;
+      
       -h|--help)
 	usage; exit 0
 	;;
@@ -120,6 +125,8 @@ DEFAULT_RU="n320"
 DEFAULT_LIST_UE="qhat01"
 
 PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
+
+START_SCENARIO="${START_SCENARIO:-true}"
 
 NAME_INVENTORY="${NAME_INVENTORY:-$DEFAULT_INVENTORY}"
 INVENTORY="${INVENTORY:-./inventory/${NAME_INVENTORY}/hosts.ini}"
@@ -377,87 +384,85 @@ fi
 
 optional_scenarios() {
 
-# ========== Optional Scenarios ==========
-# Available scenarios:
-# - Iperf R2lab scenario without interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
-# - Iperf RFSIM scenario without interference. Will run on 2 OAI-NR UEs simulated on RFSIM (only if RFSIM platform is used and RAN is OAI).
-# - Iperf R2lab scenario with interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
+    # ========== Optional Scenarios ==========
+    # Available scenarios:
+    # - Iperf R2lab scenario without interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
+    # - Iperf RFSIM scenario without interference. Will run on 2 OAI-NR UEs simulated on RFSIM (only if RFSIM platform is used and RAN is OAI).
+    # - Iperf R2lab scenario with interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
 
-# Based on the selected variables, ask the user if they want to run one of the optional scenarios after deployment. (Only one scenario can be selected).
+    # Based on the selected variables, ask the user if they want to run one of the optional scenarios after deployment. (Only one scenario can be selected).
 
-run_scenario=false
-# Ask the user if they want to run an optional scenario
-echo ""
-read -rp "Do you want to run an optional scenario after deployment? [y/N]: " scenario_choice
-if [[ "$scenario_choice" =~ ^[Yy]$ ]]; then
-  echo ""
-  echo "Select the scenario to run:"
-  options=()
-  if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
-    options+=("Iperf R2lab scenario without interference")
-  fi
-  if [[ "$platform" == "rfsim" ]]; then
-    options+=("Iperf RFSIM scenario without interference")
-  fi
-  if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
-    options+=("Iperf R2lab scenario with interference")
-  fi
-
-  for i in "${!options[@]}"; do
-    echo "$((i+1))) ${options[$i]}"
-  done
-
-  read -rp "Confirm your choice: " scenario_choice
-
-  if [[ "$scenario_choice" =~ ^[0-9]+$ ]] &&
-    ((scenario_choice >= 1 && scenario_choice <= ${#options[@]})); then
-    scenario="${options[$((scenario_choice - 1))]}"
-    echo "Selected scenario: $scenario"
-    run_scenario=true
-  else
-    echo "❌ Invalid choice"
-  fi
- 
-fi
-
-# ========== Iperf Tests Setup (without interference) ==========
-
-# Simply use the run_iperf_test.sh script to run the selected iperf test scenario after deployment.
-
-run_iperf_test=false
-if [[ "$run_scenario" == true && ( "$scenario" == "Iperf R2lab scenario without interference" || "$scenario" == "Iperf RFSIM scenario without interference" ) ]]; then
-    run_iperf_test=true
-    DEFAULT_IPERF_SERVER_NODE=${core_node}
-    echo "By default, iperf will run between UEs and the bare-metal server hosting 5G core network pods, i.e., ${DEFAULT_IPERF_SERVER_NODE}"
+    run_scenario=false
+    run_iperf_test=false
+    # Ask the user if they want to run an optional scenario
     echo ""
-    echo "Select the target node to deploy iperf servers : by default, ${DEFAULT_IPERF_SERVER_NODE}:"
-    echo "1) sopnode-f1"
-    echo "2) sopnode-f2"
-    echo "3) sopnode-f3"
-    echo "4) sopnode-w3"
-    read -rp "Enter choice [1-4]: " iperf_server_choice
-    if [[ -z "${iperf_server_choice}" ]]; then
-	iperf_server_node=${DEFAULT_IPERF_SERVER_NODE}
-    else
-      case "${iperf_server_choice}" in
-        1) iperf_server_node="sopnode-f1" ;;
-        2) iperf_server_node="sopnode-f2" ;;
-        3) iperf_server_node="sopnode-f3" ;;
-        4) iperf_server_node="sopnode-w3" ;;
-        *) echo "❌ Invalid iperf target server choice"; exit 1 ;;
-      esac
+    read -rp "Do you want to run an optional scenario after deployment? [y/N]: " scenario_choice
+    if [[ "$scenario_choice" =~ ^[Yy]$ ]]; then
+	echo ""
+	echo "Select the scenario to run:"
+	options=()
+	if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
+	    options+=("Iperf R2lab scenario without interference")
+	fi
+	if [[ "$platform" == "rfsim" ]]; then
+	    options+=("Iperf RFSIM scenario without interference")
+	fi
+	if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
+	    options+=("Iperf R2lab scenario with interference")
+	fi
+	
+	for i in "${!options[@]}"; do
+	    echo "$((i+1))) ${options[$i]}"
+	done
+
+	read -rp "Confirm your choice: " scenario_choice
+
+	if [[ "$scenario_choice" =~ ^[0-9]+$ ]] &&
+	       ((scenario_choice >= 1 && scenario_choice <= ${#options[@]})); then
+	    scenario="${options[$((scenario_choice - 1))]}"
+	    echo "Selected scenario: $scenario"
+	    run_scenario=true
+	else
+	    echo "❌ Invalid choice"
+	fi
+
+	# ========== Iperf Tests Setup (without interference) ==========
+	# Simply use the run_iperf_test.sh script to run the selected iperf test scenario after deployment.
+
+	if [[ "$run_scenario" == true && ( "$scenario" == "Iperf R2lab scenario without interference" || "$scenario" == "Iperf RFSIM scenario without interference" ) ]]; then
+	    run_iperf_test=true
+	    DEFAULT_IPERF_SERVER_NODE=${core_node}
+	    echo "By default, iperf will run between UEs and the bare-metal server hosting 5G core network pods, i.e., ${DEFAULT_IPERF_SERVER_NODE}"
+	    echo ""
+	    echo "Select the target node to deploy iperf servers : by default, ${DEFAULT_IPERF_SERVER_NODE}:"
+	    echo "1) sopnode-f1"
+	    echo "2) sopnode-f2"
+	    echo "3) sopnode-f3"
+	    echo "4) sopnode-w3"
+	    read -rp "Enter choice [1-4]: " iperf_server_choice
+	    if [[ -z "${iperf_server_choice}" ]]; then
+		iperf_server_node=${DEFAULT_IPERF_SERVER_NODE}
+	    else
+		case "${iperf_server_choice}" in
+		    1) iperf_server_node="sopnode-f1" ;;
+		    2) iperf_server_node="sopnode-f2" ;;
+		    3) iperf_server_node="sopnode-f3" ;;
+		    4) iperf_server_node="sopnode-w3" ;;
+		    *) echo "❌ Invalid iperf target server choice"; exit 1 ;;
+		esac
+	    fi
+	fi
+	echo "iperf server node: ${iperf_server_node}"
+	case "${iperf_server_node}" in
+	    "${core_node}"|"${ran_node}"|"${monitor_node}")
+		echo "iperf server already part of inventory, no need to add it."
+		;;
+	    *)
+		DISTINCT_IPERF_SERVER=true
+		echo "iperf server ${iperf_server_node} will be added in the inventory."
+		;;
+	esac
     fi
-fi
-echo "iperf server node: ${iperf_server_node}"
-case "${iperf_server_node}" in
-    "${core_node}"|"${ran_node}"|"${monitor_node}")
-	echo "iperf server already part of inventory, no need to add it."
-	;;
-    *)
-	DISTINCT_IPERF_SERVER=true
-	echo "iperf server ${iperf_server_node} will be added in the inventory."
-	;;
-esac
 }
 
 ############################
@@ -1064,26 +1069,33 @@ run_scenario() {
     done
 
     if [[ "$run_scenario" == true ]]; then
-        echo "Running $scenario"
-        case "$scenario" in
-            "Iperf R2lab scenario without interference"|"Iperf RFSIM scenario without interference")
-                run_cmd ./run_scenario.sh -d --inventory="${NAME_INVENTORY}" \
-                    "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_iperf.txt
-                ;;
-            "Iperf R2lab scenario with interference")
-                run_cmd ./run_scenario.sh -i --inventory="${NAME_INVENTORY}" \
-                    "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_interference.txt
-                ;;
-            *)
-                echo "❌ Unknown iperf test scenario: $scenario"
-                exit 1
-                ;;
-        esac
-        echo ""
-        echo "=========================================="
-        echo "========== Scenario Completed =========="
-        echo "=========================================="
-        echo ""
+	if [[ "$START_SCENARIO" == true ]]; then
+            echo "Running $scenario"
+            case "$scenario" in
+		"Iperf R2lab scenario without interference"|"Iperf RFSIM scenario without interference")
+                    run_cmd ./run_scenario.sh -d --inventory="${NAME_INVENTORY}" \
+			    "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_iperf.txt
+                    ;;
+		"Iperf R2lab scenario with interference")
+                    run_cmd ./run_scenario.sh -i --inventory="${NAME_INVENTORY}" \
+			    "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_interference.txt
+                    ;;
+		*)
+                    echo "❌ Unknown iperf test scenario: $scenario"
+                    exit 1
+                    ;;
+            esac
+            echo ""
+            echo "=========================================="
+            echo "========== Scenario Completed =========="
+            echo "=========================================="
+            echo ""
+	else
+	    echo ""
+	    echo "Scenario $scenario with MANUAL start mode selected"
+	    echo "Just launch ./run_scenario.sh to start it !"
+	    echo ""
+	fi
     fi
 }
 

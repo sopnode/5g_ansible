@@ -1,7 +1,11 @@
 ---
+#
+# Install UHD 4.7 and GNU Radio on target_server (should be part of inventory)
+# use option -e target_server=sopnode-XX to change the default (core_node).
+#
 
 - name: Install UHD + GNU Radio on sopnode
-  hosts: core_node
+  hosts: "{{ target_server | default('core_node') }}"
   become: true
   vars:
     uhd_version: "4.7.0.0"
@@ -52,4 +56,5 @@
 
     - name: Display installation summary
       debug:
+        msg: "Target server = {{ target_server | default('core_node') }}"
         msg: "{{ final_check.stdout_lines }}"
