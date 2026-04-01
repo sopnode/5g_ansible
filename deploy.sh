@@ -538,20 +538,29 @@ interference_setup() {
 	    read -rp "Enter noise bandwidth in Hz [default: 15M]: " bw_input
 	    NOISE_BANDWIDTH="${bw_input:-15M}"
 	    export FREQ GAIN NOISE_BANDWIDTH
-	else
+	else # $ran == "srsRAN" # Now srsRAN gNB config is TDD. band 78
 	    echo "Setting MODE to FDD for interference test"
 	    echo ""
-	    export MODE="FDD"
-	    # Ask user for interference parameters and export them: FREQ_UL, FREQ_DL, GAIN, NOISE_BANDWIDTH (defaults are 1747.5M, 1842.5M, 110, 5M)
-	    read -rp "Enter interference uplink frequency [default: 1747.5M]: " freq_ul_input
-	    FREQ_UL="${freq_ul_input:-1747.5M}"
-	    read -rp "Enter interference downlink frequency [default: 1842.5M]: " freq_dl_input
-	    FREQ_DL="${freq_dl_input:-1842.5M}"
+	    export MODE="TDD"
+	    # Ask user for interference parameters and export them: FREQ, GAIN, NOISE_BANDWIDTH (defaults are 3411.22M, 110, 15M)
+	    read -rp "Enter interference frequency [default: 3600.00M]: " freq_input
+	    FREQ="${freq_input:-3600.00M}"
 	    read -rp "Enter interference gain in dB [default: 110]: " gain_input
 	    GAIN="${gain_input:-110}"
-	    read -rp "Enter noise bandwidth in Hz [default: 5M]: " bw_input
-	    NOISE_BANDWIDTH="${bw_input:-5M}"
-	    export FREQ_UL FREQ_DL GAIN NOISE_BANDWIDTH
+	    read -rp "Enter noise bandwidth in Hz [default: 15M]: " bw_input
+	    NOISE_BANDWIDTH="${bw_input:-15M}"
+	    export FREQ GAIN NOISE_BANDWIDTH
+	    #export MODE="FDD"
+	    ## Ask user for interference parameters and export them: FREQ_UL, FREQ_DL, GAIN, NOISE_BANDWIDTH (defaults are 1747.5M, 1842.5M, 110, 5M)
+	    #read -rp "Enter interference uplink frequency [default: 1747.5M]: " freq_ul_input
+	    #FREQ_UL="${freq_ul_input:-1747.5M}"
+	    #read -rp "Enter interference downlink frequency [default: 1842.5M]: " freq_dl_input
+	    #FREQ_DL="${freq_dl_input:-1842.5M}"
+	    #read -rp "Enter interference gain in dB [default: 110]: " gain_input
+	    #GAIN="${gain_input:-110}"
+	    #read -rp "Enter noise bandwidth in Hz [default: 5M]: " bw_input
+	    #NOISE_BANDWIDTH="${bw_input:-5M}"
+	    #export FREQ_UL FREQ_DL GAIN NOISE_BANDWIDTH
 	fi
     fi
 }
