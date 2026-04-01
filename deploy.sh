@@ -244,7 +244,7 @@ collect_user_inputs() {
 	esac
     fi
     if [[ "$core" == "free5gc" && "${core_node}" == "${ran_node}" ]]; then
-	echo "❌ Invalid choice, with free5gc use a different node for RAN."
+	echo "❌ Invalid choice: with free5gc, use a different node for RAN."
 	exit 1
     fi
 
