@@ -1,0 +1,113 @@
+---
+- name: Check if UHD is installed
+  shell: |
+    export PATH={{ install_prefix }}/bin:$PATH
+    export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+    uhd_config_info --version || echo "none"
+  args:
+    executable: /bin/bash
+  register: uhd_check
+  changed_when: false
+
+- name: Display installed UHD version
+  debug:
+    msg: "UHD installed: {{ uhd_check.stdout | default('none') }}"
+
+# Build UHD only if the installed version is different from target
+- name: Build UHD only if target version not installed
+  block:
+
+    # --- Required packages for UHD build ---
+    - name: Ensure required packages are installed (Ubuntu/Debian)
+      apt:
+        name:
+          - build-essential
+          - cmake
+          - git
+          - python3-dev
+          - libboost-all-dev
+          - libgmp-dev
+          - libfftw3-dev
+          - libusb-1.0-0-dev
+          - libuhd-dev
+          - libvolk2-dev
+          - libspdlog-dev
+          - libthrift-dev
+          - thrift-compiler
+        state: present
+        update_cache: yes
+
+    # --- Clean previous UHD build only if source directory exists ---
+    - name: Clean previous UHD build
+      file:
+        path: "{{ uhd_src_dir }}"
+        state: absent
+
+    # --- Clone UHD sources ---
+    - name: Clone UHD sources
+      git:
+        repo: "https://github.com/EttusResearch/uhd.git"
+        version: "{{ uhd_version }}"
+        dest: "{{ uhd_src_dir }}"
+        depth: 1
+        force: yes
+
+    # --- Build and install UHD ---
+    - name: Build and install UHD
+      shell: |
+        set -e
+        mkdir -p {{ uhd_src_dir }}/host/build
+        cd {{ uhd_src_dir }}/host/build
+        cmake ../ \
+          -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
+          -DENABLE_PYTHON_API=ON \
+          -DENABLE_TESTS=OFF
+        make -j{{ make_jobs }}
+        make install
+        ldconfig
+      args:
+        executable: /bin/bash
+
+    # --- Verify UHD installation ---
+    - name: Verify UHD installation
+      shell: |
+        export PATH={{ install_prefix }}/bin:$PATH
+        export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+        uhd_config_info --version
+      args:
+        executable: /bin/bash
+      register: uhd_verify
+      failed_when: uhd_verify.rc != 0
+
+    - name: Display UHD version
+      debug:
+        msg: "UHD installed: {{ uhd_verify.stdout }}"
+
+    # --- Ensure library cache & environment variables ---
+    - name: Update library cache
+      shell: ldconfig
+      args:
+        executable: /bin/bash
+
+    - name: Ensure /usr/local/bin is in PATH
+      copy:
+        dest: /etc/profile.d/usr_local_bin.sh
+        content: 'export PATH={{ install_prefix }}/bin:$PATH'
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Update LD_LIBRARY_PATH
+      copy:
+        dest: /etc/ld.so.conf.d/usr_local.conf
+        content: '{{ install_prefix }}/lib'
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reload library cache
+      shell: ldconfig
+      args:
+        executable: /bin/bash
+
+  when: uhd_check.stdout | default('none') | trim != uhd_version

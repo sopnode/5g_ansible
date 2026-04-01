@@ -14,6 +14,9 @@ SETUP_PLAYBOOK="${SETUP_IPERF_PLAYBOOK}"
 TARGET_PLAYBOOK="${IPERF_PLAYBOOK}"
 DRY_RUN=false
 
+DIR_LOGS="LOGS"
+mkdir -p ${DIR_LOGS}
+
 EXTRA_VARS_ARRAY=()
 
 run_cmd() {
@@ -110,4 +113,4 @@ fi
 
 run_cmd ansible-playbook -i "$INVENTORY" \
     "${ANSIBLE_EXTRA_ARGS[@]}" \
-    "$TARGET_PLAYBOOK"
+    "$TARGET_PLAYBOOK" 2>&1 | tee ${DIR_LOGS}/logs-scenario.txt 

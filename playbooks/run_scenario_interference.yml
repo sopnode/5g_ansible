@@ -9,6 +9,40 @@
     - name: Normalize booleans at playbook start
       import_tasks: ../tasks/reload_booleans.yml
 
+# ============================================================
+# Set global target_server variable (default: iperf_server_node)
+# Can be overridden with: ansible-playbook ... -e "target_server_host=hostname"
+# ============================================================
+- name: Set target server configuration
+  hosts: localhost
+  gather_facts: false
+  run_once: true
+
+  tasks:
+    - name: Determine target server host
+      set_fact:
+        target_server_host: >-
+          {{
+            target_server_host
+            | default(groups['iperf_server_node'] | default([]) | first, true)
+            | default(groups['core_node'][0])
+          }}
+        cacheable: yes
+
+    - name: Determine target server IP
+      set_fact:
+        target_server_ip: >-
+          {{
+            hostvars[target_server_host].ip
+            | default(hostvars[target_server_host].ansible_host)
+          }}
+        cacheable: yes
+
+    - debug:
+        msg: |
+          Target Server Configuration:
+          Host: "{{ target_server_host }}"
+          IP: "{{ target_server_ip }}"
 
 - name: Main Test Sequence on Faraday
   hosts: faraday
@@ -17,9 +51,35 @@
   vars:
     fiveg_profile: default
     duration: 12
-    core_ip: "{{ hostvars[groups['core_node'][0]]['ip'] | default(hostvars[groups['core_node'][0]]['ansible_host']) }}"
+    target_server_host: "{{ hostvars['localhost']['target_server_host'] }}"
+    target_server_ip: "{{ hostvars['localhost']['target_server_ip'] }}"
 
   tasks:
+
+    # ---------------- INTERFERENCE NODE INITIALIZATION ----------------
+    - set_fact:
+        faraday_host: "{{ groups['faraday'][0] }}"
+
+    - set_fact:
+        interference_node: "{{ groups['fit_nodes'][0] }}"
+      when: hostvars[faraday_host].interference_usrp == "fit"
+
+    - set_fact:
+        interference_node: "{{ hostvars[faraday_host].interference_usrp }}"
+      when: hostvars[faraday_host].interference_usrp in ["n300","n320"]
+
+    - name: Debug chosen interference node
+      debug:
+        msg: "Interference node = {{ interference_node }} (type={{ hostvars[faraday_host].interference_usrp }})"
+
+    - name: Install UHD on target_server_host for n300/n320
+      include_role:
+        name: setup/uhd
+        apply:
+          delegate_to: "{{ target_server_host }}"
+          become: true
+      run_once: true
+      when: interference_node in ["n300", "n320"]
 
     # ---------------- UE PREP ----------------
     - name: Initialize UE variable
@@ -66,32 +126,34 @@
       delay: 2
       changed_when: false
 
-    - name: Ensure route to core exists
-      shell: ssh root@{{ current_ue }} "ip route get {{ core_ip }}"
+    - name: Ensure route to target_server_host exists
+      shell: ssh root@{{ current_ue }} "ip route get {{ target_server_ip }}"
       register: route_check
       changed_when: false
       ignore_errors: true
 
     - name: Add route if missing
-      shell: ssh root@{{ current_ue }} "ip route add {{ core_ip }} dev wwan0"
+      shell: ssh root@{{ current_ue }} "ip route add {{ target_server_ip }} dev wwan0"
       when: '"dev wwan0" not in route_check.stdout'
       ignore_errors: true
 
     # ---------------- IPERF SERVER ----------------
-    - name: Run iperf server on core
-      delegate_to: "{{ groups['core_node'][0] }}"
+    - name: Run iperf server on target_server_host
+      delegate_to: "{{ target_server_host }}"
       become: true
       block:
         - include_role:
             name: scenarios/iperf_server
           vars:
+            target_server_host: "{{ hostvars['localhost']['target_server_host'] }}"
+            target_server_ip: "{{ hostvars['localhost']['target_server_ip'] }}"
             nb_ues: "1"
 
     # ---------------- START IPERF ----------------
     - name: Start iperf
       shell: >
         ssh root@{{ current_ue }}
-        'iperf3 -B {{ ue_ip_cmd.stdout }} -c {{ core_ip }} --bidir -t 300 -J > /tmp/iperf_test.json'
+        'iperf3 -B {{ ue_ip_cmd.stdout }} -c {{ target_server_ip }} --bidir -t 300 -J > /tmp/iperf_test.json'
       async: 1800
       poll: 0
       register: iperf_job
@@ -100,26 +162,7 @@
       pause:
         seconds: 100
 
-    # =========================================================
-    #  INTERFERENCE NODE INITIALIZATION (FIXED VERSION)
-    # =========================================================
-
-    - set_fact:
-        faraday_host: "{{ groups['faraday'][0] }}"
-
-    - set_fact:
-        interference_node: "{{ groups['fit_nodes'][0] }}"
-      when: hostvars[faraday_host].interference_usrp == "fit"
-
-    - set_fact:
-        interference_node: "{{ hostvars[faraday_host].interference_usrp }}"
-      when: hostvars[faraday_host].interference_usrp in ["n300","n320"]
-
-    - name: Debug chosen interference node
-      debug:
-        msg: "Interference node = {{ interference_node }} (type={{ hostvars[faraday_host].interference_usrp }})"
-
-    # ---------------- RUN INTERFERENCE ----------------
+    # ---------------- START INTERFERENCE ----------------
     - name: Run noise generator
       become: true
       vars:
@@ -157,7 +200,7 @@
       find:
         paths: "/root/IPERF"
         patterns: "iperf_*.log"
-      delegate_to: "{{ groups['core_node'][0] }}"
+      delegate_to: "{{ hostvars['localhost']['target_server_host'] }}"
       become: true
       register: iperf_files
 
@@ -165,7 +208,7 @@
       command: "cat {{ item.path }}"
       loop: "{{ iperf_files.files | sort(attribute='path') }}"
       register: log_contents
-      delegate_to: "{{ groups['core_node'][0] }}"
+      delegate_to: "{{ hostvars['localhost']['target_server_host'] }}"
       become: true
       when: iperf_files.matched > 0
       changed_when: false

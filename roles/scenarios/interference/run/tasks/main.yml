@@ -3,12 +3,10 @@
   set_fact:
     usrp_args: >-
       {% if node == "n320" %}
-      --args="product=n320,serial=31B3A77"
+      --args="product=n320,serial=31B3A77,addr=192.168.235.105,master_clock_rate=245.76e6"
       {% elif node == "n300" %}
       --args="product=n300,serial=31D98C7"
-      {% else %}
-      ""
-      {% endif %}
+      {% else %}{% endif %}
 
 - name: Build final command
   set_fact:
@@ -19,8 +17,19 @@
       -g '{{ hostvars[groups['faraday'][0]].gain }}'
       -s '{{ hostvars[groups['faraday'][0]].noise_bandwidth }}'
       {{ usrp_args }}"
+  when: node != "n300" and node != "n320"
 
-- name: Debug command that will be executed
+- name: Build final command
+  set_fact:
+    noise_cmd: >-
+      "timeout {{ time }} uhd_siggen --gaussian
+      -f '{{ hostvars[groups['faraday'][0]].freq }}'
+      -g '{{ hostvars[groups['faraday'][0]].gain }}'
+      -s '{{ hostvars[groups['faraday'][0]].noise_bandwidth }}'
+      {{ usrp_args }} < /dev/null"
+  when: node == "n300" or node == "n320"
+
+- name: Show uhd_siggen command that will be executed
   debug:
     msg: "{{ noise_cmd }}"
 
@@ -28,5 +37,13 @@
   shell: "{{ noise_cmd }}"
   delegate_to: faraday.inria.fr
   ignore_errors: true
-  no_log: true
+  #no_log: true
+  when: node != "n300" and node != "n320"
+
+- name: Start Gaussian Noise Emission from {{ target_server_host }}
+  shell: "{{ noise_cmd }}"
+  delegate_to: "{{ target_server_host }}"
+  ignore_errors: true
+  #no_log: true
+  when: node == "n300" or node == "n320"
 

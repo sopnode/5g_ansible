@@ -1,13 +1,18 @@
 ---
-- name: Turn ON node {{ fit_node }}
-  shell: rhubarbe load -i gnuradio {{ fit_number }}
+# ensure usrp is off before loading image on fit node
+- name: Turn OFF USRP {{ fit_usrp }} on node {{ fit_node }}
+  shell: rhubarbe usrpoff {{ fit_number }}
+  delegate_to: faraday.inria.fr
+
+- name: Turn ON node {{ fit_node }} and load latest R2lab gnuradio image
+  shell: rhubarbe load -t 600 -i gnuradio {{ fit_number }}
   delegate_to: faraday.inria.fr
 
 - name: Wait for the node {{ fit_node }} to be SSH accessible
   wait_for:
     host: "{{ fit_node }}"
     port: 22
-    timeout: 60
+    timeout: 90
     sleep: 5
   delegate_to: faraday.inria.fr
 

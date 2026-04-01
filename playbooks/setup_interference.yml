@@ -2,21 +2,27 @@
 #
 # --- Visualization setup ---
 #
-- name: Setup first fit node on R2Lab
-  hosts: faraday
-  vars:
-    fit_node: "{{ groups['fit_nodes'][0] }}"
-    fit_number: "{{ hostvars[fit_node].fit_number }}"
-    fit_usrp: "{{ hostvars[fit_node].fit_usrp }}"
-  roles:
-    - role: scenarios/interference/setup
 
 - name: Setup first fit node for spectrum visualization (uhd_fft)
   hosts: faraday
-  vars:
-    fit_node: "{{ groups['fit_nodes'][0] }}"
+
+  pre_tasks:
+
+    - name: Set fit_node safely if group exists
+      set_fact:
+        fit_node: "{{ groups['fit_nodes'] | first }}"
+      when: groups['fit_nodes'] | default([]) | length > 0
+
+    - name: Debug selected fit_node
+      debug:
+        msg: "Using FIT node: {{ fit_node }}"
+      when: fit_node is defined
+
   roles:
+    - role: scenarios/interference/setup
+      when: fit_node is defined
     - role: scenarios/interference/watch
+      when: fit_node is defined
 
 #
 # --- Noise generation setup ---

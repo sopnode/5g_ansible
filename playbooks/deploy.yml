@@ -81,7 +81,7 @@
 
 # The following task requires all nodes be ssh-reachable
 # so it can't be the first task of the playbook
-- hosts: all
+- hosts: localhost,sopnodes,faraday
   gather_facts: true
   tasks:
     - name: Normalize booleans at playbook start
