@@ -223,30 +223,29 @@ collect_user_inputs() {
 	fi
     fi
 
-    if [[ "$core" != "free5gc" ]]; then
-	# Select RAN Node
-	# Make sopnode-f3 the default if the user just presses enter
-	echo ""
-	echo "Select the node to deploy RAN ($ran) on (default: ${DEFAULT_RAN_NODE}):"
-	echo "1) sopnode-f1"
-	echo "2) sopnode-f2"
-	echo "3) sopnode-f3"
-	echo "4) sopnode-w3"
-	read -rp "Enter choice [1-4]: " ran_node_choice
-	if [[ -z "${ran_node_choice}" ]]; then
-	    ran_node=${DEFAULT_RAN_NODE}
-	else
-	    case "${ran_node_choice}" in
-		1) ran_node="sopnode-f1" ;;
-		2) ran_node="sopnode-f2" ;;
-		3) ran_node="sopnode-f3" ;;
-		4) ran_node="sopnode-w3" ;;
-		*) echo "❌ Invalid RAN node"; exit 1 ;;
-	    esac
-	fi
-    else	
-	echo "Use ${core_node} for both $core and $ran."
-	ran_node="${core_node}"
+    # Select RAN Node
+    # Make sopnode-f3 the default if the user just presses enter
+    echo ""
+    echo "Select the node to deploy RAN ($ran) on (default: ${DEFAULT_RAN_NODE}):"
+    echo "1) sopnode-f1"
+    echo "2) sopnode-f2"
+    echo "3) sopnode-f3"
+    echo "4) sopnode-w3"
+    read -rp "Enter choice [1-4]: " ran_node_choice
+    if [[ -z "${ran_node_choice}" ]]; then
+	ran_node=${DEFAULT_RAN_NODE}
+    else
+	case "${ran_node_choice}" in
+	    1) ran_node="sopnode-f1" ;;
+	    2) ran_node="sopnode-f2" ;;
+	    3) ran_node="sopnode-f3" ;;
+	    4) ran_node="sopnode-w3" ;;
+	    *) echo "❌ Invalid RAN node"; exit 1 ;;
+	esac
+    fi
+    if [[ "$core" == "free5gc" && "${core_node}" == "${ran_node}" ]]; then
+	echo "❌ Invalid choice, with free5gc use a different node for RAN."
+	exit 1
     fi
 
     # Select Monitoring Node (only if not OAI core with UERANSIM RAN and if user wants it)
