@@ -1,2 +1,6 @@
 ---
 ue_count: 3
+ran_ns: "{{ core }}"
+
+# Multus NetworkAttachmentDefinition names
+free5gc_n3_nad_name: "n3network-free5gc-free5gc-upf"

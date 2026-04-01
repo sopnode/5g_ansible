@@ -151,19 +151,6 @@
         target_node: "{{ ran_node_name }}"
       when: core_node_name != ran_node_name and not fhi72
 
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
-
 - name: Install Multus / CNAO
   hosts: core_node
   become: true
@@ -254,6 +241,19 @@
       when: core == 'free5gc'
     - role: 5g/free5gc/deploy
       when: core == 'free5gc'
+
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
 
 - name: Deploy OAI CN/RAN
   hosts: ran_node

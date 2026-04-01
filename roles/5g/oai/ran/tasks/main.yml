@@ -2,6 +2,26 @@
 - name: OAI_RAN
   ansible.builtin.meta: noop
 
+- name: Patch n3 NAD MTU for free5gc split-node scenario
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: k8s.cni.cncf.io/v1
+      kind: NetworkAttachmentDefinition
+      metadata:
+        name: "{{ free5gc_n3_nad_name }}"
+        namespace: "{{ ran_ns }}"
+      spec:
+        config: >-
+          { "cniVersion": "0.3.1", "plugins": [ { "type": "ovs",
+            "capabilities": { "ips": true }, "bridge": "n3br",
+            "mtu": 1450,
+            "ipam": { "type": "static", "routes": [ { "dst": "0.0.0.0/0", "gw": "" } ] }
+          } ] }
+  when:
+    - core == 'free5gc'
+    - core_node_name != ran_node_name
+
 - name: Launch OAI gNB pod
   ansible.builtin.command: "{{ demo_oai_script }} start-gnb"
   args:
