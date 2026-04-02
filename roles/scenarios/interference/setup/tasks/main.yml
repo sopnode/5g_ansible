@@ -5,28 +5,30 @@
   shell: rhubarbe usrpoff {{ fit_number }}
   delegate_to: faraday.inria.fr
 
+# rhubarbe load requires longer timeout for this huge image
 - name: Turn ON node {{ fit_node }} and load latest R2lab gnuradio image
   shell: rhubarbe load -t 600 -i gnuradio {{ fit_number }}
   delegate_to: faraday.inria.fr
 
-- name: Wait for the node {{ fit_node }} to be SSH accessible
-  wait_for:
-    host: "{{ fit_node }}"
-    port: 22
-    timeout: 90
-    sleep: 5
-  delegate_to: faraday.inria.fr
-
-## rhubarbe wait has issues and fails now with non-zero return code now...
-#- name: Wait for the node  {{ fit_node }} to be ssh ready
-#  shell: rhubarbe wait {{ fit_number }}
+#- name: Wait for the node {{ fit_node }} to be SSH accessible
+#  wait_for:
+#    host: "{{ fit_node }}"
+#    port: 22
+#    timeout: 90
+#    sleep: 5
 #  delegate_to: faraday.inria.fr
+
+# rhubarbe wait requires longer timeout too for this huge image
+- name: Wait for the node  {{ fit_node }} to be ssh ready
+  shell: rhubarbe wait -t 60 {{ fit_number }}
+  delegate_to: faraday.inria.fr
 
 - name: Turn ON USRP {{ fit_usrp }} on node {{ fit_node }}
   shell: rhubarbe usrpon {{ fit_number }}
   delegate_to: faraday.inria.fr
 
-- name: Wait 60 seconds for the USRP to be ready
+
+- name: Wait 20 seconds for the USRP to be ready
   pause:
-    seconds: 60
+    seconds: 20
 
