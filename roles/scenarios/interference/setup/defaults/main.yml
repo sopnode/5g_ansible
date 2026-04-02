@@ -1,4 +1,6 @@
 ---
-fit_node: fit08
-fit_number: 8
-fit_usrp: b205
+fit_index: "{{ 1 if hostvars[faraday_host].interference_usrp == 'fit' and groups['fit_nodes'] | length > 1 else 0 }}"
+
+fit_node: "{{ groups['fit_nodes'][fit_index] }}"
+fit_number: "{{ hostvars[groups['fit_nodes'][fit_index]].fit_number }}"
+fit_usrp: "{{ hostvars[groups['fit_nodes'][fit_index]].fit_usrp }}"
