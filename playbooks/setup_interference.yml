@@ -5,15 +5,27 @@
 #
 - name: Set up fit node for noise generation if any
   hosts: faraday
-  vars:
-    fit_node: "{{ (groups['fit_nodes'] | default([]))[0] }}"
-    fit_number: "{{ hostvars[fit_node].fit_number }}"
-    fit_usrp: "{{ hostvars[fit_node].fit_usrp }}"
+
+  pre_tasks:
+    - name: Set fit_node for noise
+      set_fact:
+        fit_node: "{{ groups['fit_nodes'][0] }}"
+      when:
+        - groups['fit_nodes'] | length > 0
+        - hostvars.get(groups['faraday'][0], {}).get('interference_usrp') == 'fit'
+
+    - name: Set fit details for noise
+      set_fact:
+        fit_number: "{{ hostvars[fit_node].fit_number }}"
+        fit_usrp: "{{ hostvars[fit_node].fit_usrp }}"
+      when: fit_node is defined
+
   roles:
     - role: scenarios/interference/setup
       when:
-        - groups['fit_nodes'] | length > 0
-        - hostvars[groups['faraday'][0]].interference_usrp == 'fit'
+        - fit_node is defined
+        - fit_number is defined
+        - fit_usrp is defined
 
 - name: Set up interference USRP on R2Lab
   hosts: faraday
@@ -32,7 +44,7 @@
 
   pre_tasks:
 
-    - name: Set fit_node safely if group exists
+    - name: Set fit_index
       set_fact:
         fit_index: >-
           {{
@@ -41,8 +53,14 @@
               and groups.get('fit_nodes', []) | length > 1
             ) else 0
           }}
-        fit_node: "{{ groups['fit_nodes'][fit_index] }}"
       when: groups['fit_nodes'] | length > 0
+
+    - name: Set fit_node
+      set_fact:
+        fit_node: "{{ groups['fit_nodes'][fit_index | int] }}"
+      when:
+        - fit_index is defined
+        - groups['fit_nodes'] | length > 0
 
     - name: Set fit details
       set_fact:
