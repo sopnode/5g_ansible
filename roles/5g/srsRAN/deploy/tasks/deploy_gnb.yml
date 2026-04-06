@@ -92,11 +92,11 @@
             priority: 99
             resourceName: benetel_ru
 
-    - name: Update values file with discovered PCI address
-      ansible.builtin.shell: >
-        {{ yq_bin_path }} eval -i '
-          .sriov.pciAddress = "{{ benetel_pci_addr }}"
-        ' "{{ values_file }}"
+    #- name: Update values file with discovered PCI address
+    #  ansible.builtin.shell: >
+    #    {{ yq_bin_path }} eval -i '
+    #      .sriov.pciAddress = "{{ benetel_pci_addr }}"
+    #    ' "{{ values_file }}"
 
     - name: Wait for SR-IOV VF creation
       pause:
