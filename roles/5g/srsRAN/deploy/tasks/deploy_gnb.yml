@@ -92,15 +92,77 @@
             priority: 99
             resourceName: benetel_ru
 
-    #- name: Update values file with discovered PCI address
-    #  ansible.builtin.shell: >
-    #    {{ yq_bin_path }} eval -i '
-    #      .sriov.pciAddress = "{{ benetel_pci_addr }}"
-    #    ' "{{ values_file }}"
-
     - name: Wait for SR-IOV VF creation
       pause:
         seconds: 60
+
+- name: Set CPU scaling governor to performance on ran node
+  when: rru in ['benetel1', 'benetel2']
+  block:
+
+    - name: Set performance governor via DaemonSet job
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: set-governor
+            namespace: "{{ ran_ns }}"
+          spec:
+            nodeName: "{{ ran_node_name }}"
+            restartPolicy: Never
+            hostPID: true
+            containers:
+              - name: set-governor
+                image: busybox
+                securityContext:
+                  privileged: true
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+                      echo performance > $cpu 2>/dev/null || true
+                    done
+                    echo "Done"
+                volumeMounts:
+                  - mountPath: /sys
+                    name: sysfs
+            volumes:
+              - name: sysfs
+                hostPath:
+                  path: /sys
+                  type: Directory
+
+    - name: Wait for governor pod to complete
+      shell: >
+        kubectl wait pod/set-governor -n {{ ran_ns }}
+        --for=condition=Succeeded --timeout=30s
+      changed_when: false
+      failed_when: false
+
+    - name: Verify governor is set
+      shell: >
+        kubectl exec -n {{ ran_ns }} set-governor -- 
+        cat /sys/devices/system/cpu/cpu6/cpufreq/scaling_governor 2>/dev/null || 
+        echo "unknown"
+      register: governor_check
+      changed_when: false
+      failed_when: false
+
+    - name: Show governor status
+      ansible.builtin.debug:
+        msg: "CPU governor on {{ ran_node_name }}: {{ governor_check.stdout }}"
+
+    - name: Cleanup governor pod
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Pod
+        name: set-governor
+        namespace: "{{ ran_ns }}"
+      failed_when: false
 
 - name: Deploy srsRAN gNB using Helm
   when: not rru in ['n300', 'n320']
