@@ -17,8 +17,25 @@
     sysctl -w net.core.wmem_max=2500000"
   delegate_to: faraday.inria.fr
 
+- name: Install XFCE
+  shell: ssh root@{{ fit_node }} 'apt install -y xfce4 xfce4-goodies'
+  delegate_to: faraday.inria.fr
+
+- name: Configure VNC xstartup
+  shell: |
+    ssh root@{{ fit_node }} "echo '#!/bin/bash
+    unset SESSION_MANAGER
+    unset DBUS_SESSION_BUS_ADDRESS
+
+    export XDG_RUNTIME_DIR=/tmp/runtime-root
+    mkdir -p \$XDG_RUNTIME_DIR
+    chmod 700 \$XDG_RUNTIME_DIR
+
+    exec dbus-launch --exit-with-session startxfce4' > /root/.vnc/xstartup && chmod +x /root/.vnc/xstartup"
+  delegate_to: faraday.inria.fr
+
 - name: Launch VNC server on {{ fit_node }}
-  shell: ssh root@{{ fit_node }} 'tigervncserver -xstartup /usr/bin/xterm'
+  shell: ssh root@{{ fit_node }} 'tigervncserver :1 -geometry 2560x1600 -depth 24'
   delegate_to: faraday.inria.fr
 
 - name: Launch uhd_fft inside xterm on {{ fit_node }}
