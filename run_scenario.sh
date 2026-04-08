@@ -10,6 +10,7 @@ INTERFERENCE_PLAYBOOK="playbooks/run_scenario_interference.yml"
 SETUP_INTERFERENCE_PLAYBOOK="playbooks/setup_interference.yml"
 
 RUN_SETUP=true
+RUN_SCENARIO=true
 SETUP_PLAYBOOK="${SETUP_IPERF_PLAYBOOK}"
 TARGET_PLAYBOOK="${IPERF_PLAYBOOK}"
 DRY_RUN=false
@@ -33,7 +34,8 @@ usage() {
     echo ""
     echo "-d                       Deploy the default iperf scenario"
     echo "-i                       Deploy the interference scenario"
-    echo "--no-setup               Do not run the setup, --use this option if R2lab devices already up and running"
+    echo "-n, --no-setup           Do not run the setup, use this option if R2lab devices already up and running"
+    echo "-s, --only-setup         Only run the setup"
     echo "-e <vars>                Extra ansible vars, e.g., -e \"nb_ues=5\" -e \"duration=20\""
     echo "--inventory <name>       Use ./inventory/<name>/hosts.ini inventory instead of the default one"
     echo "--dry-run                Only print ansible commands"
@@ -43,8 +45,12 @@ usage() {
 # Proper argument parsing
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --no-setup)
+        -n|--no-setup)
             RUN_SETUP=false
+            shift
+            ;;
+        -s|--only-setup)
+            RUN_SCENARIO=false
             shift
             ;;
         --inventory=*)
@@ -111,6 +117,8 @@ if [[ "$RUN_SETUP" == true ]]; then
         "$SETUP_PLAYBOOK"
 fi
 
-run_cmd ansible-playbook -i "$INVENTORY" \
-    "${ANSIBLE_EXTRA_ARGS[@]}" \
-    "$TARGET_PLAYBOOK" 2>&1 | tee ${DIR_LOGS}/logs-scenario.txt 
+if [[ "$RUN_SCENARIO" == true ]]; then
+    run_cmd ansible-playbook -i "$INVENTORY" \
+        "${ANSIBLE_EXTRA_ARGS[@]}" \
+        "$TARGET_PLAYBOOK" 2>&1 | tee ${DIR_LOGS}/logs-scenario.txt 
+fi
