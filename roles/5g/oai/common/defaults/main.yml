@@ -1,10 +1,10 @@
 ---
 dir_oai: "{{ ansible_env.HOME }}/oai"
-repo_url: "https://github.com/sopnode/oai5g-rru.git"
+repo_url: "https://github.com/Ziyad-Mabrouk/oai5g-rru.git"
 repo_dest: "{{ dir_oai }}/oai5g-rru"
-repo_oai5g_rru: "https://github.com/sopnode/oai5g-rru.git"
+repo_oai5g_rru: "https://github.com/Ziyad-Mabrouk/oai5g-rru.git"
 tag_oai5g_rru: "main"
-repo_oai_cn5g_fed: "https://gitlab.eurecom.fr/turletti/charts.git"
+repo_oai_cn5g_fed: "https://gitlab.eurecom.fr/ziyad/charts.git"
 tag_oai_cn5g_fed: "main"
 conf: "{{ hostvars[groups['faraday'][0]].conf }}"
 prepare_demo_script: "{{ dir_oai }}/prepare-demo-oai.sh"
