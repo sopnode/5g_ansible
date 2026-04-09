@@ -64,10 +64,6 @@
       register: cplane_policy
       failed_when: cplane_policy.resources | length == 0
 
-    - name: Wait for SR-IOV VF creation
-      pause:
-        seconds: 60
-
     - name: "Detect FIRST VF (VF 0) from ruvfioc policy"
       shell: |
         lspci | grep "Virtual Function" | grep "3a:09" | head -1 | awk '{print $1}'
@@ -103,7 +99,7 @@
   when: rru in ['benetel1', 'benetel2']
   block:
 
-    - name: Set performance governor via DaemonSet job
+    - name: Set performance governor via pod
       kubernetes.core.k8s:
         state: present
         definition:
@@ -125,9 +121,16 @@
                   - /bin/sh
                   - -c
                   - |
+                    echo "Before:"
+                    cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+
                     for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
                       echo performance > $cpu 2>/dev/null || true
                     done
+
+                    echo "After:"
+                    cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+
                     echo "Done"
                 volumeMounts:
                   - mountPath: /sys
@@ -141,22 +144,23 @@
     - name: Wait for governor pod to complete
       shell: >
         kubectl wait pod/set-governor -n {{ ran_ns }}
-        --for=condition=Succeeded --timeout=30s
+        --for=condition=Succeeded --timeout=60s
       changed_when: false
       failed_when: false
 
-    - name: Verify governor is set
-      shell: >
-        kubectl exec -n {{ ran_ns }} set-governor -- 
-        cat /sys/devices/system/cpu/cpu6/cpufreq/scaling_governor 2>/dev/null || 
-        echo "unknown"
-      register: governor_check
+    - name: Read governor from pod logs
+      shell: kubectl logs -n {{ ran_ns }} set-governor
+      register: governor_logs
       changed_when: false
       failed_when: false
+
+    - name: Extract governor value
+      set_fact:
+        governor_value: "{{ governor_logs.stdout | regex_search('After:\\n(.*)', '\\1') | default('unknown') }}"
 
     - name: Show governor status
       ansible.builtin.debug:
-        msg: "CPU governor on {{ ran_node_name }}: {{ governor_check.stdout }}"
+        msg: "CPU governor on {{ ran_node_name }}: {{ governor_value }}"
 
     - name: Cleanup governor pod
       kubernetes.core.k8s:
