@@ -128,15 +128,21 @@
     path: /opt/ansible-venv
     state: absent
 
-- name: Create fresh venv using standard command
-  ansible.builtin.command: /usr/bin/python3 -m venv /opt/ansible-venv
-  args:
-    creates: /opt/ansible-venv/bin/python3
+- name: Create fresh ansible virtualenv (robust)
+  ansible.builtin.pip:
+    virtualenv: /opt/ansible-venv
+    virtualenv_command: /usr/bin/python3 -m venv
+    name: pip
+    state: present
 
 - name: Upgrade pip, setuptools, wheel in venv
-  ansible.builtin.command: /opt/ansible-venv/bin/pip install --upgrade pip setuptools wheel
-  args:
-    creates: /opt/ansible-venv/bin/wheel
+  ansible.builtin.pip:
+    virtualenv: /opt/ansible-venv
+    name:
+      - pip
+      - setuptools
+      - wheel
+    state: latest
 
 - name: Install Python requirements inside venv
   ansible.builtin.pip:
