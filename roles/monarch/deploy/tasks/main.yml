@@ -145,9 +145,16 @@
   args:
     creates: /opt/ansible-venv/bin/wheel
 
-- name: Install required Python modules in venv (kubernetes + pyyaml)
-  ansible.builtin.shell: /opt/ansible-venv/bin/pip install kubernetes pyyaml
-  
+- name: Install all required Python dependencies for Monarch in venv
+  ansible.builtin.shell: |
+    /opt/ansible-venv/bin/pip install \
+      kubernetes \
+      pyyaml \
+      flask \
+      python-dotenv \
+      requests \
+      cryptography
+
 # === CRITICAL: Reactivate venv Python interpreter BEFORE any k8s modules ===
 # deploy_core.yml, deploy_nss.yml, and deploy_kepler.yml use kubernetes.core modules
 # which require the venv Python interpreter to be active
