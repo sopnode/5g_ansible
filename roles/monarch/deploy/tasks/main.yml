@@ -145,50 +145,17 @@
   args:
     creates: /opt/ansible-venv/bin/wheel
 
-- name: Install required Python modules in venv
-  ansible.builtin.shell: /opt/ansible-venv/bin/pip install kubernetes pyyaml
+- name: Install Python requirements inside venv
+  ansible.builtin.shell: /opt/ansible-venv/bin/pip install -r {{ repo_dest }}/requirements.txt
 
-# === CRITICAL: Reactivate venv Python interpreter BEFORE imports ===
+# === CRITICAL: Reactivate venv Python interpreter BEFORE any k8s modules ===
 # deploy_core.yml, deploy_nss.yml, and deploy_kepler.yml use kubernetes.core modules
 # which require the venv Python interpreter to be active
-- name: Force Ansible to use new venv Python (BEFORE imports)
+- name: Force Ansible to use new venv Python (BEFORE all k8s operations)
   ansible.builtin.set_fact:
     ansible_python_interpreter: /opt/ansible-venv/bin/python
 
-# --- Deploy Monarch core components ---
-- name: Deploy Monarch Core Components (Data, Monitoring)
-  ansible.builtin.debug:
-    msg: "Starting deployment of Monarch core components..."
-
-- import_tasks: deploy_core.yml
-
-# --- Deploy Monarch NSS components ---
-- name: Deploy Monarch NSS Components (NSSDC, Prometheus)
-  ansible.builtin.debug:
-    msg: "Starting deployment of Monarch NSS components..."
-
-- import_tasks: deploy_nss.yml
-
-# --- Deploy Kepler (if enabled) ---
-- name: Deploy Kepler for monitoring (if enabled)
-  ansible.builtin.debug:
-    msg: "Starting deployment of Kepler for monitoring..."
-
-- import_tasks: deploy_kepler.yml
-  when: enable_kepler
-
-# --- MongoDB nodeSelector patch ---
-- name: Append nodeSelector for MongoDB (exact indent, end of file)
-  blockinfile:
-    path: "{{ repo_dest }}/data_store/mongodb/mongodb-deployment.yaml"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK: NodeSelector for MongoDB"
-    insertafter: EOF
-    block: |
-      # fixing indentation
-            nodeSelector:
-              kubernetes.io/hostname: {{ groups['monitor_node'][0] }}
-
-# --- Deploy external Monarch components robustly ---
+# --- Deploy external Monarch components robustly (MUST BE BEFORE deploy_core) ---
 - name: Stop and remove old Monarch services
   ansible.builtin.systemd:
     name: "{{ item }}"
@@ -281,3 +248,36 @@
     msg: "Service {{ item.item }} failed to start. Check logs above."
   when: item.stdout != "active"
   loop: "{{ service_status.results }}"
+
+# --- MongoDB nodeSelector patch ---
+- name: Append nodeSelector for MongoDB (exact indent, end of file)
+  blockinfile:
+    path: "{{ repo_dest }}/data_store/mongodb/mongodb-deployment.yaml"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: NodeSelector for MongoDB"
+    insertafter: EOF
+    block: |
+      # fixing indentation
+            nodeSelector:
+              kubernetes.io/hostname: {{ groups['monitor_node'][0] }}
+
+# --- Deploy Monarch core components (AFTER services are running) ---
+- name: Deploy Monarch Core Components (Data, Monitoring)
+  ansible.builtin.debug:
+    msg: "Starting deployment of Monarch core components..."
+
+- import_tasks: deploy_core.yml
+
+# --- Deploy Monarch NSS components ---
+- name: Deploy Monarch NSS Components (NSSDC, Prometheus)
+  ansible.builtin.debug:
+    msg: "Starting deployment of Monarch NSS components..."
+
+- import_tasks: deploy_nss.yml
+
+# --- Deploy Kepler (if enabled) ---
+- name: Deploy Kepler for monitoring (if enabled)
+  ansible.builtin.debug:
+    msg: "Starting deployment of Kepler for monitoring..."
+
+- import_tasks: deploy_kepler.yml
+  when: enable_kepler
