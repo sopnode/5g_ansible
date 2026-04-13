@@ -46,11 +46,11 @@
     set -e
     if command -v curl >/dev/null 2>&1; then
       curl -L --fail \
-        "https://raw.githubusercontent.com/sopnode/oai5g-rru/{{ tag_oai5g_rru }}/testing/prepare-demo-oai.sh" \
+        "https://raw.githubusercontent.com/Ziyad-Mabrouk/oai5g-rru/{{ tag_oai5g_rru }}/testing/prepare-demo-oai.sh" \
         -o "{{ prepare_demo_script }}"
     elif command -v wget >/dev/null 2>&1; then
       wget -O "{{ prepare_demo_script }}" \
-        "https://raw.githubusercontent.com/sopnode/oai5g-rru/{{ tag_oai5g_rru }}/testing/prepare-demo-oai.sh"
+        "https://raw.githubusercontent.com/Ziyad-Mabrouk/oai5g-rru/{{ tag_oai5g_rru }}/testing/prepare-demo-oai.sh"
     else
       echo "Neither curl nor wget found" >&2
       exit 1
@@ -181,6 +181,13 @@
     line: 'GNB_MODE="{{ oai_gnb_mode }}"'
     backrefs: true
   when: oai_gnb_mode is defined
+ 
+- name: Update MONITORING variable
+  ansible.builtin.lineinfile:
+    path: "{{ prepare_demo_script }}"
+    regexp: '^MONITORING='
+    line: 'MONITORING="{{ monitoring_enabled }}"'
+    backrefs: true
  
 - name: Run prepare-demo-oai.sh to pull and configure OAI charts
   ansible.builtin.shell: "./prepare-demo-oai.sh -a 2>&1 | tee /tmp/output-prepare-demo-oai.txt"

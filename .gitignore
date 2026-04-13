@@ -1,6 +1,6 @@
 .vault_pass.txt
-.r2lab_config
-# inventory/default/hosts.ini
 logs*
-playbooks/admin.conf
-playbooks/.kubeadm_join_command.txt
+.r2lab_config
+.deployment.env
+.kubeadm_join_command.txt
+admin.conf

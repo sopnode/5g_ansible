@@ -2,9 +2,12 @@
 - name: START_MONARCH_DEPLOY
   ansible.builtin.meta: noop
 
-- name: Set ansible_python_interpreter to venv
+# === CRITICAL: Reset Python interpreter BEFORE venv cleanup ===
+# This prevents a crash when deleting the venv that Ansible is currently using
+# (from a previous role like k8s_create)
+- name: Reset Ansible Python interpreter to system Python
   ansible.builtin.set_fact:
-    ansible_python_interpreter: /opt/ansible-venv/bin/python
+    ansible_python_interpreter: /usr/bin/python3
 
 - import_tasks: persist_data.yml
 
@@ -118,12 +121,8 @@
     line: 'NODE_IP="{{ monarch_node_ip }}"'
     create: yes
 
-# --- Python venv preparation ---
-- name: Reset ansible_python_interpreter to system python3
-  ansible.builtin.set_fact:
-    ansible_python_interpreter: /usr/bin/python3
-
-- name: Ensure Python tooling is available
+# === Python venv preparation (robust, works in any environment) ===
+- name: Ensure system packages for Python venv are installed
   ansible.builtin.package:
     name:
       - python3-venv
@@ -145,34 +144,34 @@
         path: /opt/ansible-venv
         state: absent
 
-    - name: Create ansible venv
-      ansible.builtin.command: /usr/bin/python3 -m venv /opt/ansible-venv
+- name: Create fresh ansible virtualenv using shell
+  ansible.builtin.shell: /usr/bin/python3 -m venv /opt/ansible-venv
+  args:
+    creates: /opt/ansible-venv/bin/python3
 
-    - name: Symlink python -> python3 in venv
-      ansible.builtin.file:
-        src: /opt/ansible-venv/bin/python3
-        dest: /opt/ansible-venv/bin/python
-        state: link
-        force: yes
+- name: Upgrade pip, setuptools, wheel in venv
+  ansible.builtin.shell: /opt/ansible-venv/bin/pip install --upgrade pip setuptools wheel
+  args:
+    creates: /opt/ansible-venv/bin/wheel
 
-    - name: Bootstrap pip in venv
-      ansible.builtin.command: /opt/ansible-venv/bin/python3 -m pip install --upgrade pip setuptools wheel
+- name: Install all required Python dependencies for Monarch in venv
+  ansible.builtin.shell: |
+    /opt/ansible-venv/bin/pip install \
+      kubernetes \
+      pyyaml \
+      flask \
+      python-dotenv \
+      requests \
+      cryptography
 
-    - name: Install kubernetes in venv
-      ansible.builtin.command: /opt/ansible-venv/bin/pip install --upgrade kubernetes
-  when: not venv_exists.stat.exists
-
-- name: Install Python requirements inside venv
-  ansible.builtin.command: >
-    /opt/ansible-venv/bin/pip install -r {{ repo_dest }}/requirements.txt
-  environment:
-    PATH: "/opt/ansible-venv/bin:/usr/bin:/bin"
-
-- name: Set ansible_python_interpreter to venv
+# === CRITICAL: Reactivate venv Python interpreter BEFORE any k8s modules ===
+# deploy_core.yml, deploy_nss.yml, and deploy_kepler.yml use kubernetes.core modules
+# which require the venv Python interpreter to be active
+- name: Force Ansible to use new venv Python (BEFORE all k8s operations)
   ansible.builtin.set_fact:
     ansible_python_interpreter: /opt/ansible-venv/bin/python
-  
-# --- Deploy external Monarch components ---
+
+# --- Deploy external Monarch components robustly (MUST BE BEFORE deploy_core) ---
 - name: Stop and remove old Monarch services
   ansible.builtin.systemd:
     name: "{{ item }}"
@@ -277,7 +276,7 @@
             nodeSelector:
               kubernetes.io/hostname: {{ groups['monitor_node'][0] }}
 
-# --- Deploy Monarch core components ---
+# --- Deploy Monarch core components (AFTER services are running) ---
 - name: Deploy Monarch Core Components (Data, Monitoring)
   ansible.builtin.debug:
     msg: "Starting deployment of Monarch core components..."

@@ -164,7 +164,7 @@
 
     # ---------------- START INTERFERENCE ----------------
     - name: Run noise generator
-      become: true
+      become: false # avoid sudo password missing error
       vars:
         usrp_type: "{{ hostvars[faraday_host].interference_usrp | default('') }}"
       block:

@@ -81,7 +81,14 @@
 
 # The following task requires all nodes be ssh-reachable
 # so it can't be the first task of the playbook
-- hosts: localhost,sopnodes,faraday
+# avoid hosts: all to not include fit_nodes since they are not running before sceanrio setup and will fail
+- hosts: sopnodes
+  gather_facts: true
+  tasks:
+    - name: Normalize booleans at playbook start
+      import_tasks: ../tasks/reload_booleans.yml
+
+- hosts: qhats
   gather_facts: true
   tasks:
     - name: Normalize booleans at playbook start
@@ -422,7 +429,7 @@
       include_role:
         name: monarch/monitoring
       vars:
-        set_gnb_monitoring: true
+        set_gnb_monitoring: false
       when: monitoring_enabled and ran == 'oai'
 
     - name: Launch monitoring for srsRAN

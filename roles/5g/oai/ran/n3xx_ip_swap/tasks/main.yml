@@ -28,12 +28,11 @@
   debug:
     msg: "New IP detected: {{ new_usrp_ip }}"
 
-# Apply the change in both files while preserving indentation (backrefs)
-- name: Update USRP address line in values.yaml files
-  lineinfile:
+- name: Update USRP address line and remove extra spaces
+  replace:
     path: "{{ item }}"
-    regexp: '^(\s+)sdr_addrs: mgmt_addr=.*,addr=.*,product=n320,serial=31B3A77,fpga=XG,clock_source=internal,time_source=internal'
-    line: '\1sdr_addrs: mgmt_addr={{ new_usrp_ip }},addr={{ new_usrp_ip }},product=n320,serial=31B3A77,fpga=XG,clock_source=internal,time_source=internal'
-    backrefs: yes
+    regexp: 'sdr_addrs:\s+mgmt_addr=[\d.]+\s*,\s*addr=[\d.]+\s*,\s*product=n320,serial=31B3A77,fpga=XG,clock_source=internal,time_source=internal'
+    replace: 'sdr_addrs: mgmt_addr={{ new_usrp_ip }},addr={{ new_usrp_ip }},product=n320,serial=31B3A77,fpga=XG,clock_source=internal,time_source=internal'
   loop: "{{ target_files }}"
   when: current_ip_cmd.stdout != new_usrp_ip
+
