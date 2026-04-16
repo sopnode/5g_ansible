@@ -50,6 +50,28 @@
     name: "{{ open5gs_ns }}"
     state: present
 
+- name: Force Open5GS workloads on core_node (nodeName)
+  ansible.builtin.copy:
+    dest: "{{ repo_dest }}/{{ deployment_option }}/open5gs-node-patch.yaml"
+    content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: any
+      spec:
+        template:
+          spec:
+            nodeName: "{{ core_node_name }}"
+      ---
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: any
+      spec:
+        template:
+          spec:
+            nodeName: "{{ core_node_name }}"
+
 - name: Apply MongoDB with Kustomize
   ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/mongodb" -n {{ open5gs_ns }}
 
@@ -126,6 +148,7 @@
             name: cluster
           spec:
             ovs: {}
+
     - name: Apply NetworkAddonsConfig
       ansible.builtin.shell: |
         kubectl apply -f /tmp/netaddonsconf.yaml
@@ -167,8 +190,8 @@
 - name: Fail if a required NAD is missing
   ansible.builtin.fail:
     msg: "NAD {{ item }} is missing in {{ open5gs_ns }}"
-  when: item not in (nad_info.resources | map(attribute='metadata.name') | list)
   loop: "{{ nad_list }}"
+  when: item not in (nad_info.resources | map(attribute='metadata.name') | list)
 
 - name: Bring OVS bridges up if single-node Open5GS
   ansible.builtin.shell: |
@@ -201,42 +224,9 @@
   changed_when: false
   when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
-# --- CLEANUP PRE-DEPLOY TO ENSURE MULTUS RE-ATTACH ---
 - name: Force cleanup existing Open5GS pods
   ansible.builtin.shell: kubectl delete pods -n {{ open5gs_ns }} -l app=open5gs --force --grace-period=0 || true
   when: core_node_name == ran_node_name and core == "open5gs"
-
-- name: Write nodeSelector patch for ALL Open5GS workloads
-  ansible.builtin.copy:
-    dest: "{{ repo_dest }}/{{ deployment_option }}/open5gs-node-patch.yaml"
-    content: |
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: any
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ core_node_name }}"
-      ---
-      apiVersion: apps/v1
-      kind: StatefulSet
-      metadata:
-        name: any
-      spec:
-        template:
-          spec:
-            nodeSelector:
-              kubernetes.io/hostname: "{{ core_node_name }}"
-
-- name: Inject nodeSelector patch into kustomization.yaml
-  ansible.builtin.blockinfile:
-    path: "{{ repo_dest }}/{{ deployment_option }}/kustomization.yaml"
-    marker: "# {mark} ANSIBLE MANAGED - nodeSelector patch"
-    block: |
-      patches:
-        - path: open5gs-node-patch.yaml
 
 - name: Apply Open5GS NFs with Kustomize
   ansible.builtin.command: kubectl apply -k "{{ repo_dest }}/{{ deployment_option }}" -n {{ open5gs_ns }}
@@ -252,11 +242,9 @@
     nf_pod.resources | length > 0 and
     (nf_pod.resources[0].status.containerStatuses is defined) and
     (nf_pod.resources[0].status.containerStatuses[0].ready | default(false))
+  loop: "{{ nfs }}"
   retries: 40
   delay: 5
-  loop: "{{ nfs }}"
-  loop_control:
-    label: "{{ item }}"
 
 - name: Verify Multus N3 interface inside AMF pod
   ansible.builtin.shell: |
@@ -341,3 +329,4 @@
 - name: Check Open5GS deployment
   ansible.builtin.include_role:
     name: 5g/open5gs/check_all
+
