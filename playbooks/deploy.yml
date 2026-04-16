@@ -86,6 +86,19 @@
     - name: Normalize booleans at playbook start
       import_tasks: ../tasks/reload_booleans.yml
 
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
+
 - name: Common sopnodes setup
   hosts: sopnodes
   roles:
@@ -214,19 +227,6 @@
   roles:
     - role: setup/gre_tunnel
       when: bridge_enabled
-
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
 
 - name: Deploy Open5GS CN
   hosts: core_node
