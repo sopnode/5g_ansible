@@ -1,8 +1,19 @@
 ---
-- name: Force Ansible to use venv Python
+
+- name: Check if ansible venv python exists
+  ansible.builtin.stat:
+    path: /opt/ansible-venv/bin/python
+  register: venv_python
+
+- name: Save current interpreter
+  ansible.builtin.set_fact:
+    _original_python_interpreter: "{{ ansible_python_interpreter | default(omit) }}"
+
+- name: Switch to venv python if available
   ansible.builtin.set_fact:
     ansible_python_interpreter: /opt/ansible-venv/bin/python
-    
+  when: venv_python.stat.exists
+
 - name: Load common variables
   include_vars:
     file: "../../common/defaults/main.yml"
@@ -193,6 +204,8 @@
       {% endfor %}
   when: rru == 'rfsim'
 
-- name: Reset ansible_python_interpreter to system python3
+- name: Restore original python interpreter if it was changed
   ansible.builtin.set_fact:
-    ansible_python_interpreter: /usr/bin/python3
+    ansible_python_interpreter: "{{ _original_python_interpreter }}"
+  when: _original_python_interpreter is defined
+  
