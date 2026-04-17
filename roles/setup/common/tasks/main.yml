@@ -13,14 +13,14 @@
   delegate_to: "{{ item }}"
   run_once: true
 
-# fix mubuntu mirror issue
-- name: Fix APT sources (force official mirror)
+# fix ubuntu mirror issue
+- name: Fix Ubuntu security repo (avoid security.ubuntu.com)
   copy:
     dest: /etc/apt/sources.list
     content: |
-      deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} main restricted universe multiverse
-      deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }}-updates main restricted universe multiverse
-      deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }}-security main restricted universe multiverse
+      deb http://fr.archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
+      deb http://fr.archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
+      deb http://fr.archive.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
   become: true
   
 - name: Ensure required apt packages are installed
