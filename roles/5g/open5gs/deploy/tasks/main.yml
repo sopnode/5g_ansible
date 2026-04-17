@@ -208,7 +208,6 @@
     - name: Wait for NetworkAddonsConfig to become Available
       ansible.builtin.shell: |
         kubectl wait networkaddonsconfig cluster --for condition=Available --timeout=300s
-  #when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
   when: core_node_name == ran_node_name and core == "open5gs"
   become: yes
 
@@ -246,7 +245,37 @@
   loop: "{{ nad_list }}"
   when: item not in (nad_info.resources | map(attribute='metadata.name') | list)
 
-- name: Bring OVS bridges up if single-node Open5GS
+- name: Ensure OVS bridges exist and are up for FHI72
+  block:
+    - name: Create OVS bridges if they don't exist
+      ansible.builtin.shell: |
+        ovs-vsctl --no-headings list-br | grep -q "n2br" || ovs-vsctl add-br n2br
+        ovs-vsctl --no-headings list-br | grep -q "n3br" || ovs-vsctl add-br n3br
+        ovs-vsctl --no-headings list-br | grep -q "n4br" || ovs-vsctl add-br n4br
+      become: true
+      changed_when: false
+
+    - name: Bring OVS bridges up
+      ansible.builtin.shell: |
+        ip link set dev n2br up || true
+        ip link set dev n3br up || true
+        ip link set dev n4br up || true
+      become: true
+      changed_when: false
+
+    - name: Remove any stale veth ports from bridges
+      ansible.builtin.shell: |
+        for br in n2br n3br n4br; do
+          for port in $(ovs-vsctl list-ports "$br" 2>/dev/null | grep veth); do
+            ovs-vsctl del-port "$br" "$port" || true
+          done
+        done
+      become: true
+      changed_when: false
+
+  when: core_node_name == ran_node_name and core == "open5gs" and fhi72
+
+- name: Bring OVS bridges up if single-node Open5GS (non-FHI72)
   ansible.builtin.shell: |
     ip link set dev n2br up
     ip link set dev n3br up
@@ -257,8 +286,7 @@
       done
     done
   become: true
-  #when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
-  when: core_node_name == ran_node_name and core == "open5gs"
+  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
 
 - name: Assign Gateway IPs to OVS bridges for Single-Node SCTP bind
   ansible.builtin.shell: |
@@ -266,7 +294,6 @@
     ip addr add 10.10.3.254/24 dev n3br || true
     ip addr add 10.10.4.254/24 dev n4br || true
   become: true
-  #when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
   when: core_node_name == ran_node_name and core == "open5gs"
 
 - name: Wait for OVS resource registration on Node (optional for FHI72)
@@ -277,13 +304,13 @@
   retries: 10
   delay: 5
   changed_when: false
-  failed_when: false  # ✅ Ne failsure pas même si ça échoue
+  failed_when: false
   when: core_node_name == ran_node_name and core == "open5gs" and fhi72
 
 - name: Warn if OVS resources not available (FHI72 only)
   ansible.builtin.debug:
     msg: "OVS device resources not registered - OK for FHI72 single-node setups"
-  when: 
+  when:
     - core_node_name == ran_node_name and core == "open5gs" and fhi72
     - ovs_res_check is failed
 
@@ -392,4 +419,3 @@
 - name: Check Open5GS deployment
   ansible.builtin.include_role:
     name: 5g/open5gs/check_all
-
