@@ -18,6 +18,12 @@
   include_vars:
     file: "../../common/defaults/main.yml"
 
+- name: Ensure kubernetes python client is installed
+  ansible.builtin.package:
+    name: python3-kubernetes
+    state: present
+  become: yes
+  
 - name: Remove existing srsRAN Helm directory to ensure clean state
   ansible.builtin.file:
     path: "{{ repo_dest }}"
