@@ -3,6 +3,13 @@
 #  ansible.builtin.set_fact:
 #    ansible_python_interpreter: /opt/ansible-venv/bin/python
 
+- name: Ensure helm is installed
+  ansible.builtin.package:
+    name: helm
+    state: present
+  become: true
+
+
 - name: Load common variables
   include_vars:
     file: "../../common/defaults/main.yml"
