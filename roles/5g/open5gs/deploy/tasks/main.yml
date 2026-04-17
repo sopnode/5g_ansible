@@ -13,6 +13,13 @@
         state: present
       become: yes
 
+    - name: Install kubernetes Python library for Ansible
+      ansible.builtin.pip:
+        name: kubernetes
+        state: present
+        executable: pip3
+      become: yes
+
     - name: Create Python virtual environment (idempotent)
       ansible.builtin.command:
         cmd: python3 -m venv "{{ repo_dest }}/venv"
