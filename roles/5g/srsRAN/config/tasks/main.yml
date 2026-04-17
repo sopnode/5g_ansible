@@ -37,6 +37,8 @@
     kind: Namespace
     name: "{{ ran_ns }}"
     state: present
+  vars:
+    ansible_python_interpreter: /opt/ansible-venv/bin/python
 
 - name: Gather env facts (remote)
   ansible.builtin.setup:
