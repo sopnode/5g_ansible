@@ -14,13 +14,37 @@
   run_once: true
 
 # fix ubuntu mirror issue
-- name: Fix Ubuntu security repo (avoid security.ubuntu.com)
-  copy:
-    dest: /etc/apt/sources.list
-    content: |
-      deb http://fr.archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
-      deb http://fr.archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
-      deb http://fr.archive.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
+- name: Detect OS codename
+  ansible.builtin.set_fact:
+    os_codename: "{{ ansible_distribution_release }}"
+
+- name: Ensure Ubuntu main repo
+  ansible.builtin.apt_repository:
+    repo: "deb http://fr.archive.ubuntu.com/ubuntu {{ os_codename }} main restricted universe multiverse"
+    state: present
+    filename: ubuntu
+
+- name: Ensure Ubuntu updates repo
+  ansible.builtin.apt_repository:
+    repo: "deb http://fr.archive.ubuntu.com/ubuntu {{ os_codename }}-updates main restricted universe multiverse"
+    state: present
+    filename: ubuntu
+
+- name: Ensure Ubuntu security repo
+  ansible.builtin.apt_repository:
+    repo: "deb http://fr.archive.ubuntu.com/ubuntu {{ os_codename }}-security main restricted universe multiverse"
+    state: present
+    filename: ubuntu
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Ensure apt is consistent before installs
+  ansible.builtin.shell: |
+    dpkg --configure -a
+    apt -f install -y
   become: true
   
 - name: Ensure required apt packages are installed
