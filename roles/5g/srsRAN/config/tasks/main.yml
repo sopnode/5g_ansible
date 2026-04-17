@@ -7,7 +7,7 @@
 
 - name: Save current interpreter
   ansible.builtin.set_fact:
-    _original_python_interpreter: "{{ ansible_python_interpreter | default(omit) }}"
+    _original_python_interpreter: "{{ ansible_python_interpreter | default('/usr/bin/python3') }}"
 
 - name: Switch to venv python if available
   ansible.builtin.set_fact:
