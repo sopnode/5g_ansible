@@ -3,12 +3,19 @@
 #  ansible.builtin.set_fact:
 #    ansible_python_interpreter: /opt/ansible-venv/bin/python
 
-- name: Ensure helm is installed
-  ansible.builtin.package:
-    name: helm
-    state: present
-  become: true
+- name: Check if helm exists
+  ansible.builtin.command: helm version --short
+  register: helm_check
+  changed_when: false
+  failed_when: false
 
+- name: Install Helm if missing
+  ansible.builtin.shell: |
+    set -e
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  when: helm_check.rc != 0
+  args:
+    executable: /bin/bash
 
 - name: Load common variables
   include_vars:
