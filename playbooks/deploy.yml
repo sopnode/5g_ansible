@@ -97,7 +97,7 @@
     - role: setup/k8s/k8s_env
     - role: setup/optimization/cpu
     - role: setup/ovs
-      when: not (fhi72 and ran == 'oai')
+      when: not (fhi72 and ran == 'oai' and core_node_name == ran_node_name)
 
 - name: PTP setup on ran_node
   hosts: ran_node
