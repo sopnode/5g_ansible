@@ -38,7 +38,7 @@
     name: "{{ ran_ns }}"
     state: present
   vars:
-    ansible_python_interpreter: /opt/ansible-venv/bin/python
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
 
 - name: Gather env facts (remote)
   ansible.builtin.setup:
