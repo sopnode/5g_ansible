@@ -156,7 +156,8 @@
     - name: Wait for NetworkAddonsConfig to become Available
       ansible.builtin.shell: |
         kubectl wait networkaddonsconfig cluster --for condition=Available --timeout=300s
-  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+  #when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+  when: core_node_name == ran_node_name and core == "open5gs"
   become: yes
 
 - name: Patch NADs to use unique interface names
@@ -204,7 +205,8 @@
       done
     done
   become: true
-  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+  #when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+  when: core_node_name == ran_node_name and core == "open5gs"
 
 - name: Assign Gateway IPs to OVS bridges for Single-Node SCTP bind
   ansible.builtin.shell: |
@@ -212,7 +214,8 @@
     ip addr add 10.10.3.254/24 dev n3br || true
     ip addr add 10.10.4.254/24 dev n4br || true
   become: true
-  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+  #when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+  when: core_node_name == ran_node_name and core == "open5gs"
 
 - name: Wait for OVS resource registration on Node
   ansible.builtin.shell: |
@@ -222,7 +225,8 @@
   retries: 20
   delay: 5
   changed_when: false
-  when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+  #when: core_node_name == ran_node_name and core == "open5gs" and not fhi72
+  when: core_node_name == ran_node_name and core == "open5gs"
 
 - name: Force cleanup existing Open5GS pods
   ansible.builtin.shell: kubectl delete pods -n {{ open5gs_ns }} -l app=open5gs --force --grace-period=0 || true
