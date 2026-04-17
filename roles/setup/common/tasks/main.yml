@@ -14,11 +14,13 @@
   run_once: true
 
 # fix mubuntu mirror issue
-- name: Force HTTPS for LRZ mirror
-  replace:
-    path: /etc/apt/sources.list
-    regexp: 'http://ubuntu\.mirror\.lrz\.de/ubuntu'
-    replace: 'https://ubuntu.mirror.lrz.de/ubuntu'
+- name: Fix APT sources (force official mirror)
+  copy:
+    dest: /etc/apt/sources.list
+    content: |
+      deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} main restricted universe multiverse
+      deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }}-updates main restricted universe multiverse
+      deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }}-security main restricted universe multiverse
   become: true
   
 - name: Ensure required apt packages are installed
@@ -37,6 +39,7 @@
       - jq
     state: present
     update_cache: yes
+    cache_valid_time: 3600
 
 - name: Disable swap
   shell: |
