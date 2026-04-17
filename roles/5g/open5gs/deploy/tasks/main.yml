@@ -1,7 +1,8 @@
 ---
 - name: START_OPEN5GS_DEPLOY
   ansible.builtin.meta: noop
-- name: Python venv setup block (FHI72 only)
+
+- name: Python venv setup block (fhi72 only)
   block:
     - name: Install python3-venv, python3-pip, setuptools and wheel
       ansible.builtin.apt:
@@ -13,12 +14,22 @@
         state: present
       become: yes
 
-    - name: Install kubernetes Python library for Ansible
+    - name: Install kubernetes Python library for Ansible (via pip with --break-system-packages)
       ansible.builtin.pip:
         name: kubernetes
         state: present
         executable: pip3
+        extra_args: "--break-system-packages"
       become: yes
+      register: pip_install
+      ignore_errors: yes
+
+    - name: Install python3-kubernetes via apt as fallback
+      ansible.builtin.apt:
+        name: python3-kubernetes
+        state: present
+      become: yes
+      when: pip_install is failed
 
     - name: Create Python virtual environment (idempotent)
       ansible.builtin.command:
@@ -42,7 +53,7 @@
       become: yes
 
   when: core_node_name == ran_node_name and core == "open5gs" and fhi72
-  
+
 - name: Reload and restart kubelet
   ansible.builtin.shell: |
     systemctl daemon-reload
