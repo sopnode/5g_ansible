@@ -7,18 +7,11 @@
   include_vars:
     file: "../../common/defaults/main.yml"
 
-- name: Uninstall existing srsran-gnb release if present
-  shell: >
-    helm list -n {{ ran_ns }} -a -q |
-    grep -w "^srsran-gnb$" | wc -l
-  register: gnb_release_exists
-  changed_when: false
-  failed_when: false
-
-- name: Uninstall srsran-gnb
-  shell: helm uninstall srsran-gnb -n {{ ran_ns }} --no-hooks
-  when: gnb_release_exists.stdout | trim | int > 0
-  failed_when: false
+- name: Uninstall srsran-gnb safely
+  kubernetes.core.helm:
+    name: srsran-gnb
+    namespace: "{{ ran_ns }}"
+    state: absent
 
 - name: Deploy srsRAN gNB (only when not rfsim)
   when: rru in ['n300', 'n320']
