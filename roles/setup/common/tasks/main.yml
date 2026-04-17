@@ -12,6 +12,14 @@
   loop: "{{ groups['all'] }}"
   delegate_to: "{{ item }}"
   run_once: true
+
+# fix mubuntu mirror issue
+- name: Force HTTPS for LRZ mirror
+  replace:
+    path: /etc/apt/sources.list
+    regexp: 'http://ubuntu\.mirror\.lrz\.de/ubuntu'
+    replace: 'https://ubuntu.mirror.lrz.de/ubuntu'
+  become: true
   
 - name: Ensure required apt packages are installed
   apt:
