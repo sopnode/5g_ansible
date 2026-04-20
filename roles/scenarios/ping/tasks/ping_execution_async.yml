@@ -19,7 +19,7 @@
   loop_control:
     loop_var: current_ue
     index_var: ue_index
-  async: 120
+  async: "{{ (duration | int) + 30 }}"
   poll: 0
   register: ping_jobs
   vars:
