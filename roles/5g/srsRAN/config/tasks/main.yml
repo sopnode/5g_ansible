@@ -95,7 +95,7 @@
       apiVersion: k8s.cni.cncf.io/v1
       kind: NetworkAttachmentDefinition
       metadata:
-        name: "{{ free5gc_n3_nad_name }}"
+        name: "{{ n3networkName }}"
         namespace: "{{ ran_ns }}"
       spec:
         config: >-
