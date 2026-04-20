@@ -20,7 +20,6 @@
     loop_var: current_ue
     index_var: ue_index
   vars:
-    iperf_port: "{{ 5201 + ue_index }}"
     ignore_task_errors: true
 
 - name: Filter out UEs without IP
@@ -35,7 +34,7 @@
 
 - name: Warn about UEs without IP
   debug:
-    msg: "Warning: UE {{ item }} has no IP and will be skipped in iperf tests"
+    msg: "Warning: UE {{ item }} has no IP and will be skipped in ping tests"
   loop: "{{ groups['qhats'] | difference(valid_ue_list) }}"
   when: (groups['qhats'] | difference(valid_ue_list)) | length > 0
 
@@ -50,7 +49,7 @@
 
 - name: Wipe remote log directories
   ansible.builtin.file:
-    path: "/tmp/iperf_logs"
+    path: "/tmp/ping_logs"
     state: absent
   loop: "{{ valid_ue_list }}"
 
@@ -60,8 +59,8 @@
     dest: "{{ results_dir }}/hosts.ini"
   delegate_to: localhost
 
-- name: Execute iperf tests for all connected UEs individually
-  include_tasks: iperf_execution.yml
+- name: Execute ping tests for all connected UEs individually
+  include_tasks: ping_execution.yml
   loop: "{{ valid_ue_list }}"
   loop_control:
     loop_var: current_ue
@@ -69,25 +68,23 @@
   vars:
     ue_count: 1
     ue_ip: "{{ ue_ips[current_ue] }}"
-    iperf_port: "{{ 5201 + ue_index }}"
     ignore_task_errors: true
 
-- name: Execute iperf tests for all connected UEs simultaneously
-  include_tasks: iperf_execution_async.yml
-  loop: "{{ iperf_scenarios }}"
+- name: Execute ping tests for all connected UEs simultaneously
+  include_tasks: ping_execution_async.yml
+  loop: "{{ ping_scenarios }}"
   loop_control:
     loop_var: scenario
   vars:
     ue_count: "{{ valid_ue_list|length }}"
-    direction: "{{ scenario.direction }}"
-    protocol: "{{ scenario.protocol }}"
+    packet_size: "{{ scenario.packet_size }}"
     extra_args: "{{ scenario.extra_args }}"
     ignore_task_errors: true
 
 - name: Archive logs
   community.general.archive:
-    path: /tmp/iperf_logs/
-    dest: /tmp/iperf_logs.tar.gz
+    path: /tmp/ping_logs/
+    dest: /tmp/ping_logs.tar.gz
     format: gz
   loop: "{{ valid_ue_list }}"
   loop_control:
@@ -96,7 +93,7 @@
 
 - name: Fetch archived logs
   ansible.builtin.fetch:
-    src: /tmp/iperf_logs.tar.gz
+    src: /tmp/ping_logs.tar.gz
     dest: "{{ results_dir }}/{{ current_ue }}_logs.tar.gz"
     flat: yes
   loop: "{{ valid_ue_list }}"
