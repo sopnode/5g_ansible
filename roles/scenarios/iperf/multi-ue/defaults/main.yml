@@ -1,6 +1,6 @@
 ---
-duration: 30
-sleep: 5
+duration: "{{ iperf_duration | default(30) }}"
+sleep: "{{ iperf_sleep | default(5) }}"
 tcp_bandwidth: "0" # 0 == unlimited
 udp_bandwidth: "50M"
 async_stagger: 0

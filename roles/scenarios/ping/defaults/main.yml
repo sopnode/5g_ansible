@@ -1,6 +1,6 @@
 ---
-duration: 30
-sleep: 5
+duration: "{{ ping_duration | default(30) }}"
+sleep: "{{ ping_sleep | default(5) }}"
 async_stagger: 0
 
 ping_scenarios:
