@@ -4,8 +4,6 @@
     ue_ips: {}
     ignore_task_errors: true
     target_server: "{{ target_server_ip | default(hostvars[groups['core_node'][0]].ip) }}"
-    duration: "{{ iperf_duration | default(30) }}"
-    sleep: "{{ iperf_sleep | default(5) }}"
 
 - name: Define timestamp
   set_fact:
@@ -72,9 +70,7 @@
     ue_count: 1
     ue_ip: "{{ ue_ips[current_ue] }}"
     iperf_port: "{{ 5201 + ue_index }}"
-    # duration: "{{ iperf_duration | default(30) }}"
     ignore_task_errors: true
-    # sleep: 2
 
 - name: Execute iperf tests for all connected UEs simultaneously
   include_tasks: iperf_execution_async.yml
@@ -86,9 +82,7 @@
     direction: "{{ scenario.direction }}"
     protocol: "{{ scenario.protocol }}"
     extra_args: "{{ scenario.extra_args }}"
-    # duration: "{{ iperf_duration | default(30) }}"
     ignore_task_errors: true
-    # sleep: 2
 
 - name: Archive logs
   community.general.archive:

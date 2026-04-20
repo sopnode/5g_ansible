@@ -1,4 +1,6 @@
 ---
+duration: 30
+sleep: 5
 tcp_bandwidth: "0" # 0 == unlimited
 udp_bandwidth: "50M"
 async_stagger: 0
