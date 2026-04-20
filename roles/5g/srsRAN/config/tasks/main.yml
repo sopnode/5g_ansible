@@ -200,6 +200,8 @@
       ueIp: "{{ srsran_network.n3.ue_ips[0] }}"
       n3networkName: "{{ n3networkName }}"
       nodeName: "{{ ran_node_name }}"
+      nodeSelector:
+        kubernetes.io/hostname: "{{ ran_node_name }}"
       ueCount: {{ ue_count }}
       ues:
       {% for ue in ue_list %}
