@@ -189,13 +189,13 @@
     regexp: '^MONITORING='
     line: 'MONITORING="{{ monitoring_enabled }}"'
     backrefs: true
- 
-- name: Update NAD_TYPE_N2N3 variable
+
+- name: Ensure NAD_TYPE_N2N3 is set to ovs when bridge_enabled
   ansible.builtin.lineinfile:
     path: "{{ prepare_demo_script }}"
-    regexp: '^export NAD_TYPE_N2N3='
+    regexp: '^#?export NAD_TYPE_N2N3='
     line: 'export NAD_TYPE_N2N3="ovs"'
-    backrefs: true
+    insertafter: EOF
   when: bridge_enabled
  
 - name: Run prepare-demo-oai.sh to pull and configure OAI charts

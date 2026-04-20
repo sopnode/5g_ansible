@@ -132,7 +132,6 @@
   become: true
   roles:
     - role: setup/k8s/remove_cp_taint
-      when: not bridge_enabled
 
 - name: Join Kubernetes Cluster on Workers
   hosts: k8s_workers
