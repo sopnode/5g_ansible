@@ -46,11 +46,11 @@
     set -e
     if command -v curl >/dev/null 2>&1; then
       curl -L --fail \
-        "https://raw.githubusercontent.com/{{ prefix_oai5g-rru }}/{{ tag_oai5g_rru }}/testing/prepare-demo-oai.sh" \
+        "https://raw.githubusercontent.com/{{ prefix_oai5g }}/{{ tag_oai5g_rru }}/testing/prepare-demo-oai.sh" \
         -o "{{ prepare_demo_script }}"
     elif command -v wget >/dev/null 2>&1; then
       wget -O "{{ prepare_demo_script }}" \
-        "https://raw.githubusercontent.com/{{ prefix_oai5g-rru }}/{{ tag_oai5g_rru }}/testing/prepare-demo-oai.sh"
+        "https://raw.githubusercontent.com/{{ prefix_oai5g }}/{{ tag_oai5g_rru }}/testing/prepare-demo-oai.sh"
     else
       echo "Couldn't retrieve prepare-demo-oai.sh script from oai5g-rru repo" >&2
       exit 1
