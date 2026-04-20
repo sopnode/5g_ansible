@@ -4,8 +4,6 @@
     ue_ips: {}
     ignore_task_errors: true
     target_server: "{{ target_server_ip | default(hostvars[groups['core_node'][0]].ip) }}"
-    duration: "{{ iperf_duration | default(30) }}"
-    sleep: "{{ iperf_sleep | default(5) }}"
 
 - name: Define timestamp
   set_fact:

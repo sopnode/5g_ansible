@@ -1,4 +1,6 @@
 ---
+duration: 30
+sleep: 5
 async_stagger: 0
 
 ping_scenarios:
