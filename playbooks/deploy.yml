@@ -97,7 +97,7 @@
     - role: setup/k8s/k8s_env
     - role: setup/optimization/cpu
     - role: setup/ovs
-      when: not (fhi72 and ran == 'oai' and core_node_name == ran_node_name)
+      when: bridge_enabled
 
 - name: PTP setup on ran_node
   hosts: ran_node
@@ -132,7 +132,7 @@
   become: true
   roles:
     - role: setup/k8s/remove_cp_taint
-      when: not (core_node_name != ran_node_name and fhi72)
+      when: not bridge_enabled
 
 - name: Join Kubernetes Cluster on Workers
   hosts: k8s_workers
@@ -148,7 +148,7 @@
     - role: setup/k8s/add_taint
       vars:
         target_node: "{{ ran_node_name }}"
-      when: core_node_name != ran_node_name and not fhi72
+      when: bridge_enabled
 
 - name: Install Multus / CNAO
   hosts: core_node
@@ -304,7 +304,7 @@
     - role: setup/k8s/remove_taint
       vars:
         target_node: "{{ monitor_node_name }}"
-      when: monitoring_enabled and core_node_name != ran_node_name
+      when: monitoring_enabled and bridge_enabled
 
 - name: 5G-Monarch Final Operations
   hosts: monitor_node
