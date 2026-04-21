@@ -69,3 +69,11 @@
 - name: Configure ueransim for free5gc
   ansible.builtin.include_tasks: config_free5gc.yml
   when: core == 'free5gc'
+  vars:
+    ueransim_network: "{{ ueransim_free5gc_network }}"
+
+- name: Configure ueransim for oai
+  ansible.builtin.include_tasks: config_free5gc.yml
+  when: core == 'oai'
+  vars:
+    ueransim_network: "{{ ueransim_oai_network }}"
