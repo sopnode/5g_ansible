@@ -6,3 +6,8 @@ ueransim_root: "/root/open5gs-k8s/ueransim"
 
 # free5gc
 ueransim_chart_path: "/root/free5gc-helm/charts/ueransim"
+
+# oai core: we need to clone free5gc that contains ueransim
+free5gc_repo_url: "https://github.com/sopnode/free5gc-helm.git"
+free5gc_repo_dest: "/root/free5gc-helm"
+free5gc_repo_branch: "main"
