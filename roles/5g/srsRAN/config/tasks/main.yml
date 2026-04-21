@@ -153,18 +153,18 @@
     replace: '"name": "{{ ''{{'' }} .Values.n3networkName {{ ''}}'' }}"'
 
 - name: Patch srsue deployment template - add nodeName and nodeSelector
-  ansible.builtin.blockinfile:
+  ansible.builtin.replace:
     path: "{{ repo_dest_abs }}/charts/srsue/templates/deployment.yaml"
-    insertafter: "restartPolicy: Always"
-    marker: ""
-    block: |
-          {% raw %}{{- if .Values.nodeName }}
-          nodeName: {{ .Values.nodeName | quote }}
+    regexp: '(\s+restartPolicy: Always)'
+    replace: |
+      \1
+          {{- if .Values.nodeName }}
+          nodeName: {% raw %}{{ .Values.nodeName | quote }}{% endraw %}
           {{- end }}
           {{- if .Values.nodeSelector }}
           nodeSelector:
-            {{- toYaml .Values.nodeSelector | nindent 8 }}
-          {{- end }}{% endraw %}
+            {% raw %}{{- toYaml .Values.nodeSelector | nindent 8 }}{% endraw %}
+          {{- end }}
 
 - name: Patch oai n3 NAD - remove static IPAM address
   kubernetes.core.k8s:
