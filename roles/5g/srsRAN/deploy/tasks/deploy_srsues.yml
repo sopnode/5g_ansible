@@ -33,20 +33,6 @@
         state: absent
       failed_when: false
 
-    - name: Patch srsue deployment template - add nodeName and nodeSelector
-      ansible.builtin.blockinfile:
-        path: "{{ repo_dest_abs }}/charts/srsue/templates/deployment.yaml"
-        insertafter: "restartPolicy: Always"
-        marker: ""
-        block: |
-              {{- if .Values.nodeName }}
-              nodeName: {{ "{{" }} .Values.nodeName | quote {{ "}}" }}
-              {{- end }}
-              {{- if .Values.nodeSelector }}
-              nodeSelector:
-                {{- toYaml .Values.nodeSelector | nindent 8 }}
-              {{- end }}
-
     - name: Deploy srsRAN UE pod via Helm (run on ran_node)
       ansible.builtin.command: >
         helm upgrade --install srsran-ue
