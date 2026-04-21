@@ -152,6 +152,36 @@
     regexp: '"name":\s*"n3network"'
     replace: '"name": "{{ ''{{'' }} .Values.n3networkName {{ ''}}'' }}"'
 
+- name: Patch srsue deployment template - add nodeName and nodeSelector
+  ansible.builtin.blockinfile:
+    path: "{{ repo_dest_abs }}/charts/srsue/templates/deployment.yaml"
+    insertafter: "restartPolicy: Always"
+    marker: ""
+    block: |
+          {{- if .Values.nodeName }}
+          nodeName: {{ "{{" }} .Values.nodeName | quote {{ "}}" }}
+          {{- end }}
+          {{- if .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml .Values.nodeSelector | nindent 8 }}
+          {{- end }}
+
+- name: Patch oai n3 NAD - remove static IPAM address
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: k8s.cni.cncf.io/v1
+      kind: NetworkAttachmentDefinition
+      metadata:
+        name: "{{ n3networkName }}"
+        namespace: "{{ ran_ns }}"
+      spec:
+        config: >-
+          { "cniVersion": "0.3.1", "name": "{{ n3networkName }}",
+            "type": "ovs", "bridge": "n3br",
+            "ipam": { "type": "static" } }
+  when: core == 'oai'
+
 # --- rfsim only: UE list + srsue values file ---
 
 - name: Load 5G profile vars
