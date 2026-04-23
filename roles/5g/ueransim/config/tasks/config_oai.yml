@@ -44,12 +44,19 @@
     msg: "WARNING: OVS bridges may not be properly configured. Check manually."
   when: ovs_check.rc != 0
 
-- name: Fix ueransim chart
-  ansible.builtin.raw: |
-    sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
-    sed -i '/nodeSelector:/a\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
-    sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
-    sed -i '/nodeSelector:/a\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
+- name: Create fix script
+  ansible.builtin.copy:
+    dest: /tmp/fix-chart.sh
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
+      sed -i '/nodeSelector:/a\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
+      sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
+      sed -i '/nodeSelector:/a\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
+
+- name: Execute fix script
+  ansible.builtin.shell: bash /tmp/fix-chart.sh
   changed_when: false
 
 - name: Generate NAD OVS for gNB (N2 and N3)
