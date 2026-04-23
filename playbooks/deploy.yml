@@ -284,7 +284,7 @@
 ############################################################################
 
 - name: Deploy ueransim
-  hosts: core_node # use ueransim repo included within open5gs_k8s|free5gc-helm already on core_node
+  hosts: "{{ 'ran_node' if core == 'oai' else 'core_node' }}"
   pre_tasks:
     - name: Load 5G profile
       include_vars:
