@@ -7,25 +7,9 @@ ueransim_root: "/root/open5gs-k8s/ueransim"
 # for free5gc and oai
 ueransim_chart_path: "/root/free5gc-helm/charts/ueransim"
 
-# NOTA: With oai core, free5gc that contains ueransim not already cloned
+# NOTA: for oai, free5gc that includes ueransim not already cloned
 free5gc_repo_url: "https://github.com/sopnode/free5gc-helm.git"
 free5gc_repo_dest: "/root/free5gc-helm"
 free5gc_repo_branch: "main"
-ueransim_oai_network:
-  # Existing OVS bridges
-  # n2br : gNB <-> AMF 
-  # n3br : gNB <-> UPF
-  
-  # Interface N2 (gNB <-> AMF) - optional
-  n2_bridge: "n2br"
-  gnb_n2_ip: "192.168.3.203"
-  amf_ip: "192.168.3.201"
-  amf_port: 38412
-  
-  # Interface N3 (gNB <-> UPF) - mandatory
-  n3_bridge: "n3br"
-  gnb_n3_ip: "192.168.3.204"
-  
-  use_ue_nad_ovs: false # true = each UE has it own OVS NAD (UNUSED)
 
 nad_manifests_path: "{{ ueransim_chart_path }}/nad"  

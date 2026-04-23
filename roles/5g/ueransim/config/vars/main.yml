@@ -21,11 +21,12 @@ ueransim_open5gs_network:
   gnb_ip: "10.10.3.231"
   amf_ip: "10.10.3.200"
 
-# network config for OAI CN 
+# oai network config for ueransim (OVS n3br)
 ueransim_oai_network:
-  n2:
-    gnb_ip: "192.168.3.203"
-    amf_ip: "192.168.3.201"
-    amf_ngap_port: 38412
-  n3:
-    gnb_ip: "192.168.3.203"
+  n2_bridge: "n2br"
+  amf_ip: "192.168.3.201"
+  amf_port: 38412
+  gnb_n2_ip: "192.168.3.203"
+  n3_bridge: "n3br"
+  gnb_n3_ip: "192.168.3.204"
+nad_manifests_path: "{{ ueransim_chart_path }}/nad"
