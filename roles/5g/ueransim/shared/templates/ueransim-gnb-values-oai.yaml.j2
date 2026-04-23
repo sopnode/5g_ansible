@@ -89,8 +89,8 @@ affinity: {}
 #           topologyKey: kubernetes.io/hostname
 
 nodeSelector:
-  kubernetes.io/hostname: {{ ran_node_name }}
-nodeName: "{{ ran_node_name }}"
+  kubernetes.io/hostname: "{{ ran_node_name }}"
+nodeName: "{{ ran_node_name | default('') }}"
 
 tolerations:
   - key: "test-eviction"
