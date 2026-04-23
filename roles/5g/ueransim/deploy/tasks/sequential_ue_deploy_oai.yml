@@ -12,7 +12,7 @@
       spec:
         template:
           spec:
-            nodeName: {{ ran_node_name }}
+            nodeName: "{{ ran_node_name }}"
             tolerations:
               - key: "test-eviction"
                 operator: "Equal"
