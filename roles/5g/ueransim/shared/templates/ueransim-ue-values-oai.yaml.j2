@@ -66,5 +66,6 @@ config:
 #                   - ueransim-gnb
 #           topologyKey: kubernetes.io/hostname
 
-nodeSelector: {{ ran_node_name }}
+nodeSelector:
+  kubernetes.io/hostname: {{ ran_node_name }}
 tolerations: []
