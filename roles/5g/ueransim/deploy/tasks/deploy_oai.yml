@@ -153,13 +153,14 @@
 - name: Deployment summary
   ansible.builtin.debug:
     msg: |
-      ✓ UERANSIM deployement for OAI done
-      
-      Pods :
+      UERANSIM deployment for OAI done
+
+      Pods:
       {% for pod in all_ueransim_pods.resources %}
         - {{ pod.metadata.name }}: {{ pod.status.phase }}
       {% endfor %}
-      
-     To check connectivity :
+
+      To check connectivity:
         kubectl logs -n {{ ran_ns | default('oai') }} -l app.kubernetes.io/instance=ueransim-gnb
         kubectl logs -n {{ ran_ns | default('oai') }} -l app.kubernetes.io/instance=ueransim-uesim01
+
