@@ -52,6 +52,16 @@
   vars:
     oai_config: "{{ ueransim_oai_network }}"
 
+- name: Generate ueransim gNB values override for OAI
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../roles/5g/ueransim/shared/templates/ueransim-gnb-values-oai.yaml.j2"
+    dest: "{{ ueransim_chart_path }}/overrides/values-gnb-override.yaml"
+    mode: '0644'
+  vars:
+    profile: "{{ fiveg }}"
+    net: "{{ ueransim_network }}"
+    oai_config: "{{ ueransim_oai_network }}"
+
 - name: Generate ueransim UE values override for each UE (OAI)
   ansible.builtin.template:
     src: "{{ playbook_dir }}/../roles/5g/ueransim/shared/templates/ueransim-ue-values-oai.yaml.j2"
