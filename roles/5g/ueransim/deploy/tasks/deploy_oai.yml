@@ -9,12 +9,23 @@
 - name: Apply NetworkAttachmentDefinitions for gNB
   kubernetes.core.k8s:
     state: present
-    src: "{{ nad_manifests_path | default(ueransim_chart_path + '/nad') }}/nad-gnb.yaml"
+    src: "{{ ueransim_chart_path }}/nad/nad-gnb.yaml"
     namespace: "{{ ran_ns | default('oai') }}"
   register: nad_gnb_applied
   retries: 3
   delay: 5
   until: nad_gnb_applied is not failed
+
+- name: Assert NAD file exists
+  ansible.builtin.stat:
+    path: "{{ ueransim_chart_path }}/nad/nad-gnb.yaml"
+  register: nad_file
+
+- name: Fail if NAD missing
+  ansible.builtin.assert:
+    that:
+      - nad_file.stat.exists
+    fail_msg: "NAD file missing in {{ ueransim_chart_path }}/nad/"
 
 - name: Verify NAD creation
   kubernetes.core.k8s_info:

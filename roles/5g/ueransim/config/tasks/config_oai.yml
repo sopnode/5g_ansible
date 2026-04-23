@@ -4,6 +4,12 @@
 # Adapt UERANSIM from Free5gc repo
 # ============================================================
 
+- name: Ensure NAD directory exists
+  ansible.builtin.file:
+    path: "{{ ueransim_chart_path }}/nad"
+    state: directory
+    mode: '0755'
+
 - name: Ensure ueransim output directory exists
   ansible.builtin.file:
     path: "{{ ueransim_chart_path }}/overrides"
