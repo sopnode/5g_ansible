@@ -1,0 +1,48 @@
+# ============================================================
+
+# NAD N2 : gNB <-> AMF
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: ueransim-gnb-n2
+  namespace: {{ ran_ns | default('oai') }}
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "name": "ueransim-gnb-n2",
+      "type": "ovs",
+      "bridge": "{{ oai_config.n2_bridge }}",
+      "ipMasq": false,
+      "isGateway": false,
+      "mtu": 1500,
+      "args": {
+        "cni": {
+          "ip": "{{ oai_config.gnb_n2_ip }}/24"
+        }
+      }
+    }
+
+---
+# NAD N3 : gNB <-> UPF
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: ueransim-gnb-n3
+  namespace: {{ ran_ns | default('oai') }}
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "name": "ueransim-gnb-n3",
+      "type": "ovs",
+      "bridge": "{{ oai_config.n3_bridge }}",
+      "ipMasq": false,
+      "isGateway": false,
+      "mtu": 1500,
+      "args": {
+        "cni": {
+          "ip": "{{ oai_config.gnb_n3_ip }}/24"
+        }
+      }
+    }

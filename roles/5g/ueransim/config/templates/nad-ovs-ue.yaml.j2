@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ueransim-ue-network-mode
+  namespace: {{ ran_ns | default('oai') }}
+data:
+  network_mode: "cluster"
+  description: "UE uses Kubernetes cluster network (default)"
+  gnb_address: "ueransim-gnb.{{ ran_ns | default('oai') }}.svc.cluster.local"

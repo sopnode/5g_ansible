@@ -1,0 +1,165 @@
+- name: Display deployment configuration
+  ansible.builtin.debug:
+    msg: |
+      OAI/ueransim deployment
+      Namespace: {{ ran_ns | default('oai') }}
+      gNB Release: ueransim-gnb
+      UE Releases: ueransim-uesim01, ueransim-uesim02, ueransim-uesim03
+      
+      Interfaces réseau:
+        N2 (gNB -> AMF): {{ ueransim_oai_network.gnb_n2_ip }} -> {{ ueransim_oai_network.amf_ip }}
+        N3 (gNB -> UPF): {{ ueransim_oai_network.gnb_n3_ip }}
+
+- name: Apply NetworkAttachmentDefinitions for gNB
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', nad_manifests_path | default(ueransim_chart_path + '/nad') + '/nad-gnb.yaml') | from_yaml_all | list }}"
+    namespace: "{{ ran_ns | default('oai') }}"
+  register: nad_gnb_applied
+  retries: 3
+  delay: 5
+  until: nad_gnb_applied is not failed
+
+- name: Verify NAD creation
+  kubernetes.core.k8s_info:
+    api_version: k8s.cni.cncf.io/v1
+    kind: NetworkAttachmentDefinition
+    namespace: "{{ ran_ns | default('oai') }}"
+  register: nad_list
+  retries: 3
+  delay: 2
+
+- name: Display created NADs
+  ansible.builtin.debug:
+    msg: |
+      Created NetworkAttachmentDefinitions :
+      {% for nad in nad_list.resources %}
+        - {{ nad.metadata.name }}
+      {% endfor %}
+
+- name: Check for existing ueransim-gnb release
+  shell: >
+    helm list -n {{ ran_ns | default('oai') }} -a -q |
+    grep -w "^ueransim-gnb$" | wc -l
+  register: gnb_release_exists
+  changed_when: false
+  failed_when: false
+
+- name: Uninstall old ueransim-gnb release
+  shell: >
+    helm uninstall ueransim-gnb -n {{ ran_ns | default('oai') }} --no-hooks
+  when: gnb_release_exists.stdout | trim | int > 0
+  failed_when: false
+  register: gnb_uninstall
+
+- name: Wait for gNB resources cleanup
+  ansible.builtin.pause:
+    seconds: 5
+  when: gnb_release_exists.stdout | trim | int > 0
+
+- name: Check for existing ueransim-ue releases
+  shell: >
+    helm list -n {{ ran_ns | default('oai') }} -a -q |
+    grep "^ueransim-uesim" | wc -l
+  register: ue_releases_exist
+  changed_when: false
+  failed_when: false
+
+- name: Uninstall old ueransim-ue releases
+  shell: >
+    helm list -n {{ ran_ns | default('oai') }} -a -q | grep "^ueransim-uesim" | 
+    xargs -I {} helm uninstall {} -n {{ ran_ns | default('oai') }} --no-hooks
+  when: ue_releases_exist.stdout | trim | int > 0
+  failed_when: false
+
+
+- name: Deploy ueransim gNB via Helm
+  kubernetes.core.helm:
+    name: ueransim-gnb
+    chart_ref: "{{ ueransim_chart_path }}"
+    release_namespace: "{{ ran_ns | default('oai') }}"
+    state: present
+    wait: true
+    timeout: 120s
+    values_files:
+      - "{{ ueransim_chart_path }}/overrides/values-gnb-override.yaml"
+  register: helm_gnb_deploy
+
+- name: gNB Helm deployment result
+  ansible.builtin.debug:
+    msg: |
+      gNB Helm deployment:
+        Status: {{ helm_gnb_deploy.status | default('deployed') }}
+        Release: {{ helm_gnb_deploy.release_name | default('ueransim-gnb') }}
+
+- name: Wait for gNB pod to be Running
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ ran_ns | default('oai') }}"
+    label_selectors:
+      - app.kubernetes.io/instance=ueransim-gnb
+  register: gnb_pod
+  until:
+    - gnb_pod.resources | length > 0
+    - gnb_pod.resources[0].status.phase == 'Running'
+  retries: 12
+  delay: 10
+
+- name: Wait for gNB containers to be Ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ ran_ns | default('oai') }}"
+    label_selectors:
+      - app.kubernetes.io/instance=ueransim-gnb
+  register: gnb_pod_ready
+  until:
+    - gnb_pod_ready.resources | length > 0
+    - gnb_pod_ready.resources[0].status.containerStatuses | default([]) | 
+      selectattr('ready', 'equalto', true) | list | length ==
+      gnb_pod_ready.resources[0].status.containerStatuses | length
+  retries: 12
+  delay: 10
+
+- name: Display gNB pod info
+  ansible.builtin.debug:
+    msg: |
+      gNB Pod:
+        Nom: {{ gnb_pod_ready.resources[0].metadata.name }}
+        Status: {{ gnb_pod_ready.resources[0].status.phase }}
+        Node: {{ gnb_pod_ready.resources[0].spec.nodeName }}
+
+- name: gNB stability delay
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Sequential UE deployment for OAI
+  ansible.builtin.include_tasks: sequential_ue_deploy_oai.yml
+  loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['uesim01', 'uesim02', 'uesim03']) | sort(attribute='key') | list }}"
+  loop_control:
+    loop_var: ue_item
+    index_var: ue_idx
+
+- name: Get all ueransim pod status
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ ran_ns | default('oai') }}"
+    label_selectors:
+      - app.kubernetes.io/name=ueransim
+  register: all_ueransim_pods
+
+- name: Deployment summary
+  ansible.builtin.debug:
+    msg: |
+      ✓ UERANSIM deployement for OAI done
+      
+      Pods :
+      {% for pod in all_ueransim_pods.resources %}
+        - {{ pod.metadata.name }}: {{ pod.status.phase }}
+      {% endfor %}
+      
+     To check connectivity :
+        kubectl logs -n {{ ran_ns | default('oai') }} -l app.kubernetes.io/instance=ueransim-gnb
+        kubectl logs -n {{ ran_ns | default('oai') }} -l app.kubernetes.io/instance=ueransim-uesim01
