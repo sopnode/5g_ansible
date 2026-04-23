@@ -46,21 +46,10 @@
 
 - name: Generate NAD OVS for gNB (N2 and N3)
   ansible.builtin.template:
-    src: "{{ role_path }}/shared/templates/nad-ovs-gnb.yaml.j2"
+    src: "{{ playbook_dir }}/../roles/5g/ueransim/shared/templates/nad-ovs-gnb.yaml.j2"
     dest: "{{ ueransim_chart_path }}/nad/nad-gnb.yaml"
     mode: '0644'
-  delegate_to: "{{ inventory_hostname }}"
   vars:
-    oai_config: "{{ ueransim_oai_network }}"
-
-- name: Generate ueransim gNB values override for OAI
-  ansible.builtin.template:
-    src: ueransim-gnb-values-oai.yaml.j2
-    dest: "{{ ueransim_chart_path }}/overrides/values-gnb-override.yaml"
-    mode: '0644'
-  vars:
-    profile: "{{ fiveg }}"
-    net: "{{ ueransim_network }}"
     oai_config: "{{ ueransim_oai_network }}"
 
 - name: Generate ueransim UE values override for each UE (OAI)
