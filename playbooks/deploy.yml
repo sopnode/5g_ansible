@@ -283,25 +283,41 @@
 #
 ############################################################################
 
-- name: Deploy ueransim
-  hosts: "{{ 'ran_node' if core == 'oai' else 'core_node' }}"
+- name: Deploy ueransim for oai core
+  hosts: ran_node
 
   pre_tasks:
     - name: Load 5G profile
       include_vars:
         file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
         name: fiveg
-
   roles:
     - role: 5g/ueransim/config
       when:
         - ran == 'ueransim'
-        - inventory_hostname in groups['ran_node']
-
+        - core == 'oai'
     - role: 5g/ueransim/deploy
       when:
         - ran == 'ueransim'
-        - inventory_hostname in groups['ran_node']
+        - core == 'oai'
+
+- name: Deploy ueransim for oai core
+  hosts: core_node
+
+  pre_tasks:
+    - name: Load 5G profile
+      include_vars:
+        file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+        name: fiveg
+  roles:
+    - role: 5g/ueransim/config
+      when:
+        - ran == 'ueransim'
+        - core != 'oai'
+    - role: 5g/ueransim/deploy
+      when:
+        - ran == 'ueransim'
+        - core != 'oai'
 
 - name: Remove NoSchedule taint on Monitor node
   hosts: core_node
