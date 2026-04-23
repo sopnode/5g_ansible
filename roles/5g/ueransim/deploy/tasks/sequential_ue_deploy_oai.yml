@@ -2,13 +2,11 @@
 
 - name: "Patch {{ ue_item.key | lower }} deployment for nodeName and tolerations"
   kubernetes.core.k8s:
-    state: present
+    state: patched
+    kind: Deployment
+    name: "ueransim-{{ ue_item.key | lower }}"
+    namespace: "{{ ran_ns | default('oai') }}"
     definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: "ueransim-{{ ue_item.key | lower }}"
-        namespace: "{{ ran_ns | default('oai') }}"
       spec:
         template:
           spec:
