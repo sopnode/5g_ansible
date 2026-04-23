@@ -44,17 +44,33 @@
     msg: "WARNING: OVS bridges may not be properly configured. Check manually."
   when: ovs_check.rc != 0
 
-- name: Fix ueransim chart - add nodeName and fix tolerations in gnb-deployment.yaml
-  ansible.builtin.shell: |
-    sed -i 's/{{- toYaml \.tolerations/{{- toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
-    sed -i '/tolerations:/i\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
-  changed_when: false
+- name: Fix ueransim chart gnb-deployment - fix tolerations
+  ansible.builtin.lineinfile:
+    path: "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
+    regexp: 'toYaml \.tolerations'
+    line: '        {{- toYaml .Values.tolerations | nindent 8 }}'
+    state: present
 
-- name: Fix ueransim chart - add nodeName and fix tolerations in ue-deployment.yaml
-  ansible.builtin.shell: |
-    sed -i 's/{{- toYaml \.tolerations/{{- toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
-    sed -i '/tolerations:/i\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
-  changed_when: false
+- name: Fix ueransim chart gnb-deployment - add nodeName
+  ansible.builtin.lineinfile:
+    path: "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
+    insertbefore: 'tolerations:'
+    line: '      nodeName: {{ .Values.nodeName }}'
+    state: present
+
+- name: Fix ueransim chart ue-deployment - fix tolerations
+  ansible.builtin.lineinfile:
+    path: "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
+    regexp: 'toYaml \.tolerations'
+    line: '        {{- toYaml .Values.tolerations | nindent 8 }}'
+    state: present
+
+- name: Fix ueransim chart ue-deployment - add nodeName
+  ansible.builtin.lineinfile:
+    path: "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
+    insertbefore: 'tolerations:'
+    line: '      nodeName: {{ .Values.nodeName }}'
+    state: present
 
 - name: Generate NAD OVS for gNB (N2 and N3)
   ansible.builtin.template:
