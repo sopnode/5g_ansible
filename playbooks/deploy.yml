@@ -284,7 +284,7 @@
 ############################################################################
 
 - name: Deploy ueransim
-  hosts: "{{ 'ran_node' if core | default('') == 'oai' else 'core_node' }}"
+  hosts: "{{ 'ran_node' if core == 'oai' else 'core_node' }}"
 
   pre_tasks:
     - name: Load 5G profile
