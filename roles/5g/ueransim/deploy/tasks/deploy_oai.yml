@@ -85,6 +85,24 @@
   when: ue_releases_exist.stdout | trim | int > 0
   failed_when: false
 
+- name: Patch ueransim-gnb deployment for nodeName and tolerations
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ueransim-gnb
+        namespace: "{{ ran_ns | default('oai') }}"
+      spec:
+        template:
+          spec:
+            nodeName: {{ ran_node_name }}
+            tolerations:
+              - key: "test-eviction"
+                operator: "Equal"
+                value: "true"
+                effect: "NoSchedule"
 
 - name: Deploy ueransim gNB via Helm
   kubernetes.core.helm:
