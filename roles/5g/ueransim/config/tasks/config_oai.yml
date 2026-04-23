@@ -50,10 +50,15 @@
     mode: '0755'
     content: |
       #!/bin/bash
-      sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
-      sed -i '/nodeSelector:/a\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
-      sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
-      sed -i '/nodeSelector:/a\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
+      set -e
+
+      CHART="{{ ueransim_chart_path }}"
+
+      sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' "$CHART/templates/gnb/gnb-deployment.yaml"
+      sed -i '/nodeSelector:/a\      nodeName: {{ "{{ .Values.nodeName }}" }}' "$CHART/templates/gnb/gnb-deployment.yaml"
+
+      sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' "$CHART/templates/ue/ue-deployment.yaml"
+      sed -i '/nodeSelector:/a\      nodeName: {{ "{{ .Values.nodeName }}" }}' "$CHART/templates/ue/ue-deployment.yaml"
 
 - name: Execute fix script
   ansible.builtin.shell: bash /tmp/fix-chart.sh
