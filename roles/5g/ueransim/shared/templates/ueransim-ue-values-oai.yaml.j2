@@ -34,9 +34,9 @@ containers:
 # UE Configuration
 # ============================================================
 config:
-  imsi: "{{ ue_data.imsi }}"
-  key: "{{ ue_data.key }}"
-  opc: "{{ ue_data.opc }}"
+  imsi: "{{ fiveg.mcc }}{{ fiveg.mnc }}{{ ue_data.imsi_suffix }}"
+  key: "{{ fiveg.ue_key }}"
+  opc: "{{ fiveg.ue_opc }}"
   
   # Slice
   sst: {{ slice_data.sst | int }}
