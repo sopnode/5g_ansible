@@ -284,7 +284,7 @@
 ############################################################################
 
 - name: Deploy ueransim
-  hosts: "{{ 'ran_node' if (core | default('')) == 'oai' else 'core_node' }}"
+  hosts: "{{ 'ran_node' if core | default('') == 'oai' else 'core_node' }}"
 
   pre_tasks:
     - name: Load 5G profile
@@ -294,10 +294,14 @@
 
   roles:
     - role: 5g/ueransim/config
-      when: ran == 'ueransim'
+      when:
+        - ran == 'ueransim'
+        - inventory_hostname in groups['ran_node']
 
     - role: 5g/ueransim/deploy
-      when: ran == 'ueransim'
+      when:
+        - ran == 'ueransim'
+        - inventory_hostname in groups['ran_node']
 
 - name: Remove NoSchedule taint on Monitor node
   hosts: core_node
