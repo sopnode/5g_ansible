@@ -64,7 +64,6 @@
     ue_data: "{{ ue.value }}"
     slice_data: "{{ fiveg.slices | selectattr('name', 'equalto', ue.value.slice) | first }}"
     oai_config: "{{ ueransim_oai_network }}"
-    ran_ns: "{{ ran_ns | default('oai') }}"
   loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['uesim01', 'uesim02', 'uesim03']) | sort(attribute='key') | list }}"
   loop_control:
     loop_var: ue
