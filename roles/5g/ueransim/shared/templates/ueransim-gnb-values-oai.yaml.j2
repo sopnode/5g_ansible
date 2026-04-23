@@ -8,11 +8,7 @@ image:
 
 podAnnotations:
   # Attach N2/N3 interfaces
-  k8s.v1.cni.cncf.io/networks: |
-    [
-      {"name": "ueransim-gnb-n2", "ips": ["{{ oai_config.gnb_n2_ip }}"]},
-      {"name": "ueransim-gnb-n3", "ips": ["{{ oai_config.gnb_n3_ip }}"]}
-    ]
+  k8s.v1.cni.cncf.io/networks: '[{"name": "ueransim-gnb-n2", "ips": ["{{ oai_config.gnb_n2_ip }}"]}, {"name": "ueransim-gnb-n3", "ips": ["{{ oai_config.gnb_n3_ip }}"]}]'
 
 podSecurityContext:
   privileged: true
