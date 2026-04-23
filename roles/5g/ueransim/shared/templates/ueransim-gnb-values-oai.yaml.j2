@@ -53,12 +53,14 @@ config:
   
   # Slices
   slices:
+  {% if profile.slices %}
   {% for slice in profile.slices %}
     - sst: {{ slice.sst | int }}
       sd: "{{ '0x%06x' | format(slice.sd | int) if slice.sd | int else '000000' }}"
+  {% endfor %}
   {% else %}
     []
-  {% endfor %}
+  {% endif %}
 
 # ============================================================
 # Service to expose N2 (NGAP/SCTP)
