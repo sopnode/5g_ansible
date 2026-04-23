@@ -69,4 +69,10 @@ config:
 nodeSelector:
   kubernetes.io/hostname: {{ ran_node_name }}
 nodeName: "{{ ran_node_name }}"
-tolerations: []
+
+tolerations:
+  - key: "test-eviction"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
