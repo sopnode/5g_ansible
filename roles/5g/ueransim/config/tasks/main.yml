@@ -87,7 +87,7 @@
     force: yes
 
 - name: Configure ueransim for oai
-  ansible.builtin.include_tasks: config_free5gc.yml
+  ansible.builtin.include_tasks: config_oai.yml
   when: core == 'oai'
   vars:
     ueransim_network: "{{ ueransim_oai_network }}"
