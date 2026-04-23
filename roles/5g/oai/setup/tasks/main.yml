@@ -196,7 +196,7 @@
     regexp: '^#?export NAD_TYPE_N2N3='
     line: 'export NAD_TYPE_N2N3="ovs"'
     insertafter: EOF
-  when: bridge_enabled
+  when: not (core == 'oai' and core_node_name == ran_node_name)
  
 - name: Run prepare-demo-oai.sh to pull and configure OAI charts
   ansible.builtin.shell: "./prepare-demo-oai.sh -a 2>&1 | tee /tmp/output-prepare-demo-oai.txt"
