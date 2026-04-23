@@ -9,7 +9,7 @@
 - name: Apply NetworkAttachmentDefinitions for gNB
   kubernetes.core.k8s:
     state: present
-    definition: "{{ lookup('file', role_path + '/../shared/templates/nad-gnb.yaml') | from_yaml_all | list }}"
+    src: "{{ nad_manifests_path | default(ueransim_chart_path + '/nad') }}/nad-gnb.yaml"
     namespace: "{{ ran_ns | default('oai') }}"
   register: nad_gnb_applied
   retries: 3
