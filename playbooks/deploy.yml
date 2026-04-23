@@ -283,10 +283,8 @@
 #
 ############################################################################
 
-- name: Deploy ueransim on RAN node (OAI core)
-  hosts: ran_node
-  gather_facts: false
-  when: core == "oai"
+- name: Deploy ueransim
+  hosts: "{{ 'ran_node' if (core | default('')) == 'oai' else 'core_node' }}"
 
   pre_tasks:
     - name: Load 5G profile
@@ -297,24 +295,7 @@
   roles:
     - role: 5g/ueransim/config
       when: ran == 'ueransim'
-    - role: 5g/ueransim/deploy
-      when: ran == 'ueransim'
 
-
-- name: Deploy ueransim on Core node (non-OAI core)
-  hosts: core_node
-  gather_facts: false
-  when: core != "oai"
-
-  pre_tasks:
-    - name: Load 5G profile
-      include_vars:
-        file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
-        name: fiveg
-
-  roles:
-    - role: 5g/ueransim/config
-      when: ran == 'ueransim'
     - role: 5g/ueransim/deploy
       when: ran == 'ueransim'
 
