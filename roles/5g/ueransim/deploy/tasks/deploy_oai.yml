@@ -5,10 +5,6 @@
       Namespace: {{ ran_ns | default('oai') }}
       gNB Release: ueransim-gnb
       UE Releases: ueransim-uesim01, ueransim-uesim02, ueransim-uesim03
-      
-      Interfaces réseau:
-        N2 (gNB -> AMF): {{ ueransim_oai_network.gnb_n2_ip }} -> {{ ueransim_oai_network.amf_ip }}
-        N3 (gNB -> UPF): {{ ueransim_oai_network.gnb_n3_ip }}
 
 - name: Apply NetworkAttachmentDefinitions for gNB
   kubernetes.core.k8s:
