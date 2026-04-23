@@ -1,0 +1,8 @@
+#!/bin/bash
+# Fix gnb-deployment.yaml
+sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
+sed -i '/nodeSelector:/a\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
+
+# Fix ue-deployment.yaml
+sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
+sed -i '/nodeSelector:/a\      nodeName: {{ .Values.nodeName }}' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
