@@ -6,26 +6,32 @@
       gNB Release: ueransim-gnb
       UE Releases: ueransim-uesim01, ueransim-uesim02, ueransim-uesim03
 
+- name: Load NAD file from chart path
+  ansible.builtin.slurp:
+    src: "{{ ueransim_chart_path }}/nad/nad-gnb.yaml"
+  register: nad_file
+  delegate_to: "{{ inventory_hostname }}"
+
 - name: Apply NetworkAttachmentDefinitions for gNB
   kubernetes.core.k8s:
     state: present
-    definition: "{{ lookup('ansible.builtin.file', ueransim_chart_path + '/nad/nad-gnb.yaml') | from_yaml_all | list }}"
+    definition: "{{ nad_file.content | b64decode | from_yaml_all | list }}"
     namespace: "{{ ran_ns | default('oai') }}"
   register: nad_gnb_applied
   retries: 3
   delay: 5
   until: nad_gnb_applied is not failed
 
-- name: Assert NAD file exists
+- name: Assert NAD exists
   ansible.builtin.stat:
     path: "{{ ueransim_chart_path }}/nad/nad-gnb.yaml"
-  register: nad_file
+  register: nad_stat
+  delegate_to: "{{ inventory_hostname }}"
 
-- name: Fail if NAD missing
-  ansible.builtin.assert:
-    that:
-      - nad_file.stat.exists
-    fail_msg: "NAD file missing in {{ ueransim_chart_path }}/nad/"
+- name: Fail if missing NAD
+  ansible.builtin.fail:
+    msg: "NAD missing on ran_node"
+  when: not nad_stat.stat.exists
 
 - name: Verify NAD creation
   kubernetes.core.k8s_info:
