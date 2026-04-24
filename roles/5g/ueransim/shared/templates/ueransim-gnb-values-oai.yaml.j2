@@ -8,7 +8,7 @@ global:
   n2network:
     enabled: false
   n3network:
-    enabled: false
+    enabled: true
 
 gnb:
   enabled: true
@@ -39,6 +39,13 @@ gnb:
         sd: {{ resolve_sd(slice.sd) }}
 {% endfor %}
     ignoreStreamIds: true
+
+    # USEFUL for GTP-U BIND
+    linkIp: 0.0.0.0
+    ngapIp: 0.0.0.0
+
+    # Must match Multus N3 interface
+    gtpIp: {{ net.gnb_n3_ip }}
 
 ue:
   enabled: false
