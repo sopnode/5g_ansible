@@ -3,12 +3,17 @@
 # ueransim config for OAI (Helm + existing OVS NAD)
 # ============================================================
 
-- name: Fix chart templates - replace .Values with $.Values in with context
-  ansible.builtin.shell: |
-    CHART="{{ ueransim_chart_path }}"
-    sed -i '/with .Values.gnb/,/end/s/\.Values/$.Values/g' "$CHART/templates/gnb/gnb-deployment.yaml"
-    sed -i '/with .Values.ue/,/end/s/\.Values/$.Values/g' "$CHART/templates/ue/ue-deployment.yaml"
-  changed_when: false
+- name: Fix chart templates - replace .Values with $.Values in gnb-deployment
+  ansible.builtin.replace:
+    path: "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
+    regexp: '\.Values'
+    replace: '$.Values'
+
+- name: Fix chart templates - replace .Values with $.Values in ue-deployment
+  ansible.builtin.replace:
+    path: "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
+    regexp: '\.Values'
+    replace: '$.Values'
 
 - name: Fix chart templates - replace .nodeSelector, .affinity, .tolerations with .Values.xxx
   ansible.builtin.shell: |
