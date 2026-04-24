@@ -1,4 +1,3 @@
----
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
@@ -15,14 +14,9 @@ spec:
         "type": "static",
         "addresses": [
           {
-            "address": "{{ oai_config.gnb_n3_ip }}/24"
-            {% if oai_config.n3_gateway is defined and oai_config.n3_gateway %}
-            , "gateway": "{{ oai_config.n3_gateway }}"
-            {% endif %}
+            "address": "{{ net.gnb_n3_ip }}/24"
           }
         ]
       },
-      "ipMasq": false,
-      "isGateway": false,
       "mtu": 1500
     }
