@@ -52,7 +52,7 @@
 
 - name: Generate ueransim gNB values override for OAI
   ansible.builtin.template:
-    src: ueransim-gnb-values-oai.yaml.j2
+    src: "{{ playbook_dir }}/../roles/5g/ueransim/shared/templates/ueransim-gnb-values-oai.yaml.j2"
     dest: "{{ ueransim_chart_path }}/overrides/values-gnb-override.yaml"
     mode: '0644'
   vars:
@@ -61,7 +61,7 @@
 
 - name: Generate ueransim UE values override for each UE (OAI)
   ansible.builtin.template:
-    src: ueransim-ue-values-oai.yaml.j2
+    src: "{{ playbook_dir }}/../roles/5g/ueransim/shared/templates/ueransim-ue-values-oai.yaml.j2"
     dest: "{{ ueransim_chart_path }}/overrides/values-{{ ue.key | lower }}-override.yaml"
     mode: '0644'
   vars:
