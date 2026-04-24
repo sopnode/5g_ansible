@@ -13,15 +13,6 @@ global:
 gnb:
   enabled: true
 
-  nodeSelector:
-    kubernetes.io/hostname: "{{ ran_node_name }}"
-
-  tolerations:
-    - key: "test-eviction"
-      operator: "Equal"
-      value: "true"
-      effect: "NoSchedule"
-
   n2if:
     ipAddress: 0.0.0.0
 
@@ -51,3 +42,18 @@ gnb:
 
 ue:
   enabled: false
+
+# ============================================================
+# IMPORTANT : MUST MATCH gnb-deployment.yaml
+# ============================================================
+
+nodeSelector:
+  kubernetes.io/hostname: "{{ ran_node_name }}"
+
+tolerations:
+  - key: "test-eviction"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+affinity: {}
