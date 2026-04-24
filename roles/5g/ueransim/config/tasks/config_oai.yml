@@ -30,6 +30,18 @@
   loop:
     - "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
     - "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
+
+- name: Fix chart - use $.Values in gnb context
+  ansible.builtin.replace:
+    path: "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
+    regexp: '\.Values\.'
+    replace: '$.Values.'
+
+- name: Fix chart - use $.Values in ue context
+  ansible.builtin.replace:
+    path: "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
+    regexp: '\.Values\.'
+    replace: '$.Values.'
     
 - name: Ensure NAD directory exists
   ansible.builtin.file:
