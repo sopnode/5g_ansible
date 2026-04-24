@@ -1,10 +1,8 @@
 ---
-# ueransim UE Helm values for OAI
-
 replicaCount: 1
 
 image:
-  repository: aligungr/ueransim  # Image ueransim standard
+  repository: aligungr/ueransim
   pullPolicy: IfNotPresent
   tag: "latest"
 
@@ -21,7 +19,6 @@ containers:
       capabilities:
         add:
           - NET_ADMIN
-    
     resources:
       limits:
         cpu: 300m
@@ -30,49 +27,14 @@ containers:
         cpu: 100m
         memory: 128Mi
 
-# ============================================================
-# UE Configuration
-# ============================================================
 config:
-  imsi: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ ue_data.imsi_suffix }}"
-  key: "{{ fiveg.security.full_key }}"
-  opc: "{{ fiveg.security.opc }}"
-  
-  # Slice
+  imsi: "{{ profile.plmn.mcc }}{{ profile.plmn.mnc }}{{ ue_data.imsi_suffix }}"
+  key: "{{ profile.security.full_key }}"
+  opc: "{{ profile.security.opc }}"
   sst: {{ slice_data.sst | int }}
   sd: "{{ '0x%06x' | format(slice_data.sd | int) if slice_data.sd | int else '000000' }}"
-  
-  # gNB Connection
   gnbSearchList:
     - "ueransim-gnb"
     - "ueransim-gnb.{{ ran_ns | default('oai') }}.svc.cluster.local"
 
-
-# ============================================================
-# Affinity - optionnel
-# ============================================================
-
-# Option 2 : même nœud que gNB
-# affinity:
-#   podAffinity:
-#     preferredDuringSchedulingIgnoredDuringExecution:
-#       - weight: 100
-#         podAffinityTerm:
-#           labelSelector:
-#             matchExpressions:
-#               - key: app.kubernetes.io/instance
-#                 operator: In
-#                 values:
-#                   - ueransim-gnb
-#           topologyKey: kubernetes.io/hostname
-
-nodeSelector:
-  kubernetes.io/hostname: "{{ ran_node_name | default('') }}"
-nodeName: "{{ ran_node_name | default('') }}"
-
-tolerations:
-  - key: "test-eviction"
-    operator: "Equal"
-    value: "true"
-    effect: "NoSchedule"
-
+affinity: {}

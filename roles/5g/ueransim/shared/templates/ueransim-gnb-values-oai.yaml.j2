@@ -2,12 +2,11 @@
 replicaCount: 1
 
 image:
-  repository: aligungr/ueransim  # Image ueransim standard
+  repository: aligungr/ueransim
   pullPolicy: IfNotPresent
   tag: "latest"
 
 podAnnotations:
-  # Attach N2/N3 interfaces
   k8s.v1.cni.cncf.io/networks: '[{"name": "ueransim-gnb-net", "ips": ["{{ oai_config.gnb_n2_ip }}"]}, {"name": "ueransim-gnb-net", "ips": ["{{ oai_config.gnb_n3_ip }}"]}]'
 
 podSecurityContext:
@@ -25,8 +24,6 @@ containers:
         add:
           - NET_ADMIN
           - NET_RAW
-    
-    # Ressources
     resources:
       limits:
         cpu: 500m
@@ -35,66 +32,27 @@ containers:
         cpu: 200m
         memory: 256Mi
 
-# ============================================================
-# Configuration gNB
-# ============================================================
 config:
   mcc: "{{ profile.plmn.mcc }}"
   mnc: "{{ profile.plmn.mnc }}"
   tac: {{ profile.plmn.tac | int }}
-  
-  # IPs : use OVS IPs for N2/N3
-  linkIp: "0.0.0.0" # Loca link
-  ngapIp: "{{ oai_config.gnb_n2_ip }}" # N2 Interface N2 for NGAP (AMF)
-  gtpIp: "{{ oai_config.gnb_n3_ip }}" # N3 Interface N3 for GTP (UPF)
-  
+  linkIp: "0.0.0.0"
+  ngapIp: "{{ oai_config.gnb_n2_ip }}"
+  gtpIp: "{{ oai_config.gnb_n3_ip }}"
   amfAddr: "{{ oai_config.amf_ip }}"
   amfPort: {{ oai_config.amf_port | int }}
-  
-  # Slices
   slices:
 {% for slice in profile.slices %}
     - sst: {{ slice.sst | int }}
       sd: "{{ '0x%06x' | format(slice.sd | int) if slice.sd | int else '000000' }}"
 {% endfor %}
 
-# ============================================================
-# Service to expose N2 (NGAP/SCTP)
-# ============================================================
 service:
   type: ClusterIP
-  # Exposer NGAP sur le réseau OVS n2br
   ports:
     ngap:
       port: 38412
       protocol: SCTP
       targetPort: 38412
 
-# ============================================================
-# Affinity - pour distribuer selon les nœuds disponibles
-# ============================================================
 affinity: {}
-# Option : forcer même nœud que OAI si présent
-# affinity:
-#   podAffinity:
-#     preferredDuringSchedulingIgnoredDuringExecution:
-#       - weight: 100
-#         podAffinityTerm:
-#           labelSelector:
-#             matchExpressions:
-#               - key: app
-#                 operator: In
-#                 values:
-#                   - oai-ran  # Adapter selon le label de votre OAI gNB
-#           topologyKey: kubernetes.io/hostname
-
-nodeSelector:
-  kubernetes.io/hostname: "{{ ran_node_name }}"
-nodeName: "{{ ran_node_name | default('') }}"
-
-tolerations:
-  - key: "test-eviction"
-    operator: "Equal"
-    value: "true"
-    effect: "NoSchedule"
-

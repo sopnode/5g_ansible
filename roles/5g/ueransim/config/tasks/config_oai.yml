@@ -1,7 +1,6 @@
 ---
 # ============================================================
-# ueransim config for OAI (Helm + existing OVS NAD
-# Adapt UERANSIM from Free5gc repo
+# ueransim config for OAI (Helm + existing OVS NAD)
 # ============================================================
 
 - name: Ensure NAD directory exists
@@ -20,7 +19,6 @@
   ansible.builtin.shell: |
     set -e
     bridges_ok=true
-    
     echo "Checking OVS bridges..."
     for bridge in n2br n3br; do
       if ovs-vsctl list-br | grep -q "^${bridge}$"; then
@@ -30,7 +28,6 @@
         bridges_ok=false
       fi
     done
-    
     if [ "$bridges_ok" = "false" ]; then
       echo "ERROR: Some required OVS bridges are missing"
       exit 1
@@ -44,27 +41,7 @@
     msg: "WARNING: OVS bridges may not be properly configured. Check manually."
   when: ovs_check.rc != 0
 
-- name: Create fix script
-  ansible.builtin.copy:
-    dest: /tmp/fix-chart.sh
-    mode: '0755'
-    content: |
-      #!/bin/bash
-      set -e
-
-      CHART="{{ ueransim_chart_path }}"
-
-      sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' "$CHART/templates/gnb/gnb-deployment.yaml"
-      sed -i '/nodeSelector:/a\      nodeName: {{ "{{ .Values.nodeName }}" }}' "$CHART/templates/gnb/gnb-deployment.yaml"
-
-      sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' "$CHART/templates/ue/ue-deployment.yaml"
-      sed -i '/nodeSelector:/a\      nodeName: {{ "{{ .Values.nodeName }}" }}' "$CHART/templates/ue/ue-deployment.yaml"
-
-- name: Execute fix script
-  ansible.builtin.shell: bash /tmp/fix-chart.sh
-  changed_when: false
-
-- name: Generate NAD OVS for gNB (N2 and N3)
+- name: Generate NAD OVS for gNB
   ansible.builtin.template:
     src: "{{ playbook_dir }}/../roles/5g/ueransim/shared/templates/nad-ovs-gnb.yaml.j2"
     dest: "{{ ueransim_chart_path }}/nad/nad-gnb.yaml"
@@ -79,7 +56,6 @@
     mode: '0644'
   vars:
     profile: "{{ fiveg }}"
-    net: "{{ ueransim_network }}"
     oai_config: "{{ ueransim_oai_network }}"
 
 - name: Generate ueransim UE values override for each UE (OAI)
@@ -89,7 +65,6 @@
     mode: '0644'
   vars:
     profile: "{{ fiveg }}"
-    net: "{{ ueransim_network }}"
     ue_name: "{{ ue.key }}"
     ue_data: "{{ ue.value }}"
     slice_data: "{{ fiveg.slices | selectattr('name', 'equalto', ue.value.slice) | first }}"
@@ -101,11 +76,8 @@
 - name: Display NAD and values generation summary
   ansible.builtin.debug:
     msg: |
-      ✓ NAD OVS NAD generated in : {{ nad_manifests_path }}
+      ✓ NAD OVS generated in : {{ ueransim_chart_path }}/nad/
       ✓ Helm values generated in : {{ ueransim_chart_path }}/overrides/
-      
       gNB network config :
         - N2 IP: {{ ueransim_oai_network.gnb_n2_ip }} (AMF: {{ ueransim_oai_network.amf_ip }})
         - N3 IP: {{ ueransim_oai_network.gnb_n3_ip }}
-      
-

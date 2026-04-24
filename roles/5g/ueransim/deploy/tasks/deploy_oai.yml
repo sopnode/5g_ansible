@@ -1,10 +1,11 @@
+---
 - name: Display deployment configuration
   ansible.builtin.debug:
     msg: |
       OAI/ueransim deployment
       Namespace: {{ ran_ns | default('oai') }}
       gNB Release: ueransim-gnb
-      UE Releases: ueransim-uesim01, ueransim-uesim02, ueransim-uesim03
+      UE Releases: uesim01, uesim02, uesim03
 
 - name: Load NAD file from chart path
   ansible.builtin.slurp:
@@ -22,17 +23,6 @@
   delay: 5
   until: nad_gnb_applied is not failed
 
-- name: Assert NAD exists
-  ansible.builtin.stat:
-    path: "{{ ueransim_chart_path }}/nad/nad-gnb.yaml"
-  register: nad_stat
-  delegate_to: "{{ inventory_hostname }}"
-
-- name: Fail if missing NAD
-  ansible.builtin.fail:
-    msg: "NAD missing on ran_node"
-  when: not nad_stat.stat.exists
-
 - name: Verify NAD creation
   kubernetes.core.k8s_info:
     api_version: k8s.cni.cncf.io/v1
@@ -45,7 +35,7 @@
 - name: Display created NADs
   ansible.builtin.debug:
     msg: |
-      Created NetworkAttachmentDefinitions :
+      Created NetworkAttachmentDefinitions:
       {% for nad in nad_list.resources %}
         - {{ nad.metadata.name }}
       {% endfor %}
@@ -63,7 +53,6 @@
     helm uninstall ueransim-gnb -n {{ ran_ns | default('oai') }} --no-hooks
   when: gnb_release_exists.stdout | trim | int > 0
   failed_when: false
-  register: gnb_uninstall
 
 - name: Wait for gNB resources cleanup
   ansible.builtin.pause:
@@ -80,27 +69,10 @@
 
 - name: Uninstall old ueransim-ue releases
   shell: >
-    helm list -n {{ ran_ns | default('oai') }} -a -q | grep "^ueransim-uesim" | 
+    helm list -n {{ ran_ns | default('oai') }} -a -q | grep "^ueransim-uesim" |
     xargs -I {} helm uninstall {} -n {{ ran_ns | default('oai') }} --no-hooks
   when: ue_releases_exist.stdout | trim | int > 0
   failed_when: false
-
-- name: Patch ueransim-gnb deployment for nodeName and tolerations
-  kubernetes.core.k8s:
-    state: patched
-    kind: Deployment
-    name: ueransim-gnb
-    namespace: "{{ ran_ns | default('oai') }}"
-    definition:
-      spec:
-        template:
-          spec:
-            nodeName: "{{ ran_node_name }}"
-            tolerations:
-              - key: "test-eviction"
-                operator: "Equal"
-                value: "true"
-                effect: "NoSchedule"
 
 - name: Deploy ueransim gNB via Helm
   kubernetes.core.helm:
@@ -113,13 +85,6 @@
     values_files:
       - "{{ ueransim_chart_path }}/overrides/values-gnb-override.yaml"
   register: helm_gnb_deploy
-
-- name: gNB Helm deployment result
-  ansible.builtin.debug:
-    msg: |
-      gNB Helm deployment:
-        Status: {{ helm_gnb_deploy.status | default('deployed') }}
-        Release: {{ helm_gnb_deploy.release_name | default('ueransim-gnb') }}
 
 - name: Wait for gNB pod to be Running
   kubernetes.core.k8s_info:
@@ -145,17 +110,34 @@
   register: gnb_pod_ready
   until:
     - gnb_pod_ready.resources | length > 0
-    - gnb_pod_ready.resources[0].status.containerStatuses | default([]) | 
+    - gnb_pod_ready.resources[0].status.containerStatuses | default([]) |
       selectattr('ready', 'equalto', true) | list | length ==
       gnb_pod_ready.resources[0].status.containerStatuses | length
   retries: 12
   delay: 10
 
+- name: Patch ueransim-gnb deployment with nodeName and tolerations
+  kubernetes.core.k8s:
+    state: patched
+    kind: Deployment
+    name: ueransim-gnb
+    namespace: "{{ ran_ns | default('oai') }}"
+    definition:
+      spec:
+        template:
+          spec:
+            nodeName: "{{ ran_node_name }}"
+            tolerations:
+              - key: "test-eviction"
+                operator: "Equal"
+                value: "true"
+                effect: "NoSchedule"
+
 - name: Display gNB pod info
   ansible.builtin.debug:
     msg: |
       gNB Pod:
-        Nom: {{ gnb_pod_ready.resources[0].metadata.name }}
+        Name: {{ gnb_pod_ready.resources[0].metadata.name }}
         Status: {{ gnb_pod_ready.resources[0].status.phase }}
         Node: {{ gnb_pod_ready.resources[0].spec.nodeName }}
 
@@ -183,13 +165,11 @@
   ansible.builtin.debug:
     msg: |
       UERANSIM deployment for OAI done
-
+      
       Pods:
       {% for pod in all_ueransim_pods.resources %}
-        - {{ pod.metadata.name }}: {{ pod.status.phase }}
+        - {{ pod.metadata.name }}: {{ pod.status.phase }} on {{ pod.spec.nodeName }}
       {% endfor %}
-
+      
       To check connectivity:
         kubectl logs -n {{ ran_ns | default('oai') }} -l app.kubernetes.io/instance=ueransim-gnb
-        kubectl logs -n {{ ran_ns | default('oai') }} -l app.kubernetes.io/instance=ueransim-uesim01
-

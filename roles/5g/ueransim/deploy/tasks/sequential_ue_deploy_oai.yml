@@ -1,22 +1,4 @@
 ---
-
-- name: "Patch {{ ue_item.key | lower }} deployment for nodeName and tolerations"
-  kubernetes.core.k8s:
-    state: patched
-    kind: Deployment
-    name: "ueransim-{{ ue_item.key | lower }}"
-    namespace: "{{ ran_ns | default('oai') }}"
-    definition:
-      spec:
-        template:
-          spec:
-            nodeName: "{{ ran_node_name }}"
-            tolerations:
-              - key: "test-eviction"
-                operator: "Equal"
-                value: "true"
-                effect: "NoSchedule"
-
 - name: "Deploy ueransim-{{ ue_item.key | lower }} via Helm"
   kubernetes.core.helm:
     name: "ueransim-{{ ue_item.key | lower }}"
@@ -27,11 +9,6 @@
     timeout: 120s
     values_files:
       - "{{ ueransim_chart_path }}/overrides/values-{{ ue_item.key | lower }}-override.yaml"
-  register: helm_ue_deploy
-
-- name: "Waiting for {{ ue_item.key }} pod initialization"
-  ansible.builtin.pause:
-    seconds: 3
 
 - name: "Wait for {{ ue_item.key }} pod to be Running"
   kubernetes.core.k8s_info:
@@ -63,14 +40,31 @@
   retries: 12
   delay: 10
 
+- name: "Patch {{ ue_item.key | lower }} deployment with nodeName and tolerations"
+  kubernetes.core.k8s:
+    state: patched
+    kind: Deployment
+    name: "ueransim-{{ ue_item.key | lower }}"
+    namespace: "{{ ran_ns | default('oai') }}"
+    definition:
+      spec:
+        template:
+          spec:
+            nodeName: "{{ ran_node_name }}"
+            tolerations:
+              - key: "test-eviction"
+                operator: "Equal"
+                value: "true"
+                effect: "NoSchedule"
+
 - name: "Display {{ ue_item.key }} deployment status"
   ansible.builtin.debug:
     msg: |
-      {{ ue_item.key }} deployed successfully:
+      {{ ue_item.key }} deployed:
         Pod: {{ ue_pod_ready.resources[0].metadata.name }}
         Status: {{ ue_pod_ready.resources[0].status.phase }}
         Node: {{ ue_pod_ready.resources[0].spec.nodeName }}
 
-- name: "Delay before next UE ({{ ue_item.key }})"
+- name: "Delay before next UE"
   ansible.builtin.pause:
     seconds: 5
