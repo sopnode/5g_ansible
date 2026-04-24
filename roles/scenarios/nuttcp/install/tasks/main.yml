@@ -23,6 +23,6 @@
 
     - name: Create symlink in /usr/bin
       ansible.builtin.file:
-        src: "/opt/build/nuttcp/nuttcp-{{ nuttcp_version }}.c"
+        src: "/opt/build/nuttcp/nuttcp-{{ nuttcp_version }}"
         dest: /usr/bin/nuttcp
         state: link

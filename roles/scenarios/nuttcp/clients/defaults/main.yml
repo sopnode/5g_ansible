@@ -1,12 +1,14 @@
 ---
 duration: "{{ nuttcp_duration | default(30) }}"
 sleep: "{{ nuttcp_sleep | default(5) }}"
-# tcp_bandwidth: "0" # Unclear whether a 0 value works as "no limit" for nuttcp.  Simply don't use any -R option to send without a limit
-udp_bandwidth: "50m" # Note that "m/g" suffix should be lowercase, unlike iPerf.  Default is "k" if no suffix specified
 async_stagger: 0
+# tcp_bandwidth: "0" # Unclear whether a 0 value works as "no limit" for nuttcp.  Simply don't use any -Ri option to send without a limit
+udp_bandwidth: "50m" # Note that "m/g" suffix should be lowercase, unlike iPerf.  Default is "k" if no suffix specified
+# tcp_buffer_length: 65536 # Default value of 65536 is probably fine
+udp_buffer_length: 1200 # Default of 8192 will cause fragmentation with 1500-byte MTU
 
 nuttcp_scenarios:
   - {protocol: "tcp", direction: "up", extra_args: "-v -t"}
   - {protocol: "tcp", direction: "down", extra_args: "-v -r"}
-  - {protocol: "udp", direction: "up", extra_args: "-v -u -R {{ udp_bandwidth }} -t"}
-  - {protocol: "udp", direction: "down", extra_args: "-v -u -R {{ udp_bandwidth }} -r"}
+  - {protocol: "udp", direction: "up", extra_args: "-v -t -u -Ri {{ udp_bandwidth }} -l {{ udp_buffer_length }}"}
+  - {protocol: "udp", direction: "down", extra_args: "-v -r -u -Ri {{ udp_bandwidth }} -l {{ udp_buffer_length }}"}
