@@ -22,9 +22,8 @@
   until:
     - ue_pod.resources | length > 0
     - ue_pod.resources[0].status.phase == 'Running'
-    - ue_pod.resources[0].status.containerStatuses |
-      selectattr('ready', 'equalto', true) | list | length ==
-      ue_pod.resources[0].status.containerStatuses | length
+    - ue_pod.resources[0].status.conditions is defined
+    - ue_pod.resources[0].status.conditions | selectattr('type','equalto','Ready') | map(attribute='status') | list | first == 'True'
   retries: 12
   delay: 10
 
