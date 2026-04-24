@@ -3,7 +3,7 @@ duration: "{{ nuttcp_duration | default(30) }}"
 sleep: "{{ nuttcp_sleep | default(5) }}"
 async_stagger: 0
 # tcp_bandwidth: "0" # Unclear whether a 0 value works as "no limit" for nuttcp.  Simply don't use any -Ri option to send without a limit
-udp_bandwidth: "50m" # Note that "m/g" suffix should be lowercase, unlike iPerf.  Default is "k" if no suffix specified
+udp_bandwidth: "50M"
 # tcp_buffer_length: 65536 # Default value of 65536 is probably fine
 udp_buffer_length: 1200 # Default of 8192 will cause fragmentation with 1500-byte MTU
 
