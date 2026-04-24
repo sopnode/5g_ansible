@@ -3,6 +3,16 @@
 # ueransim config for OAI (Helm + existing OVS NAD)
 # ============================================================
 
+- name: Fix chart templates - replace .nodeSelector, .affinity, .tolerations with .Values.xxx
+  ansible.builtin.shell: |
+    sed -i 's/{{- toYaml \.nodeSelector/{{- toYaml .Values.nodeSelector/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
+    sed -i 's/{{- toYaml \.tolerations/{{- toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
+    sed -i 's/{{- toYaml \.affinity/{{- toYaml .Values.affinity/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
+    sed -i 's/{{- toYaml \.nodeSelector/{{- toYaml .Values.nodeSelector/g' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
+    sed -i 's/{{- toYaml \.tolerations/{{- toYaml .Values.tolerations/g' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
+    sed -i 's/{{- toYaml \.affinity/{{- toYaml .Values.affinity/g' {{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml
+  changed_when: false
+
 - name: Ensure NAD directory exists
   ansible.builtin.file:
     path: "{{ ueransim_chart_path }}/nad"
