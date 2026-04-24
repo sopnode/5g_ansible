@@ -100,6 +100,28 @@
   retries: 12
   delay: 10
 
+- name: Patch gNB pod to sopnode-f2
+  ansible.builtin.shell: |
+    kubectl delete pod -n {{ ran_ns | default('oai') }} -l app=ueransim,component=gnb --ignore-not-found=true
+    sleep 5
+  changed_when: false
+
+- name: Wait for gNB pod rescheduled on sopnode-f2
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ ran_ns | default('oai') }}"
+    label_selectors:
+      - app=ueransim
+      - component=gnb
+  register: gnb_pod
+  until:
+    - gnb_pod.resources | length > 0
+    - gnb_pod.resources[0].spec.nodeName == "{{ ran_node_name }}"
+    - gnb_pod.resources[0].status.phase == 'Running'
+  retries: 20
+  delay: 5
+
 - name: Delay for gNB stability
   ansible.builtin.pause:
     seconds: 10

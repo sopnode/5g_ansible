@@ -1,48 +1,8 @@
 ---
 # ============================================================
 # ueransim config for OAI (Helm + existing OVS NAD)
-# Basé sur free5gc qui marche
 # ============================================================
 
-- name: Fix chart - use .Values.nodeSelector, .Values.affinity, .Values.tolerations
-  ansible.builtin.replace:
-    path: "{{ item }}"
-    regexp: 'toYaml \.nodeSelector'
-    replace: 'toYaml .Values.nodeSelector'
-  loop:
-    - "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
-    - "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
-
-- name: Fix chart - use .Values.affinity
-  ansible.builtin.replace:
-    path: "{{ item }}"
-    regexp: 'toYaml \.affinity'
-    replace: 'toYaml .Values.affinity'
-  loop:
-    - "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
-    - "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
-
-- name: Fix chart - use .Values.tolerations
-  ansible.builtin.replace:
-    path: "{{ item }}"
-    regexp: 'toYaml \.tolerations'
-    replace: 'toYaml .Values.tolerations'
-  loop:
-    - "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
-    - "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
-
-- name: Fix chart - use $.Values in gnb context
-  ansible.builtin.replace:
-    path: "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
-    regexp: '\.Values\.'
-    replace: '$.Values.'
-
-- name: Fix chart - use $.Values in ue context
-  ansible.builtin.replace:
-    path: "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
-    regexp: '\.Values\.'
-    replace: '$.Values.'
-    
 - name: Ensure NAD directory exists
   ansible.builtin.file:
     path: "{{ ueransim_chart_path }}/nad"
