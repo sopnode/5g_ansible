@@ -4,6 +4,7 @@ kind: NetworkAttachmentDefinition
 metadata:
   name: ueransim-gnb-net
   namespace: {{ ran_ns | default('oai') }}
+
 spec:
   config: |
     {
@@ -16,17 +17,6 @@ spec:
         "addresses": [
           {
             "address": "{{ net.gnb_n3_ip }}/24"
-            {% if net.n3_gateway is defined and net.n3_gateway %}
-            ,"gateway": "{{ net.n3_gateway }}"
-            {% endif %}
-          }
-        ],
-        "routes": [
-          {
-            "dst": "0.0.0.0/0"
-            {% if net.n3_gateway is defined and net.n3_gateway %}
-            ,"gw": "{{ net.n3_gateway }}"
-            {% endif %}
           }
         ]
       },
