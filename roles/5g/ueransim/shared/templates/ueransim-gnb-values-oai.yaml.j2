@@ -1,7 +1,3 @@
-{#
-  ueransim-gnb-values-oai.yaml.j2
-#}
-
 {%- macro resolve_sd(sd) -%}
   {%- if sd == 'EMPTY' -%}0xFFFFFF
   {%- else -%}0x{{ '%06x' | format(sd | int(base=16)) }}
@@ -10,12 +6,21 @@
 
 global:
   n2network:
-    enabled: false   # FIX: stop ipvlan auto-generation
+    enabled: false
   n3network:
-    enabled: false   # FIX: stop ipvlan auto-generation
+    enabled: false
 
 gnb:
   enabled: true
+
+  nodeSelector:
+    kubernetes.io/hostname: "{{ ran_node_name }}"
+
+  tolerations:
+    - key: "test-eviction"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
 
   n2if:
     ipAddress: 0.0.0.0
@@ -44,14 +49,5 @@ gnb:
 {% endfor %}
     ignoreStreamIds: true
 
-  k8s.v1.cni.cncf.io/networks:
-    - name: ueransim-gnb-net
-      interface: n2
-    - name: ueransim-gnb-net
-      interface: n3
-
 ue:
   enabled: false
-
-nodeSelector:
-  kubernetes.io/hostname: "{{ ran_node_name }}"
