@@ -1,3 +1,4 @@
+---
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
@@ -9,14 +10,27 @@ spec:
       "cniVersion": "0.3.1",
       "name": "ueransim-gnb-net",
       "type": "ovs",
-      "bridge": "{{ oai_config.n3_bridge }}",
+      "bridge": "{{ net.n3_bridge }}",
       "ipam": {
         "type": "static",
         "addresses": [
           {
             "address": "{{ net.gnb_n3_ip }}/24"
+            {% if net.n3_gateway is defined and net.n3_gateway %}
+            ,"gateway": "{{ net.n3_gateway }}"
+            {% endif %}
+          }
+        ],
+        "routes": [
+          {
+            "dst": "0.0.0.0/0"
+            {% if net.n3_gateway is defined and net.n3_gateway %}
+            ,"gw": "{{ net.n3_gateway }}"
+            {% endif %}
           }
         ]
       },
+      "ipMasq": false,
+      "isGateway": false,
       "mtu": 1500
     }

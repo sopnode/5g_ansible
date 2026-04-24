@@ -47,7 +47,7 @@
     dest: "{{ ueransim_chart_path }}/nad/nad-gnb.yaml"
     mode: '0644'
   vars:
-    oai_config: "{{ ueransim_oai_network }}"
+    net: "{{ ueransim_oai_network }}"
 
 - name: Generate ueransim gNB values override for OAI
   ansible.builtin.template:
