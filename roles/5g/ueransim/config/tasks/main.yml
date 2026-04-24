@@ -94,22 +94,22 @@
   when: core == 'oai'
   loop:
     - file: "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
-      regexp: 'toYaml \.Values\.nodeSelector'
+      regexp: 'toYaml \.nodeSelector'
       replace: 'toYaml $.Values.nodeSelector'
     - file: "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
-      regexp: 'toYaml \.Values\.affinity'
+      regexp: 'toYaml \.affinity'
       replace: 'toYaml $.Values.affinity'
     - file: "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
-      regexp: 'toYaml \.Values\.tolerations'
+      regexp: 'toYaml \.tolerations'
       replace: 'toYaml $.Values.tolerations'
     - file: "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
-      regexp: 'toYaml \.Values\.nodeSelector'
+      regexp: 'toYaml \.nodeSelector'
       replace: 'toYaml $.Values.nodeSelector'
     - file: "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
-      regexp: 'toYaml \.Values\.affinity'
+      regexp: 'toYaml \.affinity'
       replace: 'toYaml $.Values.affinity'
     - file: "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
-      regexp: 'toYaml \.Values\.tolerations'
+      regexp: 'toYaml \.tolerations'
       replace: 'toYaml $.Values.tolerations'
   changed_when: false
 
