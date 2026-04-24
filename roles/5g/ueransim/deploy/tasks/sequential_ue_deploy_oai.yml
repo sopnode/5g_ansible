@@ -40,23 +40,6 @@
   retries: 12
   delay: 10
 
-- name: "Patch {{ ue_item.key | lower }} deployment with nodeName and tolerations"
-  kubernetes.core.k8s:
-    state: patched
-    kind: Deployment
-    name: "ueransim-{{ ue_item.key | lower }}"
-    namespace: "{{ ran_ns | default('oai') }}"
-    definition:
-      spec:
-        template:
-          spec:
-            nodeName: "{{ ran_node_name }}"
-            tolerations:
-              - key: "test-eviction"
-                operator: "Equal"
-                value: "true"
-                effect: "NoSchedule"
-
 - name: "Display {{ ue_item.key }} deployment status"
   ansible.builtin.debug:
     msg: |

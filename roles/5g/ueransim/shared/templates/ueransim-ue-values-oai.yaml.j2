@@ -38,3 +38,15 @@ config:
     - "ueransim-gnb.{{ ran_ns | default('oai') }}.svc.cluster.local"
 
 affinity: {}
+
+nodeSelector:
+  kubernetes.io/hostname: "{{ ran_node_name }}"
+
+nodeName: "{{ ran_node_name }}"
+
+tolerations:
+  - key: "test-eviction"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+

@@ -116,23 +116,6 @@
   retries: 12
   delay: 10
 
-- name: Patch ueransim-gnb deployment with nodeName and tolerations
-  kubernetes.core.k8s:
-    state: patched
-    kind: Deployment
-    name: ueransim-gnb
-    namespace: "{{ ran_ns | default('oai') }}"
-    definition:
-      spec:
-        template:
-          spec:
-            nodeName: "{{ ran_node_name }}"
-            tolerations:
-              - key: "test-eviction"
-                operator: "Equal"
-                value: "true"
-                effect: "NoSchedule"
-
 - name: Display gNB pod info
   ansible.builtin.debug:
     msg: |
