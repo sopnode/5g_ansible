@@ -15,9 +15,9 @@ spec:
         "type": "static",
         "addresses": [
           {
-            "address": "{{ net.gnb_n3_ip }}/24"
-            {% if net.n3_gateway is defined and net.n3_gateway %}
-            ,"gateway": "{{ net.n3_gateway }}"
+            "address": "{{ oai_config.gnb_n3_ip }}/24"
+            {% if oai_config.n3_gateway is defined and oai_config.n3_gateway %}
+            , "gateway": "{{ oai_config.n3_gateway }}"
             {% endif %}
           }
         ]
