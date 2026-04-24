@@ -1,9 +1,4 @@
 ---
-# ============================================================
-# NetworkAttachmentDefinition for gNB
-# N2 and N3 both on n3br (same subnet as OAI)
-# ============================================================
-
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
@@ -16,16 +11,10 @@ spec:
       "name": "ueransim-gnb-net",
       "type": "ovs",
       "bridge": "{{ oai_config.n3_bridge }}",
+      "ipam": {
+        "type": "static"
+      },
       "ipMasq": false,
       "isGateway": false,
-      "mtu": 1500,
-      "ipam": {
-        "type": "static",
-        "addresses": [
-          {
-            "address": "{{ oai_config.gnb_n3_ip }}/24",
-            "gateway": "{{ oai_config.gateway | default('192.168.3.1') }}"
-          }
-        ]
-      }
+      "mtu": 1500
     }
