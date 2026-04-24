@@ -10,43 +10,23 @@
     values_files:
       - "{{ ueransim_chart_path }}/overrides/values-{{ ue_item.key | lower }}-override.yaml"
 
-- name: "Wait for {{ ue_item.key }} pod to be Running"
+- name: "Wait for {{ ue_item.key }} pod to be Ready"
   kubernetes.core.k8s_info:
     api_version: v1
     kind: Pod
     namespace: "{{ ran_ns | default('oai') }}"
     label_selectors:
-      - app.kubernetes.io/instance=ueransim-{{ ue_item.key | lower }}
+      - app=ueransim
+      - component={{ ue_item.key | lower }}
   register: ue_pod
   until:
     - ue_pod.resources | length > 0
     - ue_pod.resources[0].status.phase == 'Running'
-  retries: 12
-  delay: 10
-
-- name: "Wait for {{ ue_item.key }} containers Ready"
-  kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Pod
-    namespace: "{{ ran_ns | default('oai') }}"
-    label_selectors:
-      - app.kubernetes.io/instance=ueransim-{{ ue_item.key | lower }}
-  register: ue_pod_ready
-  until:
-    - ue_pod_ready.resources | length > 0
-    - ue_pod_ready.resources[0].status.containerStatuses | default([]) |
+    - ue_pod.resources[0].status.containerStatuses |
       selectattr('ready', 'equalto', true) | list | length ==
-      ue_pod_ready.resources[0].status.containerStatuses | length
+      ue_pod.resources[0].status.containerStatuses | length
   retries: 12
   delay: 10
-
-- name: "Display {{ ue_item.key }} deployment status"
-  ansible.builtin.debug:
-    msg: |
-      {{ ue_item.key }} deployed:
-        Pod: {{ ue_pod_ready.resources[0].metadata.name }}
-        Status: {{ ue_pod_ready.resources[0].status.phase }}
-        Node: {{ ue_pod_ready.resources[0].spec.nodeName }}
 
 - name: "Delay before next UE"
   ansible.builtin.pause:

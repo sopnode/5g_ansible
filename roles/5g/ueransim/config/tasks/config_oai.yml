@@ -1,30 +1,8 @@
 ---
 # ============================================================
 # ueransim config for OAI (Helm + existing OVS NAD)
+# Basé sur free5gc qui marche
 # ============================================================
-
-- name: Fix chart templates - replace .Values with $.Values in gnb-deployment
-  ansible.builtin.replace:
-    path: "{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
-    regexp: '\.Values'
-    replace: '$.Values'
-
-- name: Fix chart templates - replace .Values with $.Values in ue-deployment
-  ansible.builtin.replace:
-    path: "{{ ueransim_chart_path }}/templates/ue/ue-deployment.yaml"
-    regexp: '\.Values'
-    replace: '$.Values'
-
-- name: Fix chart templates - replace .nodeSelector, .affinity, .tolerations with .Values.xxx
-  ansible.builtin.shell: |
-    CHART="{{ ueransim_chart_path }}"
-    sed -i 's/toYaml \.nodeSelector/toYaml .Values.nodeSelector/g' "$CHART/templates/gnb/gnb-deployment.yaml"
-    sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' "$CHART/templates/gnb/gnb-deployment.yaml"
-    sed -i 's/toYaml \.affinity/toYaml .Values.affinity/g' "$CHART/templates/gnb/gnb-deployment.yaml"
-    sed -i 's/toYaml \.nodeSelector/toYaml .Values.nodeSelector/g' "$CHART/templates/ue/ue-deployment.yaml"
-    sed -i 's/toYaml \.tolerations/toYaml .Values.tolerations/g' "$CHART/templates/ue/ue-deployment.yaml"
-    sed -i 's/toYaml \.affinity/toYaml .Values.affinity/g' "$CHART/templates/ue/ue-deployment.yaml"
-  changed_when: false
 
 - name: Ensure NAD directory exists
   ansible.builtin.file:
@@ -74,24 +52,24 @@
 
 - name: Generate ueransim gNB values override for OAI
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../roles/5g/ueransim/shared/templates/ueransim-gnb-values-oai.yaml.j2"
+    src: ueransim-gnb-values.yaml.j2
     dest: "{{ ueransim_chart_path }}/overrides/values-gnb-override.yaml"
     mode: '0644'
   vars:
     profile: "{{ fiveg }}"
-    oai_config: "{{ ueransim_oai_network }}"
+    net: "{{ ueransim_network }}"
 
 - name: Generate ueransim UE values override for each UE (OAI)
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../roles/5g/ueransim/shared/templates/ueransim-ue-values-oai.yaml.j2"
+    src: ueransim-ue-values.yaml.j2
     dest: "{{ ueransim_chart_path }}/overrides/values-{{ ue.key | lower }}-override.yaml"
     mode: '0644'
   vars:
     profile: "{{ fiveg }}"
+    net: "{{ ueransim_network }}"
     ue_name: "{{ ue.key }}"
     ue_data: "{{ ue.value }}"
     slice_data: "{{ fiveg.slices | selectattr('name', 'equalto', ue.value.slice) | first }}"
-    oai_config: "{{ ueransim_oai_network }}"
   loop: "{{ fiveg.ues | dict2items | selectattr('key', 'in', ['uesim01', 'uesim02', 'uesim03']) | sort(attribute='key') | list }}"
   loop_control:
     loop_var: ue
