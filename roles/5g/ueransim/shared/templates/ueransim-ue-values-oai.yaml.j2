@@ -65,3 +65,14 @@ ue:
     integrityMaxRate:
       uplink: full
       downlink: full
+
+nodeSelector:
+  kubernetes.io/hostname: "{{ ran_node_name }}"
+
+affinity: {}
+
+tolerations:
+  - key: "test-eviction"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
