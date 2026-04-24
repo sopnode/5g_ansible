@@ -98,7 +98,7 @@ while [[ $# -gt 0 ]]; do
             TARGET_PLAYBOOK="${PING_PLAYBOOK}"
             shift
             ;;
-        --ping)
+        --nuttcp)
             SETUP_PLAYBOOK="${SETUP_NUTTCP_PLAYBOOK}"
             TARGET_PLAYBOOK="${NUTTCP_PLAYBOOK}"
             shift
