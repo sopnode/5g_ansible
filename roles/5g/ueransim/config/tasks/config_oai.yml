@@ -6,12 +6,9 @@
 - name: Fix chart templates - replace .Values with $.Values in with context
   ansible.builtin.shell: |
     CHART="{{ ueransim_chart_path }}"
-    # Fix gnb-deployment.yaml (lines 80-90 approximately)
-    sed -i '/{{- with \.Values\.gnb/,/{{- end/s/\.Values/\$.Values/g' "$CHART/templates/gnb/gnb-deployment.yaml"
-    # Fix ue-deployment.yaml (lines 56-62 approximately)
-    sed -i '/{{- with \.Values\.ue/,/{{- end/s/\.Values/\$.Values/g' "$CHART/templates/ue/ue-deployment.yaml"
+    sed -i '/with .Values.gnb/,/end/s/\.Values/$.Values/g' "$CHART/templates/gnb/gnb-deployment.yaml"
+    sed -i '/with .Values.ue/,/end/s/\.Values/$.Values/g' "$CHART/templates/ue/ue-deployment.yaml"
   changed_when: false
-
 
 - name: Fix chart templates - replace .nodeSelector, .affinity, .tolerations with .Values.xxx
   ansible.builtin.shell: |
