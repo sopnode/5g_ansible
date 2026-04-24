@@ -15,8 +15,17 @@ spec:
       "cniVersion": "0.3.1",
       "name": "ueransim-gnb-net",
       "type": "ovs",
-      "bridge": "n3br",
+      "bridge": "{{ oai_config.n3_bridge }}",
       "ipMasq": false,
       "isGateway": false,
-      "mtu": 1500
+      "mtu": 1500,
+      "ipam": {
+        "type": "static",
+        "addresses": [
+          {
+            "address": "{{ oai_config.gnb_n3_ip }}/24",
+            "gateway": "{{ oai_config.gateway | default('192.168.3.1') }}"
+          }
+        ]
+      }
     }
