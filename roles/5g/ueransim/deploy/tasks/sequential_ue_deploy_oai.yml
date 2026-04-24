@@ -17,7 +17,7 @@
     namespace: "{{ ran_ns | default('oai') }}"
     label_selectors:
       - app=ueransim
-      - component={{ ue_item.key | lower }}
+      - component=ue
   register: ue_pod
   until:
     - ue_pod.resources | length > 0
