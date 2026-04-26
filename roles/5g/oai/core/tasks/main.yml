@@ -1,6 +1,42 @@
 ---
-- name: RESTART_OAI_CORE
+- name: START_OAI_CORE
   ansible.builtin.meta: noop
+
+- name: Install OVS CNI via Cluster Network Addons Operator (single-node)
+  block:
+    - name: Apply Cluster Network Addons Operator namespace
+      ansible.builtin.shell: |
+        kubectl apply -f https://github.com/kubevirt/cluster-network-addons-operator/releases/download/v0.98.1/namespace.yaml
+
+    - name: Apply Cluster Network Addons CRDs
+      ansible.builtin.shell: |
+        kubectl apply -f https://github.com/kubevirt/cluster-network-addons-operator/releases/download/v0.98.1/network-addons-config.crd.yaml
+
+    - name: Apply Cluster Network Addons Operator
+      ansible.builtin.shell: |
+        kubectl apply -f https://github.com/kubevirt/cluster-network-addons-operator/releases/download/v0.98.1/operator.yaml
+
+    - name: Create NetworkAddonsConfig for OVS
+      ansible.builtin.copy:
+        dest: /tmp/netaddonsconf.yaml
+        content: |
+          apiVersion: networkaddonsoperator.network.kubevirt.io/v1
+          kind: NetworkAddonsConfig
+          metadata:
+            name: cluster
+          spec:
+            ovs: {}
+
+    - name: Apply NetworkAddonsConfig
+      ansible.builtin.shell: |
+        kubectl apply -f /tmp/netaddonsconf.yaml
+
+    - name: Wait for NetworkAddonsConfig to become Available
+      ansible.builtin.shell: |
+        kubectl wait networkaddonsconfig cluster --for condition=Available --timeout=300s
+  when: core_node_name == ran_node_name and ran == 'ueransim'
+  become: yes
+
 
 - name: Run demo-oai.sh start-cn to launch OAI CN pods
   ansible.builtin.command: "{{ demo_oai_script }} start-cn"
