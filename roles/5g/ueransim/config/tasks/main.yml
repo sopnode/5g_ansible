@@ -120,26 +120,9 @@
     # Fix ngapIp issue BEFORE loading config_oai.yml
     - name: Fix ngapIp issue in gnb-deployment.yaml
       ansible.builtin.shell: |
-        set -e
-        TEMPLATE="{{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml"
-
-        if [ ! -f "$TEMPLATE" ]; then
-          echo "ERROR: Template not found at $TEMPLATE"
-          exit 1
-        fi
-
-        echo "🔧 Fixing ngapIp in template..."
-        # Use a variable to avoid Jinja2 interpretation
-        REPLACEMENT='ngapIp: {{ .n2if.ipAddress }}'
-        sed -i "s/ngapIp: 0\.0\.0\.0/$REPLACEMENT/g" "$TEMPLATE"
-
-        if grep -q "ngapIp:" "$TEMPLATE"; then
-          echo "✓ ngapIp patch applied"
-          grep -n "ngapIp:" "$TEMPLATE"
-        else
-          echo "ERROR: ngapIp patch failed"
-          exit 1
-        fi
+        sed -i 's/ngapIp: 0\.0\.0\.0/ngapIp: {{ "{" }}.n2if.ipAddress {{ "}" }}/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
+        echo "✓ ngapIp patch applied"
+        grep -n "ngapIp:" {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
       register: ngapip_patch
       changed_when: false
 
@@ -153,3 +136,4 @@
 
   vars:
     ueransim_network: "{{ ueransim_oai_network }}"
+
