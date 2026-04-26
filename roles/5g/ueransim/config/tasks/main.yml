@@ -114,34 +114,8 @@
   changed_when: false
 
 - name: Configure ueransim for oai
+  ansible.builtin.include_tasks: config_oai.yml
   when: core == 'oai'
-  block:
-
-    - name: Create sed script to fix ngapIp
-      ansible.builtin.template:
-        src: fix_ngapip.sed.j2
-        dest: "{{ ueransim_chart_path }}/fix_ngapip.sed"
-        mode: '0644'
-
-    - name: Fix ngapIp in gnb-deployment.yaml
-      ansible.builtin.shell: |
-        sed -i -f {{ ueransim_chart_path }}/fix_ngapip.sed {{ ueransim_chart_path }}/templates/gnb/gnb-configmap.yaml
-        echo "✓ ngapIp patch applied"
-        grep -n "ngapIp:" {{ ueransim_chart_path }}/templates/gnb/gnb-configmap.yaml
-      register: ngapip_patch
-      changed_when: false
-
-    - name: Display result
-      ansible.builtin.debug:
-        msg: "{{ ngapip_patch.stdout }}"
-
-    - name: Cleanup
-      ansible.builtin.file:
-        path: "{{ ueransim_chart_path }}/fix_ngapip.sed"
-        state: absent
-
-    - name: Load OAI configuration tasks
-      ansible.builtin.include_tasks: config_oai.yml
-
   vars:
     ueransim_network: "{{ ueransim_oai_network }}"
+
