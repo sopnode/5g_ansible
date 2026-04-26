@@ -3,6 +3,11 @@ kind: NetworkAttachmentDefinition
 metadata:
   name: n3network-ueransim-gnb
   namespace: {{ ran_ns | default('oai') }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    meta.helm.sh/release-name: ueransim-gnb
+    meta.helm.sh/release-namespace: {{ ran_ns | default('oai') }}
 spec:
   config: |
     {
