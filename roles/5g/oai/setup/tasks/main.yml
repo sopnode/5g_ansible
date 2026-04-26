@@ -70,7 +70,7 @@
   ansible.builtin.set_fact:
     multus_core_if: "n3br"
     multus_ran_if: "n3br"
-  when: bridge_enabled
+  when: bridge_enabled or (core == 'oai' and ran == 'ueransim')
 
 - name: Update NS variable in prepare-demo-oai.sh
   ansible.builtin.lineinfile:
