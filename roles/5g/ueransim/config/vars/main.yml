@@ -26,7 +26,7 @@ ueransim_oai_network:
   n2_bridge: "n2br"
   amf_ip: "192.168.3.201"
   amf_port: 38412
-  gnb_n2_ip: "192.168.3.203"
+  gnb_n2_ip: "192.168.3.204"
   n3_bridge: "n3br"
   gnb_n3_ip: "192.168.3.204"
 nad_manifests_path: "{{ ueransim_chart_path }}/nad"
