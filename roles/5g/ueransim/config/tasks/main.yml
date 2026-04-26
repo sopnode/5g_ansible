@@ -117,20 +117,30 @@
   when: core == 'oai'
   block:
 
-    # Fix ngapIp issue BEFORE loading config_oai.yml
-    - name: Fix ngapIp issue in gnb-deployment.yaml
+    - name: Create sed script to fix ngapIp
+      ansible.builtin.copy:
+        content: |
+          s/ngapIp: 0\.0\.0\.0/ngapIp: {{ .n2if.ipAddress }}/g
+        dest: "{{ ueransim_chart_path }}/fix_ngapip.sed"
+        mode: '0644'
+
+    - name: Fix ngapIp in gnb-deployment.yaml
       ansible.builtin.shell: |
-        sed -i 's/ngapIp: 0\.0\.0\.0/ngapIp: {{ "{" }}.n2if.ipAddress {{ "}" }}/g' {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
+        sed -i -f {{ ueransim_chart_path }}/fix_ngapip.sed {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
         echo "✓ ngapIp patch applied"
         grep -n "ngapIp:" {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
       register: ngapip_patch
       changed_when: false
 
-    - name: Display ngapIp patch result
+    - name: Display result
       ansible.builtin.debug:
         msg: "{{ ngapip_patch.stdout }}"
 
-    # Now load the rest of config_oai.yml
+    - name: Cleanup
+      ansible.builtin.file:
+        path: "{{ ueransim_chart_path }}/fix_ngapip.sed"
+        state: absent
+
     - name: Load OAI configuration tasks
       ansible.builtin.include_tasks: config_oai.yml
 
