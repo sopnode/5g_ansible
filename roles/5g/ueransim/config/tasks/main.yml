@@ -125,9 +125,9 @@
 
     - name: Fix ngapIp in gnb-deployment.yaml
       ansible.builtin.shell: |
-        sed -i -f {{ ueransim_chart_path }}/fix_ngapip.sed {{ ueransim_chart_path }}/templates/gnb/gnb-configmap.yaml
+        sed -i -f {{ ueransim_chart_path }}/fix_ngapip.sed {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
         echo "✓ ngapIp patch applied"
-        grep -n "ngapIp:" {{ ueransim_chart_path }}/templates/gnb/gnb-configmap.yaml
+        grep -n "ngapIp:" {{ ueransim_chart_path }}/templates/gnb/gnb-deployment.yaml
       register: ngapip_patch
       changed_when: false
 
