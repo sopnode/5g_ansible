@@ -119,7 +119,7 @@
 
     - name: Create sed script to fix ngapIp
       ansible.builtin.copy:
-        content: {% raw %}s/ngapIp: 0\.0\.0\.0/ngapIp: {{ .n2if.ipAddress }}/g{% endraw %}
+        content: "{% raw %}s/ngapIp: 0\.0\.0\.0/ngapIp: {{ .n2if.ipAddress }}/g{% endraw %}"
         dest: "{{ ueransim_chart_path }}/fix_ngapip.sed"
         mode: '0644'
 
