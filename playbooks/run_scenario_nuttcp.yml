@@ -59,13 +59,13 @@
       
     - name: Download nuttcp unless local archive already exists
       ansible.builtin.shell: |
-        wget -r -np -nH --cut-dirs=2 -R '*C=*O=*' -P ./include/nuttcp https://nuttcp.net/nuttcp/nuttcp-8.1.4/
+        wget -r -np -nH --cut-dirs=2 -R '*C=*O=*' -P ../include/nuttcp https://nuttcp.net/nuttcp/nuttcp-8.1.4/
       when: not nuttcp_exists.stat.exists
 
     - name: Compress nuttcp code unless archive already exists
       community.general.archive:
-        path: ./include/nuttcp/
-        dest: ./include/nuttcp.tar.gz
+        path: ../include/nuttcp/
+        dest: ../include/nuttcp.tar.gz
         format: gz
       when: not nuttcp_exists.stat.exists
 

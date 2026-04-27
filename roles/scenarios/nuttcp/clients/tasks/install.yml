@@ -13,7 +13,7 @@
 
     - name: Copy archive from controller
       ansible.builtin.unarchive:
-        src: include/nuttcp.tar.gz
+        src: ../include/nuttcp.tar.gz
         dest: /opt/build/nuttcp
 
     - name: Run make
