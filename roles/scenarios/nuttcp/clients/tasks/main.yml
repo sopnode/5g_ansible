@@ -40,10 +40,6 @@
   loop: "{{ groups['qhats'] | difference(valid_ue_list) }}"
   when: (groups['qhats'] | difference(valid_ue_list)) | length > 0
 
-- name: Make sure local archive of nuttcp exists
-  include_tasks: download_nuttcp.yml
-  delegate_to: localhost
-
 - name: Install nuttcp on UEs
   include_tasks: ../install/tasks/main.yml
   loop: "{{ valid_ue_list }}"
