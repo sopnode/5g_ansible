@@ -48,7 +48,6 @@
   loop: "{{ valid_ue_list }}"
   loop_control:
     loop_var: current_ue
-  delegate_to: "{{ current_ue }}"
 
 - name: Create local log directories
   ansible.builtin.file:
