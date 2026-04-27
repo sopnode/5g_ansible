@@ -116,8 +116,11 @@
   set_fact:
     valid_ues: "{{ valid_ues + [{'pod': ue_resources[0].metadata.name,
                                  'ip': item.split()[1] | regex_replace('/.*', ''),
-                                 'tun': item.split()[0]}] }}"
+                                 'tun': item.split()[0],
+                                 'slice': fiveg.ues['uesim0' ~ (ue_idx + 1)].slice}] }}"
   loop: "{{ open5gs_tun_raw.stdout_lines | default([]) }}"
+  loop_control:
+    index_var: ue_idx
   when:
     - open5gs_srsran | bool
     - item | trim != ''
@@ -139,15 +142,6 @@
 # OPEN5GS ROUTING (FIX ONLY)
 # ============================================================
 
-- name: Ensure Open5GS slices exist
-  assert:
-    that:
-      - fiveg is defined
-      - fiveg.slices is defined
-      - fiveg.slices | length > 0
-    fail_msg: "Open5GS requires fiveg.slices"
-  when: open5gs_srsran | bool
-
 - name: Define UPF mapping (open5gs+srsRAN)
   set_fact:
     upf_map:
@@ -164,13 +158,11 @@
       slice2: upf2
   when: open5gs_srsran | bool
 
-- name: Add routes to UPFs via cbr0
+- name: Add UE routes per slice via correct UPF (Open5GS)
   become: true
   shell: |
-    ip route add {{ item.ip }} dev cbr0 2>/dev/null || true
-  loop:
-    - "{{ upf_map.upf1 }}"
-    - "{{ upf_map.upf2 }}"
+    ip route add {{ item.ip }} via {{ upf_map[slice_upf_map[item.slice]].ip }} dev cbr0 2>/dev/null || true
+  loop: "{{ valid_ues }}"
   when: open5gs_srsran | bool
 
 - name: Add routes for UE subnet per slice via correct UPF
