@@ -47,30 +47,28 @@
             IP: {{ target_server_ip }}
       run_once: true
 
-- name: Define nuttcp version number
-  set_fact:
-    nuttcp_version: "8.1.4"
-  run_once: true
+    - name: Define nuttcp version number
+      set_fact:
+        nuttcp_version: "8.1.4"
+      run_once: true
 
-- name: Check if local archive of nuttcp code exists
-  hosts: localhost
-  ansible.builtin.stat:
-    path: ./include/nuttcp.zip
-  register: nuttcp_exists
-  
-- name: Download nuttcp unless local archive already exists
-  hosts: localhost
-  ansible.builtin.shell: |
-    "wget -r -np -nH --cut-dirs=2 -R *C=*O=* -P ./include/nuttcp https://nuttcp.net/nuttcp/nuttcp-{{ nuttcp_version }}/"
-  when: not nuttcp_exists.stat.exists
+    - name: Check if local archive of nuttcp code exists
+      ansible.builtin.stat:
+        path: ./include/nuttcp.zip
+      register: nuttcp_exists
+      
+    - name: Download nuttcp unless local archive already exists
+      ansible.builtin.shell: |
+        "wget -r -np -nH --cut-dirs=2 -R *C=*O=* -P ./include/nuttcp https://nuttcp.net/nuttcp/nuttcp-{{ nuttcp_version }}/"
+      when: not nuttcp_exists.stat.exists
 
-- name: Compress nuttcp code unless archive already exists
-  hosts: localhost
-  community.general.archive:
-    path: ./include/nuttcp/
-    dest: ./include/nuttcp.tar.gz
-    format: gz
-  when: not nuttcp_exists.stat.exists
+    - name: Compress nuttcp code unless archive already exists
+      hosts: localhost
+      community.general.archive:
+        path: ./include/nuttcp/
+        dest: ./include/nuttcp.tar.gz
+        format: gz
+      when: not nuttcp_exists.stat.exists
 
 - name: Install nuttcp on target server
   hosts: "{{ hostvars['localhost'].get('target_server_host', groups['iperf_server_node'][0]) }}"
@@ -111,5 +109,5 @@
     nb_ues: "{{ groups['qhats'] | length }}"
     target_server_ip: "{{ hostvars[target_server_host]['ip'] }}"
   roles:
-    - role: scenarios/iperf/multi-ue
+    - role: scenarios/nuttcp/clients
       when: rru != "rfsim"
