@@ -71,8 +71,7 @@
 
 - name: Install nuttcp on target server
   hosts: "{{ hostvars['localhost'].get('target_server_host', groups['iperf_server_node'][0]) }}"
-  roles:
-    - role: scenarios/nuttcp/install
+  include_tasks: ../scenarios/nuttcp/clients/tasks/install.yml
 
 - name: Run nuttcp servers on target server
   hosts: "{{ hostvars['localhost'].get('target_server_host', groups['iperf_server_node'][0]) }}"
