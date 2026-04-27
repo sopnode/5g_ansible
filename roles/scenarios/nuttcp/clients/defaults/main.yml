@@ -9,6 +9,6 @@ udp_buffer_length: 1200 # Default of 8192 will cause fragmentation with 1500-byt
 
 nuttcp_scenarios:
   - {protocol: "tcp", direction: "up", extra_args: "--t -Ri{{ tcp_bandwidth }} -l {{ tcp_buffer_length }}"}
-  - {protocol: "tcp", direction: "down", extra_args: "-r -Ri{{ tcp_bandwidth }} -l {{ tcp_buffer_length }}"}
+  # - {protocol: "tcp", direction: "down", extra_args: "-r -Ri{{ tcp_bandwidth }} -l {{ tcp_buffer_length }}"}
   - {protocol: "udp", direction: "up", extra_args: "-u -t -Ri{{ udp_bandwidth }} -l {{ udp_buffer_length }}"}
-  - {protocol: "udp", direction: "down", extra_args: "-u -r -Ri{{ udp_bandwidth }} -l {{ udp_buffer_length }}"}
+  # - {protocol: "udp", direction: "down", extra_args: "-u -r -Ri{{ udp_bandwidth }} -l {{ udp_buffer_length }}"}
