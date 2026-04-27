@@ -41,7 +41,7 @@
   when: (groups['qhats'] | difference(valid_ue_list)) | length > 0
 
 - name: Install nuttcp on UEs
-  include_tasks: ../../install/tasks/main.yml
+  include_tasks: install.yml
   loop: "{{ valid_ue_list }}"
   loop_control:
     loop_var: current_ue
