@@ -63,7 +63,6 @@
       when: not nuttcp_exists.stat.exists
 
     - name: Compress nuttcp code unless archive already exists
-      hosts: localhost
       community.general.archive:
         path: ./include/nuttcp/
         dest: ./include/nuttcp.tar.gz
