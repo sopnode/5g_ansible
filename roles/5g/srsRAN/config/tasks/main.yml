@@ -2,7 +2,9 @@
 - name: Force Ansible to use venv Python
   ansible.builtin.set_fact:
     ansible_python_interpreter: /opt/ansible-venv/bin/python
-  when: monitoring_enabled | default(false) and ran_node_name == (monitor_node_name | default(''))
+  when:
+    - core == 'free5gc'
+    - core_node_name != ran_node_name
     
 - name: Load common variables
   include_vars:
@@ -197,4 +199,7 @@
 - name: Reset ansible_python_interpreter to system python3
   ansible.builtin.set_fact:
     ansible_python_interpreter: /usr/bin/python3
-  when: monitoring_enabled | default(false) and ran_node_name == (monitor_node_name | default(''))
+  when:
+    - core == 'free5gc'
+    - core_node_name != ran_node_name
+
