@@ -196,6 +196,17 @@
 # iperf uplink
 # ============================================================
 
+- name: Run iperf uplink with temporary UE route
+  shell: |
+    kubectl exec -n {{ core_ns }} {{ item.pod }} -- ip route add {{ target_server }} dev {{ item.tun }} 2>/dev/null || true
+    kubectl exec -n {{ core_ns }} {{ item.pod }} -- iperf3 -B {{ item.ip }} -c {{ target_server }} -p {{ 5201 + idx }} -t {{ duration }}
+    kubectl exec -n {{ core_ns }} {{ item.pod }} -- ip route del {{ target_server }} dev {{ item.tun }} 2>/dev/null || true
+  loop: "{{ valid_ues }}"
+  loop_control:
+    index_var: idx
+  ignore_errors: yes
+  when: open5gs_srsran | bool
+
 - name: Run iperf uplink
   shell: >
     kubectl exec -n {{ core_ns }} {{ item.pod }} --
@@ -207,6 +218,7 @@
   loop_control:
     index_var: idx
   ignore_errors: yes
+  when: not open5gs_srsran | bool
 
 - pause:
     seconds: 1
@@ -214,6 +226,17 @@
 # ============================================================
 # iperf downlink
 # ============================================================
+
+- name: Run iperf downlink with temporary UE route
+  shell: |
+    kubectl exec -n {{ core_ns }} {{ item.pod }} -- ip route add {{ target_server }} dev {{ item.tun }} 2>/dev/null || true
+    kubectl exec -n {{ core_ns }} {{ item.pod }} -- iperf3 -B {{ item.ip }} -c {{ target_server }} -p {{ 5201 + idx }} -t {{ duration }} -R
+    kubectl exec -n {{ core_ns }} {{ item.pod }} -- ip route del {{ target_server }} dev {{ item.tun }} 2>/dev/null || true
+  loop: "{{ valid_ues }}"
+  loop_control:
+    index_var: idx
+  ignore_errors: yes
+  when: open5gs_srsran | bool
 
 - name: Run iperf downlink
   shell: >
@@ -226,3 +249,4 @@
   loop_control:
     index_var: idx
   ignore_errors: yes
+  when: not open5gs_srsran | bool
