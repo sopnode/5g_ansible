@@ -1,7 +1,7 @@
 ---
-- name: Force Ansible to use venv Python
-  ansible.builtin.set_fact:
-    ansible_python_interpreter: /opt/ansible-venv/bin/python
+#- name: Force Ansible to use venv Python
+#  ansible.builtin.set_fact:
+#    ansible_python_interpreter: /opt/ansible-venv/bin/python
     
 - name: Load common variables
   include_vars:
@@ -193,6 +193,6 @@
       {% endfor %}
   when: rru == 'rfsim'
 
-- name: Reset ansible_python_interpreter to system python3
-  ansible.builtin.set_fact:
-    ansible_python_interpreter: /usr/bin/python3
+#- name: Reset ansible_python_interpreter to system python3
+#  ansible.builtin.set_fact:
+#    ansible_python_interpreter: /usr/bin/python3
