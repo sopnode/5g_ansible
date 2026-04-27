@@ -19,6 +19,12 @@
          else 'oaitun_ue1' if ran == 'oai'
          else 'uesimtun0' }}
 
+- name: Load active 5G profile
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+    name: fiveg
+  when: open5gs_srsran | bool
+
 - name: Display RFSIM iperf configuration
   debug:
     msg: |
@@ -136,9 +142,11 @@
 - name: Ensure Open5GS slices exist
   assert:
     that:
-      - not open5gs_srsran | bool or fiveg.slices is defined
-      - not open5gs_srsran | bool or fiveg.slices | length > 0
+      - fiveg is defined
+      - fiveg.slices is defined
+      - fiveg.slices | length > 0
     fail_msg: "Open5GS requires fiveg.slices"
+  when: open5gs_srsran | bool
 
 - name: Define UPF mapping (open5gs+srsRAN)
   set_fact:
