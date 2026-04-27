@@ -178,7 +178,7 @@
   when: not (single_pod_srsran | bool)
 
 # ============================================================
-# Routing setup - free5gc+srsRAN: PSA-UPF routes on core node
+# Routing setup - free5gc+srsRAN: PSA-UPF routes on iperf target_server
 # + ip rule per UE source IP in UE pod
 # ============================================================
 
@@ -202,7 +202,7 @@
   changed_when: false
   when: free5gc_srsran | bool
 
-- name: Add routes on core node via each PSA-UPF (free5gc+srsRAN)
+- name: Add routes on target_server via each PSA-UPF (free5gc+srsRAN)
   shell: |
     ip route add {{ item.1 }} via {{ item.0.item.status.podIP }} dev cni0 2>/dev/null || true
   loop: "{{ psaupf_routes.results | default([]) | subelements('stdout_lines') }}"
@@ -230,6 +230,49 @@
     label: "ip rule from {{ item.ip }} -> {{ item.tun }} (table {{ 100 + idx + 1 }})"
   failed_when: false
   when: free5gc_srsran | bool
+
+# ============================================================
+# Routing setup - open5gs+srsRAN: PSA-UPF routes on iperf target_server
+# + ip rule per UE source IP in UE pod
+# ============================================================
+
+- name: Define UPF mappings (open5gs+srsRAN)
+  set_fact:
+    upf_map:
+      upf1:
+        ip: "10.10.3.1"
+      upf2:
+        ip: "10.10.3.2"
+    n3_dev: "n3br"
+  when: open5gs_srsran | bool
+
+- name: Add routes to reach UPF1 and UPF2 via N3 interface
+  become: true
+  shell: |
+    ip route add {{ item.ip }} dev {{ n3_dev }} 2>/dev/null || true
+  loop:
+    - "{{ upf_map.upf1 }}"
+    - "{{ upf_map.upf2 }}"
+  loop_control:
+    label: "Route to UPF {{ item.ip }} via {{ n3_dev }}"
+  when: open5gs_srsran | bool
+
+- name: Build slice-to-UPF mapping
+  set_fact:
+    slice_upf_map:
+      slice1: upf1
+      slice2: upf2
+  when: open5gs_srsran | bool
+
+- name: Add routes for UE subnet per slice via correct UPF
+  become: true
+  shell: |
+    ip route add {{ item.ip_prefix }}.0/24 via {{ upf_map[slice_upf_map[item.name]].ip }} dev {{ n3_dev }} 2>/dev/null || true
+  loop: "{{ slices }}"
+  loop_control:
+    label: "Slice {{ item.name }} -> {{ item.ip_prefix }} via UPF"
+  when: open5gs_srsran | bool
+
 
 # ============================================================
 # iperf uplink
