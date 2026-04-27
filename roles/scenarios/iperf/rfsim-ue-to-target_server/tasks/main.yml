@@ -123,10 +123,14 @@
 
 - name: Build valid_ues (open5gs+srsRAN)
   set_fact:
-    valid_ues: "{{ valid_ues + [{'pod': ue_resources[0].metadata.name,
-                                 'ip': item.split()[1] | regex_replace('/.*', ''),
-                                 'tun': item.split()[0],
-                                 'slice': fiveg.ues['uesim{{ "%02d" | format(item.split()[0].replace("tun_srsue","") | int) }}'].slice
+    valid_ues: "{{ valid_ues + [{
+      'pod': ue_resources[0].metadata.name,
+      'ip': item.split()[1] | regex_replace('/.*', ''),
+      'tun': item.split()[0],
+      'slice': fiveg.ues['uesim01'].slice if item.split()[0] == 'tun_srsue1'
+               else fiveg.ues['uesim02'].slice if item.split()[0] == 'tun_srsue2'
+               else fiveg.ues['uesim03'].slice
+    }] }}"
   loop: "{{ open5gs_tun_raw.stdout_lines | default([]) }}"
   when:
     - open5gs_srsran | bool
