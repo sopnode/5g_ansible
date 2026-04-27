@@ -54,7 +54,7 @@
 
     - name: Check if local archive of nuttcp code exists
       ansible.builtin.stat:
-        path: ../include/nuttcp.zip
+        path: ../include/nuttcp.tar.gz
       register: nuttcp_exists
       
     - name: Download nuttcp unless local archive already exists
