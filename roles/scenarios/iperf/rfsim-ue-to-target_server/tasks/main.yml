@@ -19,6 +19,15 @@
          else 'oaitun_ue1' if ran == 'oai'
          else 'uesimtun0' }}
 
+- name: Detect N3 interface
+  shell: "ip link show n3br >/dev/null 2>&1 && echo n3br || echo cbr0"
+  register: n3_dev_detect
+  changed_when: false
+
+- name: Set N3 device
+  set_fact:
+    n3_dev: "{{ n3_dev_detect.stdout }}"
+
 - name: Load active 5G profile
   ansible.builtin.include_vars:
     file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
@@ -117,10 +126,8 @@
     valid_ues: "{{ valid_ues + [{'pod': ue_resources[0].metadata.name,
                                  'ip': item.split()[1] | regex_replace('/.*', ''),
                                  'tun': item.split()[0],
-                                 'slice': fiveg.ues['uesim0' ~ (ue_idx + 1)].slice}] }}"
+                                 'slice': fiveg.ues[item.split()[0].replace('tun_srsue','uesim')].slice}] }}"
   loop: "{{ open5gs_tun_raw.stdout_lines | default([]) }}"
-  loop_control:
-    index_var: ue_idx
   when:
     - open5gs_srsran | bool
     - item | trim != ''
@@ -139,7 +146,7 @@
   failed_when: false
 
 # ============================================================
-# OPEN5GS ROUTING (FIX ONLY)
+# OPEN5GS ROUTING
 # ============================================================
 
 - name: Define UPF mapping (open5gs+srsRAN)
@@ -158,17 +165,26 @@
       slice2: upf2
   when: open5gs_srsran | bool
 
-- name: Add UE routes per slice via correct UPF (Open5GS)
+- name: Add routes to UPFs via N3 device
   become: true
   shell: |
-    ip route add {{ item.ip }} via {{ upf_map[slice_upf_map[item.slice]].ip }} dev cbr0 2>/dev/null || true
+    ip route add {{ item.ip }} dev {{ n3_dev }} 2>/dev/null || true
+  loop:
+    - "{{ upf_map.upf1 }}"
+    - "{{ upf_map.upf2 }}"
+  when: open5gs_srsran | bool
+
+- name: Add UE routes per slice via correct UPF
+  become: true
+  shell: |
+    ip route add {{ item.ip }} via {{ upf_map[slice_upf_map[item.slice]].ip }} dev {{ n3_dev }} 2>/dev/null || true
   loop: "{{ valid_ues }}"
   when: open5gs_srsran | bool
 
 - name: Add routes for UE subnet per slice via correct UPF
   become: true
   shell: |
-    ip route add {{ item.ip_prefix }}.0/24 via {{ upf_map[slice_upf_map[item.name]].ip }} dev cbr0 2>/dev/null || true
+    ip route add {{ item.ip_prefix }}.0/24 via {{ upf_map[slice_upf_map[item.name]].ip }} dev {{ n3_dev }} 2>/dev/null || true
   loop: "{{ fiveg.slices }}"
   when: open5gs_srsran | bool
 
