@@ -243,18 +243,17 @@
         ip: "10.10.3.1"
       upf2:
         ip: "10.10.3.2"
-    n3_dev: "n3br"
   when: open5gs_srsran | bool
 
 - name: Add routes to reach UPF1 and UPF2 via N3 interface
   become: true
   shell: |
-    ip route add {{ item.ip }} dev {{ n3_dev }} 2>/dev/null || true
+    ip route add {{ item.ip }} dev cbr0 2>/dev/null || true
   loop:
     - "{{ upf_map.upf1 }}"
     - "{{ upf_map.upf2 }}"
   loop_control:
-    label: "Route to UPF {{ item.ip }} via {{ n3_dev }}"
+    label: "Route to UPF {{ item.ip }} via cbr0"
   when: open5gs_srsran | bool
 
 - name: Build slice-to-UPF mapping
@@ -267,7 +266,7 @@
 - name: Add routes for UE subnet per slice via correct UPF
   become: true
   shell: |
-    ip route add {{ item.ip_prefix }}.0/24 via {{ upf_map[slice_upf_map[item.name]].ip }} dev {{ n3_dev }} 2>/dev/null || true
+    ip route add {{ item.ip_prefix }}.0/24 via {{ upf_map[slice_upf_map[item.name]].ip }} dev cbr0 2>/dev/null || true
   loop: "{{ slices }}"
   loop_control:
     label: "Slice {{ item.name }} -> {{ item.ip_prefix }} via UPF"
