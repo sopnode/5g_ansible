@@ -126,7 +126,7 @@
     valid_ues: "{{ valid_ues + [{'pod': ue_resources[0].metadata.name,
                                  'ip': item.split()[1] | regex_replace('/.*', ''),
                                  'tun': item.split()[0],
-                                 'slice': fiveg.ues[item.split()[0].replace('tun_srsue','uesim')].slice}] }}"
+                                 'slice': fiveg.ues['uesim{{ "%02d" | format(item.split()[0].replace("tun_srsue","") | int) }}'].slice
   loop: "{{ open5gs_tun_raw.stdout_lines | default([]) }}"
   when:
     - open5gs_srsran | bool
