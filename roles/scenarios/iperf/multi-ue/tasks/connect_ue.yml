@@ -67,3 +67,10 @@
   set_fact:
     ue_ips: "{{ ue_ips | default({}) | combine({ current_ue: ue_ip_cmd.stdout }) }}"
   when: ue_ip_cmd.stdout != ""
+
+- name: Copy snmp_stats script
+  ansible.builtin.copy:
+    src: ../debug-scripts/snmp_stats.sh
+    dest: /usr/local/bin/snmp_stats.sh
+    mode: '0755'
+  become: true
