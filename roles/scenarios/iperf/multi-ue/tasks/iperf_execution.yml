@@ -12,7 +12,7 @@
 - name: Run iperf tests from {{ current_ue }}
   shell: |
     mkdir -p {{ log_dir }} &&
-    /usr/local/bin/snmp_stats.sh {{ duration }} {{ log_dir }}/snmp.log &&
+    /usr/local/bin/snmp_stats.sh {{ duration }} {{ log_dir }}/snmp.log &
     iperf3 -p {{ iperf_port }} -B {{ ue_ip }} -c {{ target_server }} -t {{ duration }} -J --get-server-output {{ extra_args }} > {{ log_dir }}/iperf.json &&
     sleep {{ sleep }}
   ignore_errors: "{{ ignore_task_errors | default(false) }}"

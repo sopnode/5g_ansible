@@ -13,7 +13,7 @@
   shell: |
     mkdir -p {{ log_dir }} &&
     sleep {{ pre_sleep }} &&
-    /usr/local/bin/snmp_stats.sh {{ test_duration }} {{ log_dir }}/snmp.log &&
+    /usr/local/bin/snmp_stats.sh {{ test_duration }} {{ log_dir }}/snmp.log &
     iperf3 -p {{ iperf_port }} -B {{ ue_ip }} -c {{ target_server }} -t {{ test_duration }} -J --get-server-output {{ extra_args }} > {{ log_dir }}/iperf.json
   ignore_errors: "{{ ignore_task_errors | default(false) }}"
   when: ue_ip is defined and ue_ip != ""
