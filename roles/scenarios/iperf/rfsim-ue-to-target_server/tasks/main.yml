@@ -271,6 +271,10 @@
   ignore_errors: yes
   when: not srsran | bool
 
+- name: Debug iperf uplink results
+  debug:
+    var: iperf_uplink.results
+
 - pause:
     seconds: 1
 
@@ -306,3 +310,6 @@
   ignore_errors: yes
   when: not srsran | bool
 
+- name: Debug iperf downlink results
+  debug:
+    var: iperf_downlink.results
