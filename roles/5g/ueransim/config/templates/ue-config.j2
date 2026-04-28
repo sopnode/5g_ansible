@@ -23,12 +23,10 @@ slices:
   - sst: {{ slice_data.sst }}
     sd: '{{ curr_sd }}'
     dnn: '{{ slice_data.dnn }}'
-    default_indicator: true
 
 # gNB Configuration
-gnb:
-  search_list:
-    - {{ ueransim_open5gs_network.gnb_ip }}
+gnbSearchList:
+  - {{ ueransim_open5gs_network.gnb_ip }}
 
 # Session Configuration  
 sessions:
