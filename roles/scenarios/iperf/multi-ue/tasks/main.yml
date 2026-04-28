@@ -60,6 +60,7 @@
     dest: /usr/local/bin/snmp_stats.sh
     mode: '0755'
   become: true
+  loop: "{{ valid_ue_list }}"
   loop_control:
     loop_var: current_ue
   delegate_to: "{{ current_ue }}"
