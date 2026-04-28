@@ -97,7 +97,7 @@
     - role: setup/k8s/k8s_env
     - role: setup/optimization/cpu
     - role: setup/ovs
-      when: not (fhi72 and ran == 'oai')
+      #when: bridge_enabled
 
 - name: PTP setup on ran_node
   hosts: ran_node
@@ -132,7 +132,6 @@
   become: true
   roles:
     - role: setup/k8s/remove_cp_taint
-      when: not (core_node_name != ran_node_name and fhi72)
 
 - name: Join Kubernetes Cluster on Workers
   hosts: k8s_workers
@@ -148,7 +147,7 @@
     - role: setup/k8s/add_taint
       vars:
         target_node: "{{ ran_node_name }}"
-      when: core_node_name != ran_node_name and not fhi72
+      when: bridge_enabled
 
 - name: Install Multus / CNAO
   hosts: core_node
@@ -241,6 +240,19 @@
     - role: 5g/free5gc/deploy
       when: core == 'free5gc'
 
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
+
 - name: Deploy OAI CN/RAN
   hosts: ran_node
   pre_tasks:
@@ -257,19 +269,6 @@
     - role: 5g/oai/ran
       when: ran == 'oai'
 
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
-
 - name: Deploy srsRAN
   hosts: ran_node
   vars:
@@ -284,8 +283,9 @@
     - role: 5g/srsRAN/deploy
       when: ran == 'srsRAN'
 
-- name: Deploy ueransim
-  hosts: core_node # use ueransim repo included within open5gs_k8s|free5gc-helm already on core_node
+- name: Deploy ueransim for oai core
+  hosts: ran_node
+
   pre_tasks:
     - name: Load 5G profile
       include_vars:
@@ -293,9 +293,31 @@
         name: fiveg
   roles:
     - role: 5g/ueransim/config
-      when: ran == 'ueransim'
+      when:
+        - ran == 'ueransim'
+        - core == 'oai'
     - role: 5g/ueransim/deploy
-      when: ran == 'ueransim'
+      when:
+        - ran == 'ueransim'
+        - core == 'oai'
+
+- name: Deploy ueransim for oai core
+  hosts: core_node
+
+  pre_tasks:
+    - name: Load 5G profile
+      include_vars:
+        file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+        name: fiveg
+  roles:
+    - role: 5g/ueransim/config
+      when:
+        - ran == 'ueransim'
+        - core != 'oai'
+    - role: 5g/ueransim/deploy
+      when:
+        - ran == 'ueransim'
+        - core != 'oai'
 
 - name: Remove NoSchedule taint on Monitor node
   hosts: core_node
@@ -304,7 +326,7 @@
     - role: setup/k8s/remove_taint
       vars:
         target_node: "{{ monitor_node_name }}"
-      when: monitoring_enabled and core_node_name != ran_node_name
+      when: monitoring_enabled and bridge_enabled
 
 - name: 5G-Monarch Final Operations
   hosts: monitor_node

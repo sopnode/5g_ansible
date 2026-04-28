@@ -228,29 +228,22 @@ collect_user_inputs() {
     fi
 
     # Select RAN
-    if [[ "$core" == "oai" ]]; then
-      # If OAI core is selected, only OAI RAN is supported
-      echo ""
-      echo "ℹ️ Only OAI RAN is supported with OAI Core"
-      ran="oai"
+    # Make OAI RAN the default if the user just presses enter
+    echo ""
+    echo "Which RAN do you want to deploy? (default: ${DEFAULT_RAN})"
+    echo "1) OAI"
+    echo "2) srsRAN"
+    echo "3) UERANSIM"
+    read -rp "Enter choice [1-3]: " ran_choice
+    if [[ -z "${ran_choice}" ]]; then
+      ran=${DEFAULT_RAN}
     else
-      # Make OAI RAN the default if the user just presses enter
-      echo ""
-      echo "Which RAN do you want to deploy? (default: ${DEFAULT_RAN})"
-      echo "1) OAI"
-      echo "2) srsRAN"
-      echo "3) UERANSIM"
-      read -rp "Enter choice [1-3]: " ran_choice
-      if [[ -z "${ran_choice}" ]]; then
-        ran=${DEFAULT_RAN}
-      else
-        case "${ran_choice}" in
-          1) ran="oai" ;;
-          2) ran="srsRAN" ;;
-          3) ran="ueransim" ;;
-          *) echo "❌ Invalid choice"; exit 1 ;;
-        esac
-      fi
+      case "${ran_choice}" in
+        1) ran="oai" ;;
+        2) ran="srsRAN" ;;
+        3) ran="ueransim" ;;
+        *) echo "❌ Invalid choice"; exit 1 ;;
+      esac
     fi
 
     # Select RAN Node
@@ -961,7 +954,7 @@ f3_ran=$( [[ "${ran_node}" == "sopnode-f3" ]] && echo true || echo false )
 
 # ---- Other boolean parameters
 # bridge_enabled is true if OVS bridge required between core_node and ran_node
-bridge_enabled=$( [[ "${fhi72}" == "false" && "${ran_node}" != "${core_node}" ]] && echo true || echo false )
+bridge_enabled=$( [[ "${ran_node}" != "${core_node}" ]] && echo true || echo false )
 monitoring_enabled=${monitoring_enabled}
 EOF
 

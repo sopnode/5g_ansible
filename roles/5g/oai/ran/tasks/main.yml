@@ -1,5 +1,5 @@
 ---
-- name: OAI_RAN
+- name: START_OAI_RAN
   ansible.builtin.meta: noop
 
 - name: Launch OAI gNB pod
