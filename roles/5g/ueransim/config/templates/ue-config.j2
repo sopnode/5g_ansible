@@ -1,42 +1,57 @@
-# UERANSIM UE Configuration Template for Open5GS
-# Generated dynamically for each UE instance
+# UERANSIM UE Configuration for Open5GS
+# Based on free5gc/OAI ueransim-ue-values.yaml.j2 structure
 
-# PLMN Configuration
+supi: "imsi-{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ ue_data.imsi_suffix }}"
 mcc: '{{ fiveg.plmn.mcc }}'
 mnc: '{{ fiveg.plmn.mnc }}'
-
-# IMSI Configuration
-supi: '{{ fiveg.plmn.mcc }}-{{ fiveg.plmn.mnc }}-{{ ue_data.imsi_suffix }}'
-imsi: '{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ ue_data.imsi_suffix }}'
-
-# Security Configuration
 key: '{{ fiveg.security.full_key }}'
-opc: '{{ fiveg.security.opc }}'
-amf: '80'
-
-# Device Configuration
+op: '{{ fiveg.security.opc }}'
+opType: OPC
+amf: '8000'
 imei: '356938035643803'
-imeiSv: '8944692340891'
+imeiSv: '4370816125816151'
 
-# Slice Configuration
-slices:
-  - sst: {{ slice_data.sst }}
+uacAic:
+  mps: false
+  mcs: false
+
+uacAcc:
+  normalClass: 0
+  class11: false
+  class12: false
+  class13: false
+  class14: false
+  class15: false
+
+sessions:
+  - type: IPv4
+    apn: {{ slice_data.dnn }}
+    slice:
+      sst: {{ slice_data.sst | int }}
+      sd: '{{ curr_sd }}'
+
+configured-nssai:
+  - sst: {{ slice_data.sst | int }}
     sd: '{{ curr_sd }}'
-    dnn: '{{ slice_data.dnn }}'
 
-# gNB Configuration
+default-nssai:
+  - sst: {{ slice_data.sst | int }}
+    sd: '{{ curr_sd }}'
+
+integrity:
+  IA1: true
+  IA2: true
+  IA3: true
+
+ciphering:
+  EA1: true
+  EA2: true
+  EA3: true
+
+integrityMaxRate:
+  uplink: full
+  downlink: full
+
 gnbSearchList:
   - {{ ueransim_open5gs_network.gnb_ip }}
 
-# Session Configuration  
-sessions:
-  - type: IPv4
-    apn: '{{ slice_data.dnn }}'
-    slice:
-      sst: {{ slice_data.sst }}
-      sd: '{{ curr_sd }}'
-
-# Logging Configuration
-log:
-  level: debug
-  echo: false
