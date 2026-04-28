@@ -271,9 +271,10 @@
   ignore_errors: yes
   when: not srsran | bool
 
-- name: Debug iperf uplink results
+- name: SHOW uplink commands
   debug:
-    var: iperf_uplink.results
+    msg: "UPLINK {{ item.item.pod }} {{ item.item.ip }} port {{ 5201 + item.idx }} skipped={{ item.skipped | default(false) }}"
+  loop: "{{ iperf_uplink.results | default([]) }}"
 
 - pause:
     seconds: 1
@@ -310,6 +311,7 @@
   ignore_errors: yes
   when: not srsran | bool
 
-- name: Debug iperf downlink results
+- name: SHOW downlink commands
   debug:
-    var: iperf_downlink.results
+    msg: "DOWNLINK {{ item.item.pod }} {{ item.item.ip }} port {{ 5201 + item.idx }} skipped={{ item.skipped | default(false) }}"
+  loop: "{{ iperf_downlink.results | default([]) }}"
