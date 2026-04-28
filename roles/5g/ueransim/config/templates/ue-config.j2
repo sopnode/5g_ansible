@@ -1,6 +1,10 @@
 # UERANSIM UE Configuration Template for Open5GS
 # Generated dynamically for each UE instance
 
+# PLMN Configuration
+mcc: '{{ fiveg.plmn.mcc }}'
+mnc: '{{ fiveg.plmn.mnc }}'
+
 # IMSI Configuration
 supi: '{{ fiveg.plmn.mcc }}-{{ fiveg.plmn.mnc }}-{{ ue_data.imsi_suffix }}'
 imsi: '{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ ue_data.imsi_suffix }}'
