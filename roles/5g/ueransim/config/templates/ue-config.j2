@@ -1,0 +1,40 @@
+# UERANSIM UE Configuration Template for Open5GS
+# Generated dynamically for each UE instance
+
+# IMSI Configuration
+supi: '{{ fiveg.plmn.mcc }}-{{ fiveg.plmn.mnc }}-{{ ue_data.imsi_suffix }}'
+imsi: '{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ ue_data.imsi_suffix }}'
+
+# Security Configuration
+key: '{{ fiveg.security.full_key }}'
+opc: '{{ fiveg.security.opc }}'
+amf: '80'
+
+# Device Configuration
+imei: '356938035643803'
+imeiSv: '8944692340891'
+
+# Slice Configuration
+slices:
+  - sst: {{ slice_data.sst }}
+    sd: '{{ curr_sd }}'
+    dnn: '{{ slice_data.dnn }}'
+    default_indicator: true
+
+# gNB Configuration
+gnb:
+  search_list:
+    - {{ ueransim_open5gs_network.gnb_ip }}
+
+# Session Configuration  
+sessions:
+  - type: IPv4
+    apn: '{{ slice_data.dnn }}'
+    slice:
+      sst: {{ slice_data.sst }}
+      sd: '{{ curr_sd }}'
+
+# Logging Configuration
+log:
+  level: debug
+  echo: false
