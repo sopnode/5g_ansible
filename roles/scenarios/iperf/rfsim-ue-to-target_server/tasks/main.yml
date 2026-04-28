@@ -120,7 +120,7 @@
     tun: "{{ parts[0] }}"
     ip: "{{ parts[1] | regex_replace('/.*', '') }}"
     idx: "{{ tun | regex_replace('tun_srsue', '') | int }}"
-    slice: "{{ fiveg.ues['uesim%02d' | format(idx)].slice }}"
+    slice: "{{ fiveg.ues['uesim%02d' | format(idx | int)].slice }}"
   loop: "{{ tun_raw.stdout_lines | default([]) }}"
   when:
     - srsran | bool
