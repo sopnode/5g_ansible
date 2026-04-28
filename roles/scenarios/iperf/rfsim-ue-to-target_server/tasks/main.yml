@@ -5,10 +5,12 @@
     sleep: "{{ iperf_sleep | default(5) }}"
     # Use target_server_ip if provided, else core_node IP
     target_server: "{{ target_server_ip | default(hostvars[groups['core_node'][0]].ip) }}"
+    target_server_name: "{{ target_server_host | default(hostvars[groups['core_node'][0]]) }}"
     core_ns: "{{ core }}"
     valid_ues: []
     free5gc_srsran: "{{ core == 'free5gc' and ran == 'srsRAN' }}"
     open5gs_srsran: "{{ core == 'open5gs' and ran == 'srsRAN' }}"
+    oai_srsran: "{{ core == 'oai' and ran == 'srsRAN' }}"
     single_pod_srsran: "{{ (core == 'free5gc' or core == 'open5gs') and ran == 'srsRAN' }}"
     ue_name: >-
       {{ 'srsran-ue-srsran-ue' if ran == 'srsRAN'
@@ -149,47 +151,62 @@
     label: "Setting MTU 1350 on {{ item.pod }} ({{ item.tun }})"
   failed_when: false
 
+
+# ============================================================
+# OAI ROUTING
+# ============================================================
+
+- name: Add UE/UPF routing on iperf target node
+  become: true
+  shell: |
+    ip route replace 12.1.0.0/16 via 192.168.3.202
+  when: oai_srsran | bool
+  delegate_to: "{{ target_server_name }}"
+  
 # ============================================================
 # OPEN5GS ROUTING
 # ============================================================
 
-- name: Define UPF mapping (open5gs+srsRAN)
-  set_fact:
-    upf_map:
-      upf1:
-        ip: "10.10.3.1"
-      upf2:
-        ip: "10.10.3.2"
-  when: open5gs_srsran | bool
+- name: UPF + slice routing configuration (open5gs + srsRAN)
+  block:
 
-- name: Build slice-to-UPF mapping
-  set_fact:
-    slice_upf_map:
-      slice1: upf1
-      slice2: upf2
-  when: open5gs_srsran | bool
+    - name: Define UPF mapping (open5gs+srsRAN)
+      set_fact:
+        upf_map:
+          upf1:
+            ip: "10.10.3.1"
+          upf2:
+            ip: "10.10.3.2"
 
-- name: Add routes to UPFs via N3 device
-  become: true
-  shell: |
-    ip route add {{ item.ip }} dev {{ n3_dev }} 2>/dev/null || true
-  loop:
-    - "{{ upf_map.upf1 }}"
-    - "{{ upf_map.upf2 }}"
-  when: open5gs_srsran | bool
+    - name: Build slice-to-UPF mapping
+      set_fact:
+        slice_upf_map:
+          slice1: upf1
+          slice2: upf2
 
-- name: Add UE routes per slice via correct UPF
-  become: true
-  shell: |
-    ip route add {{ item.ip }} via {{ upf_map[slice_upf_map[item.slice]].ip }} dev {{ n3_dev }} 2>/dev/null || true
-  loop: "{{ valid_ues }}"
-  when: open5gs_srsran | bool
+    - name: Add routes to UPFs via N3 device
+      become: true
+      shell: |
+        ip route add {{ item.ip }} dev {{ n3_dev }} 2>/dev/null || true
+      loop:
+        - "{{ upf_map.upf1 }}"
+        - "{{ upf_map.upf2 }}"
+      delegate_to: "{{ target_server_name }}"
 
-- name: Add routes for UE subnet per slice via correct UPF
-  become: true
-  shell: |
-    ip route add {{ item.ip_prefix }}.0/24 via {{ upf_map[slice_upf_map[item.name]].ip }} dev {{ n3_dev }} 2>/dev/null || true
-  loop: "{{ fiveg.slices }}"
+    - name: Add UE routes per slice via correct UPF
+      become: true
+      shell: |
+        ip route add {{ item.ip }} via {{ upf_map[slice_upf_map[item.slice]].ip }} dev {{ n3_dev }} 2>/dev/null || true
+      loop: "{{ valid_ues }}"
+      delegate_to: "{{ target_server_name }}"
+
+    - name: Add routes for UE subnet per slice via correct UPF
+      become: true
+      shell: |
+        ip route add {{ item.ip_prefix }}.0/24 via {{ upf_map[slice_upf_map[item.name]].ip }} dev {{ n3_dev }} 2>/dev/null || true
+      loop: "{{ fiveg.slices }}"
+      delegate_to: "{{ target_server_name }}"
+
   when: open5gs_srsran | bool
 
 # ============================================================
