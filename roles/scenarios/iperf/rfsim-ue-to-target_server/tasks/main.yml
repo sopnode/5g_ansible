@@ -139,9 +139,27 @@
 
 - name: Build valid_ues (others)
   set_fact:
-    valid_ues: "{{ valid_ues + [{'pod': item.item.metadata.name,
-                                 'ip': item.stdout | trim,
-                                 'tun': tun_name}] }}"
+    valid_ues: "{{ valid_ues + [{
+      'pod': item.item.metadata.name,
+      'ip': item.stdout | trim,
+      'tun': (
+        'oaitun_ue' ~ (
+          (item.item.metadata.name | regex_search('ue([0-9]+)') | regex_replace('ue', '') | int)
+          if (item.item.metadata.name | regex_search('ue[0-9]+'))
+          else (loop_idx + 1)
+        )
+      ) if ran == 'oai'
+      else (
+        'uesimtun' ~ (
+          (
+            (item.item.metadata.name | regex_search('ue([0-9]+)') | regex_replace('ue', '') | int) - 1
+          )
+          if (item.item.metadata.name | regex_search('ue[0-9]+'))
+          else loop_idx
+        )
+      ) if ran == 'ueransim'
+      else tun_name
+    }] }}"
   loop: "{{ ue_ip_results.results | default([]) }}"
   loop_control:
     index_var: loop_idx
