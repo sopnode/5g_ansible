@@ -162,7 +162,13 @@
     ip route replace 12.1.0.0/16 via 192.168.3.202
   when: oai_srsran | bool
   delegate_to: "{{ target_server_name }}"
-  
+
+- name: Add route to iperf target node on srsue pod
+  shell: >
+    kubectl exec -n {{ core_ns }} {{ ue_resources[0].metadata.name }} --
+    ip route replace {{ target_server }} via 12.1.1.1
+  when: oai_srsran | bool
+
 # ============================================================
 # OPEN5GS ROUTING
 # ============================================================
