@@ -37,13 +37,14 @@
     ls -R {{ ueransim_chart_path }}
   register: check
 
-- name: SHOW ABSOLUTE REAL FILE
-  stat:
-    path: "{{ ueransim_chart_path }}/overrides/values-gnb-override.yaml"
-  register: gnb
+- name: SHOW REAL FILE CONTENT
+  shell: |
+    ls -l {{ ueransim_chart_path }}/overrides
+    cat {{ ueransim_chart_path }}/overrides/values-gnb-override.yaml
+  register: real_file
 
 - debug:
-    var: gnb.stat.exists
+    var: real_file.stdout_lines
     
 - name: Generate ueransim UE values override for each UE
   ansible.builtin.template:
