@@ -69,6 +69,7 @@
     ue_count: 1
     ue_ip: "{{ ue_ips[current_ue] }}"
     ignore_task_errors: true
+  when: do_individual_tests
 
 - name: Execute ping tests for all connected UEs simultaneously
   include_tasks: ping_execution_async.yml
@@ -80,6 +81,7 @@
     packet_size: "{{ scenario.packet_size }}"
     extra_args: "{{ scenario.extra_args }}"
     ignore_task_errors: true
+  when: do_simultaneous_tests
 
 - name: Archive logs
   community.general.archive:
