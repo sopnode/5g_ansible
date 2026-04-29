@@ -82,6 +82,7 @@
     nuttcp_data_port: "{{ 5000 + ue_index }}"
     nuttcp_control_port: "{{ 5500 + ue_index }}"
     ignore_task_errors: true
+  when: do_individual_tests
 
 - name: Execute nuttcp tests for all connected UEs simultaneously
   include_tasks: nuttcp_execution_async.yml
@@ -94,6 +95,7 @@
     protocol: "{{ scenario.protocol }}"
     extra_args: "{{ scenario.extra_args }}"
     ignore_task_errors: true
+  when: do_simultaneous_tests
 
 - name: Archive logs
   community.general.archive:

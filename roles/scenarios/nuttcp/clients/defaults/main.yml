@@ -6,6 +6,8 @@ tcp_bandwidth: "0" # Make sure to NOT add a space between "-Ri" flag and this va
 udp_bandwidth: "50M" # Make sure to NOT add a space between "-Ri" flag and this value
 tcp_buffer_length: 65536 # Default value of 65536 is probably fine
 udp_buffer_length: 1200 # Default of 8192 will cause fragmentation with 1500-byte MTU
+do_individual_tests: true
+do_simultaneous_tests: true
 
 # Note: downlink scenarios (with -r instead of -t flag) fail to connect for some reason
 nuttcp_scenarios:
