@@ -77,6 +77,7 @@
   ansible.builtin.file:
     path: "{{ free5gc_repo_dest }}"
     state: absent
+  when: core == 'oai'
 
 - name: Clone free5gc repo
   ansible.builtin.git:
@@ -85,6 +86,7 @@
     version: "{{ free5gc_repo_branch }}"
     update: yes
     force: yes
+  when: core == 'oai'
 
 - name: Fix chart templates - use $.Values in gnb/ue context
   ansible.builtin.replace:

@@ -19,33 +19,6 @@
     profile: "{{ fiveg }}"
     net: "{{ ueransim_network }}"
 
-- name: VERIFY directory exists immediately
-  stat:
-    path: "{{ ueransim_chart_path }}/overrides"
-  register: overrides_dir
-
-- debug:
-    var: overrides_dir.stat.exists
-
-- name: PRINT REAL PATH USED
-  debug:
-    msg: "{{ ueransim_chart_path }}"
-
-- name: HARD VERIFY FILE
-  shell: |
-    echo "PATH={{ ueransim_chart_path }}"
-    ls -R {{ ueransim_chart_path }}
-  register: check
-
-- name: SHOW REAL FILE CONTENT
-  shell: |
-    ls -l {{ ueransim_chart_path }}/overrides
-    cat {{ ueransim_chart_path }}/overrides/values-gnb-override.yaml
-  register: real_file
-
-- debug:
-    var: real_file.stdout_lines
-    
 - name: Generate ueransim UE values override for each UE
   ansible.builtin.template:
     src: ueransim-ue-values.yaml.j2
