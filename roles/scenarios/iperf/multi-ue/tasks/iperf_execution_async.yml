@@ -27,7 +27,7 @@
     iperf_port: "{{ 5201 + ue_index }}"
     pre_sleep: "{{ async_stagger * ue_index }}"
     test_duration: "{{ (duration | int) - (pre_sleep | int) }}"
-    log_dir: "/tmp/iperf_logs/protocol={{ protocol }}/ue_count={{ valid_ue_list|length }}/direction={{ direction }}"
+    log_dir: "/tmp/iperf_logs/protocol={{ protocol }}/ue_count={{ ue_count }}/direction={{ direction }}"
   async: "{{ (duration | int) + 30 }}"
   poll: 0
   register: iperf_jobs
