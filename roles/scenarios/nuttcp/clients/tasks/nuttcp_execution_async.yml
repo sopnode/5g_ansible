@@ -15,8 +15,7 @@
     "mkdir -p {{ log_dir }} &&
     sleep {{ pre_sleep }} &&
     nohup /usr/local/bin/snmp_stats.sh {{ test_duration }} {{ log_dir }}/snmp.log > /dev/null 2>&1 &
-    /usr/bin/nuttcp -p {{ nuttcp_data_port }} -P {{ nuttcp_control_port }} -T {{ test_duration }} -i {{ extra_args }} {{ target_server }} > {{ log_dir }}/nuttcp.log &&
-    cat /proc/net/snmp > {{ log_dir }}/snmp_end.log"
+    /usr/bin/nuttcp -p {{ nuttcp_data_port }} -P {{ nuttcp_control_port }} -T {{ test_duration }} -i {{ extra_args }} {{ target_server }} > {{ log_dir }}/nuttcp.log"
   ignore_errors: "{{ ignore_task_errors | default(false) }}"
   when: ue_ip is defined and ue_ip != ""
   loop: "{{ valid_ue_list }}"
