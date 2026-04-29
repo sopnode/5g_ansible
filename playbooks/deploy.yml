@@ -301,7 +301,7 @@
         - ran == 'ueransim'
         - core == 'oai'
 
-- name: Deploy ueransim for oai core
+- name: Deploy ueransim for other 5G cores than oai
   hosts: core_node
 
   pre_tasks:

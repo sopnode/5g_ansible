@@ -19,6 +19,18 @@
     profile: "{{ fiveg }}"
     net: "{{ ueransim_network }}"
 
+- name: VERIFY directory exists immediately
+  stat:
+    path: "{{ ueransim_chart_path }}/overrides"
+  register: overrides_dir
+
+- debug:
+    var: overrides_dir.stat.exists
+
+- name: PRINT REAL PATH USED
+  debug:
+    msg: "{{ ueransim_chart_path }}"
+
 - name: Generate ueransim UE values override for each UE
   ansible.builtin.template:
     src: ueransim-ue-values.yaml.j2
