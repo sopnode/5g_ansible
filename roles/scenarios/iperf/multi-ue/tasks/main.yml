@@ -82,6 +82,7 @@
     ue_ip: "{{ ue_ips[current_ue] }}"
     iperf_port: "{{ 5201 + ue_index }}"
     ignore_task_errors: true
+  when: "{{ do_individual_tests }}"
 
 - name: Execute iperf tests for all connected UEs simultaneously
   include_tasks: iperf_execution_async.yml
@@ -94,6 +95,7 @@
     protocol: "{{ scenario.protocol }}"
     extra_args: "{{ scenario.extra_args }}"
     ignore_task_errors: true
+  when: "{{ do_simultaneous_tests }}"
 
 - name: Archive logs
   community.general.archive:
