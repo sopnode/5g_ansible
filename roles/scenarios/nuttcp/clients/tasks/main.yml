@@ -64,6 +64,17 @@
     state: absent
   loop: "{{ valid_ue_list }}"
 
+- name: Copy snmp_stats script
+  ansible.builtin.copy:
+    src: ../debug-scripts/snmp_stats.sh
+    dest: /usr/local/bin/snmp_stats.sh
+    mode: '0755'
+  become: true
+  loop: "{{ valid_ue_list }}"
+  loop_control:
+    loop_var: current_ue
+  delegate_to: "{{ current_ue }}"
+
 - name: Copy inventory file
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../inventory/default/hosts.ini"
