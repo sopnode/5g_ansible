@@ -4,7 +4,7 @@ sleep: "{{ iperf_sleep | default(5) }}"
 tcp_bandwidth: "0" # 0 == unlimited
 udp_bandwidth: "50M"
 async_stagger: 0
-do_individual_tests: false
+do_individual_tests: true
 do_simultaneous_tests: true
 
 iperf_scenarios:
