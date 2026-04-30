@@ -30,8 +30,8 @@
     nuttcp_data_port: "{{ 5000 + ue_index }}"
     nuttcp_control_port: "{{ 5500 + ue_index }}"
     pre_sleep: "{{ async_stagger * ue_index }}"
-    test_duration: "{{ (duration | int) - (pre_sleep | int) }}"
     log_dir: "/tmp/nuttcp_logs/protocol={{ protocol }}/ue_count={{ ue_count }}/direction={{ direction }}"
+    test_duration: "{{ (duration | int) - (pre_sleep | int) }}"
 
 - name: Wait for async jobs to finish
   async_status:
