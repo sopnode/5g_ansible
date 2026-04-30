@@ -15,4 +15,3 @@ nuttcp_scenarios:
   # - {protocol: "tcp", direction: "down", extra_args: "-r -Ri{{ tcp_bandwidth }} -l {{ tcp_buffer_length }}"}
   - {protocol: "udp", direction: "up", extra_args: "-u -t -Ri{{ udp_bandwidth }} -l {{ udp_buffer_length }}"}
   # - {protocol: "udp", direction: "down", extra_args: "-u -r -Ri{{ udp_bandwidth }} -l {{ udp_buffer_length }}"}
-  
