@@ -64,5 +64,5 @@
     nb_ues: "{{ groups['qhats'] | length }}"
     target_server_ip: "{{ hostvars[target_server_host]['ip'] }}"
   roles:
-    - role: scenarios/ping
+    - role: scenarios/ping/clients
       when: rru != "rfsim"

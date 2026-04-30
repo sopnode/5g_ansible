@@ -56,7 +56,7 @@
     ignore_task_errors: yes
     nb_ues: "{{ 3 if rru == 'rfsim' else groups['qhats'] | length }}"
   roles:
-    - role: scenarios/iperf_server_multi
+    - role: scenarios/iperf/multi-ue/server
 
 # - name: Run RFSIM UE iperf tests (only if rru=rfsim)
 #   hosts: core_node
@@ -81,5 +81,5 @@
     nb_ues: "{{ groups['qhats'] | length }}"
     target_server_ip: "{{ hostvars[target_server_host]['ip'] }}"
   roles:
-    - role: scenarios/iperf/multi-ue
+    - role: scenarios/iperf/multi-ue/clients
       when: rru != "rfsim"
