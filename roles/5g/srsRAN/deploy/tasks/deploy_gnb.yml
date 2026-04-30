@@ -2,23 +2,35 @@
 - name: Force Ansible to use venv Python
   ansible.builtin.set_fact:
     ansible_python_interpreter: /opt/ansible-venv/bin/python
+  when: rru in ['benetel1', 'benetel2']
+
+- name: Check if helm exists
+  ansible.builtin.command: helm version --short
+  register: helm_check
+  changed_when: false
+  failed_when: false
+
+- name: Install Helm if missing
+  ansible.builtin.shell: |
+    set -e
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  when: helm_check.rc != 0
+  args:
+    executable: /bin/bash
 
 - name: Load common variables
   include_vars:
     file: "../../common/defaults/main.yml"
 
-- name: Uninstall existing srsran-gnb release if present
-  shell: >
-    helm list -n {{ ran_ns }} -a -q |
-    grep -w "^srsran-gnb$" | wc -l
+- name: Check srsran-gnb release
+  ansible.builtin.command: helm status srsran-gnb -n {{ ran_ns }}
   register: gnb_release_exists
   changed_when: false
   failed_when: false
 
 - name: Uninstall srsran-gnb
-  shell: helm uninstall srsran-gnb -n {{ ran_ns }} --no-hooks
-  when: gnb_release_exists.stdout | trim | int > 0
-  failed_when: false
+  ansible.builtin.command: helm uninstall srsran-gnb -n {{ ran_ns }} --no-hooks
+  when: gnb_release_exists.rc == 0
 
 - name: Deploy srsRAN gNB (only when not rfsim)
   when: rru in ['n300', 'n320']
@@ -191,3 +203,4 @@
 - name: Reset ansible_python_interpreter to system python3
   ansible.builtin.set_fact:
     ansible_python_interpreter: /usr/bin/python3
+  when: rru in ['benetel1', 'benetel2']
