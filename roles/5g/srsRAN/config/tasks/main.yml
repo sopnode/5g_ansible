@@ -132,12 +132,6 @@
       .namespace = "{{ ran_ns }}"
     ' "{{ values_file }}"
 
-- name: Enable CSI Logger in gNB config
-  ansible.builtin.shell: >
-    {{ yq_bin_path }} eval -i '
-      .gnbConfig.csi_logger_enabled = true
-    ' "{{ values_file }}"
-
 - name: Fix device_args for rfsim GNU Radio single-channel multi-UE
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
