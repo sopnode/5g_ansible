@@ -187,6 +187,12 @@
         namespace: "{{ ran_ns }}"
       failed_when: false
 
+- name: Add csi-logger-enabled flag to gNB deployment command
+  ansible.builtin.replace:
+    path: "{{ repo_dest_abs }}/charts/srsran-gnb/templates/deployment.yaml"
+    regexp: "/usr/local/bin/gnb -c \\$CONFIG_FILE"
+    replace: "/usr/local/bin/gnb -c $CONFIG_FILE --csi-logger-enabled"
+
 - name: Deploy srsRAN gNB using Helm
   when: not rru in ['n300', 'n320']
   kubernetes.core.helm:
