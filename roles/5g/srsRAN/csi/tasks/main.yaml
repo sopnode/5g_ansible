@@ -1,0 +1,158 @@
+---
+# roles/5g/srsRAN/csi/tasks/main.yml
+# Intégrated CSI Logger monitoring and visualization for srsRAN
+
+- name: CSI Logger - Initialize directories
+  block:
+    - name: Create CSI output directory
+      file:
+        path: "{{ csi_output_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: Create CSI plots directory
+      file:
+        path: "{{ csi_plots_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+  tags: ['csi', 'csi-setup']
+
+- name: CSI Logger - Copy visualizer script to Ansible host
+  copy:
+    src: csi_visualizer.py
+    dest: "{{ csi_visualizer_path }}"
+    mode: '0755'
+  delegate_to: localhost
+  tags: ['csi', 'csi-setup']
+
+- name: CSI Logger - Deploy monitoring script to RAN node
+  template:
+    src: csi-monitor.sh.j2
+    dest: "{{ csi_monitor_script }}"
+    mode: '0755'
+  tags: ['csi', 'csi-monitor']
+
+- name: CSI Logger - Fetch CSI data from pod
+  block:
+    - name: Wait for gNB pod to be ready
+      command: >
+        kubectl get pods -n {{ k8s_namespace }}
+        -l app=gnb
+        --field-selector=status.phase=Running
+        -o jsonpath='{.items[0].metadata.name}'
+      register: gnb_pod_result
+      retries: 30
+      delay: 2
+      until: gnb_pod_result.stdout != ""
+      tags: ['csi', 'csi-fetch']
+
+    - name: Set gNB pod name
+      set_fact:
+        gnb_pod: "{{ gnb_pod_result.stdout }}"
+      tags: ['csi', 'csi-fetch']
+
+    - name: Fetch CSI data binary file from pod
+      command: >
+        kubectl cp "{{ k8s_namespace }}/{{ gnb_pod }}:/tmp/csi_data.bin"
+        "{{ csi_output_dir }}/csi_data.bin"
+        -c gnb
+      register: fetch_result
+      failed_when: false
+      tags: ['csi', 'csi-fetch']
+
+    - name: Check if CSI data was fetched
+      stat:
+        path: "{{ csi_output_dir }}/csi_data.bin"
+      register: csi_data_stat
+      tags: ['csi', 'csi-fetch']
+
+    - name: Display CSI data fetch status
+      debug:
+        msg: "CSI data fetched: {{ csi_data_stat.stat.exists }} ({{ csi_data_stat.stat.size | int / 1024 / 1024 | round(2) }}MB)"
+      tags: ['csi', 'csi-fetch']
+  when: csi_logger_enabled | default(false)
+  tags: ['csi', 'csi-fetch']
+
+- name: CSI Logger - Visualize CSI data
+  block:
+    - name: Run CSI visualizer (statistics)
+      command: >
+        python3 {{ csi_visualizer_path }}
+        {{ csi_output_dir }}/csi_data.bin
+        --stats
+        --output {{ csi_plots_dir }}
+      register: visualizer_stats
+      changed_when: false
+      tags: ['csi', 'csi-visualize']
+
+    - name: Display CSI statistics
+      debug:
+        msg: "{{ visualizer_stats.stdout_lines }}"
+      tags: ['csi', 'csi-visualize']
+
+    - name: Run CSI visualizer (plots)
+      command: >
+        python3 {{ csi_visualizer_path }}
+        {{ csi_output_dir }}/csi_data.bin
+        --output {{ csi_plots_dir }}
+        --slot {{ csi_plot_slot | default(0) }}
+        --prb {{ csi_plot_prb | default(0) }}
+      register: visualizer_plots
+      changed_when: false
+      tags: ['csi', 'csi-visualize']
+
+    - name: Check generated plots
+      find:
+        path: "{{ csi_plots_dir }}"
+        patterns: "*.png"
+      register: csi_plots
+      tags: ['csi', 'csi-visualize']
+
+    - name: Display generated plots
+      debug:
+        msg: "Generated {{ csi_plots.matched }} plots in {{ csi_plots_dir }}"
+      tags: ['csi', 'csi-visualize']
+  when: 
+    - csi_logger_enabled | default(false)
+    - csi_data_stat.stat.exists | default(false)
+  tags: ['csi', 'csi-visualize']
+
+- name: CSI Logger - Archive results
+  block:
+    - name: Create tarball of CSI results
+      archive:
+        path:
+          - "{{ csi_output_dir }}/csi_data.bin"
+          - "{{ csi_plots_dir }}"
+        dest: "{{ csi_archive_path }}"
+        format: gz
+      register: archive_result
+      tags: ['csi', 'csi-archive']
+
+    - name: Display archive location
+      debug:
+        msg: "CSI results archived to {{ csi_archive_path }}"
+      tags: ['csi', 'csi-archive']
+  when: 
+    - csi_logger_enabled | default(false)
+    - csi_data_stat.stat.exists | default(false)
+  tags: ['csi', 'csi-archive']
+
+- name: CSI Logger - Cleanup (optional)
+  block:
+    - name: Remove CSI data from pod
+      command: >
+        kubectl exec -n {{ k8s_namespace }} {{ gnb_pod }} -c gnb
+        -- rm -f /tmp/csi_data.bin /tmp/csi_debug.log
+      when: csi_cleanup_remote | default(false)
+      tags: ['csi', 'csi-cleanup']
+
+    - name: Remove local CSI binary (keep plots)
+      file:
+        path: "{{ csi_output_dir }}/csi_data.bin"
+        state: absent
+      when: csi_cleanup_local_binary | default(false)
+      tags: ['csi', 'csi-cleanup']
+  tags: ['csi', 'csi-cleanup']

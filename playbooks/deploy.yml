@@ -282,6 +282,10 @@
       when: ran == 'srsRAN'
     - role: 5g/srsRAN/deploy
       when: ran == 'srsRAN'
+    - role: 5g/srsRAN/csi
+      when: 
+        - ran == 'srsRAN'
+        - csi_logger_enabled | default(false)
 
 - name: Deploy ueransim for oai core
   hosts: ran_node
