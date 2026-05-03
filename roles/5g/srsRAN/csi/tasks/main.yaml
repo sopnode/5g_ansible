@@ -1,51 +1,67 @@
 ---
-# roles/5g/srsRAN/csi/tasks/main.yml
-# Intégrated CSI Logger monitoring and visualization for srsRAN
+# roles/5g/srsRAN/csi/tasks/main.yml (RÉVISÉ)
+# CSI Logger : Génération sur le serveur RAN, récupération sur Duckburg et Mac
 
-- name: CSI Logger - Initialize directories
+- name: CSI Logger - Initialize directories on RAN node
   block:
-    - name: Create CSI output directory
+    - name: Create CSI output directory on RAN node
       file:
-        path: "{{ csi_output_dir }}"
+        path: "/home/{{ ansible_user }}/csi_output"
         state: directory
         mode: '0755'
-      delegate_to: localhost
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      tags: ['csi', 'csi-setup']
 
-    - name: Create CSI plots directory
+    - name: Create CSI plots directory on RAN node
       file:
-        path: "{{ csi_plots_dir }}"
+        path: "/home/{{ ansible_user }}/csi_output/plots"
         state: directory
         mode: '0755'
-      delegate_to: localhost
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      tags: ['csi', 'csi-setup']
   tags: ['csi', 'csi-setup']
 
-- name: CSI Logger - Copy visualizer script to Ansible host
+- name: CSI Logger - Install dependencies on RAN node
+  block:
+    - name: Check if Python packages are installed
+      command: python3 -c "import matplotlib, numpy, struct"
+      register: python_check
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      tags: ['csi', 'csi-setup']
+
+    - name: Install Python packages (if not already installed)
+      shell: |
+        pip3 install --user matplotlib numpy 2>/dev/null || \
+        pip3 install matplotlib numpy 2>/dev/null || \
+        echo "Packages may already be installed or installation skipped"
+      when: python_check.rc != 0
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      tags: ['csi', 'csi-setup']
+  tags: ['csi', 'csi-setup']
+
+- name: CSI Logger - Copy visualizer to RAN node
   copy:
     src: csi_visualizer.py
-    dest: "{{ csi_visualizer_path }}"
+    dest: "/home/{{ ansible_user }}/csi_output/csi_visualizer.py"
     mode: '0755'
-  delegate_to: localhost
+  delegate_to: "{{ groups['ran_node'][0] }}"
   tags: ['csi', 'csi-setup']
 
-- name: CSI Logger - Deploy monitoring script to RAN node
-  template:
-    src: csi-monitor.sh.j2
-    dest: "{{ csi_monitor_script }}"
-    mode: '0755'
-  tags: ['csi', 'csi-monitor']
-
-- name: CSI Logger - Fetch CSI data from pod
+- name: CSI Logger - Fetch CSI data from Kubernetes pod to RAN node
   block:
     - name: Wait for gNB pod to be ready
-      command: >
-        kubectl get pods -n {{ k8s_namespace }}
-        -l app=gnb
-        --field-selector=status.phase=Running
-        -o jsonpath='{.items[0].metadata.name}'
+      shell: |
+        kubectl get pods -n {{ k8s_namespace }} \
+        -l app=srsran \
+        --field-selector=status.phase=Running \
+        -o jsonpath='{.items[0].metadata.name}' \
+        2>/dev/null || echo ""
       register: gnb_pod_result
       retries: 30
       delay: 2
       until: gnb_pod_result.stdout != ""
+      delegate_to: "{{ groups['ran_node'][0] }}"
       tags: ['csi', 'csi-fetch']
 
     - name: Set gNB pod name
@@ -53,37 +69,64 @@
         gnb_pod: "{{ gnb_pod_result.stdout }}"
       tags: ['csi', 'csi-fetch']
 
-    - name: Fetch CSI data binary file from pod
-      command: >
-        kubectl cp "{{ k8s_namespace }}/{{ gnb_pod }}:/tmp/csi_data.bin"
-        "{{ csi_output_dir }}/csi_data.bin"
-        -c gnb
-      register: fetch_result
+    - name: Check if CSI data exists in pod
+      shell: |
+        kubectl exec -n {{ k8s_namespace }} {{ gnb_pod }} -c gnb \
+        -- test -f /tmp/csi_data.bin && echo "exists" || echo "missing"
+      register: csi_check
       failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
       tags: ['csi', 'csi-fetch']
 
-    - name: Check if CSI data was fetched
+    - name: Wait for CSI data to be available in pod
+      shell: |
+        size=$(kubectl exec -n {{ k8s_namespace }} {{ gnb_pod }} -c gnb \
+        -- stat -c%s /tmp/csi_data.bin 2>/dev/null || echo 0)
+        echo $size
+      register: csi_size_result
+      retries: 10
+      delay: 10
+      until: csi_size_result.stdout | int > 100000
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      tags: ['csi', 'csi-fetch']
+
+    - name: Copy CSI data from pod to RAN node
+      shell: |
+        kubectl cp {{ k8s_namespace }}/{{ gnb_pod }}:/tmp/csi_data.bin \
+        /home/{{ ansible_user }}/csi_output/csi_data.bin \
+        -c gnb
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      register: kubectl_cp_result
+      tags: ['csi', 'csi-fetch']
+
+    - name: Verify CSI data was copied
       stat:
-        path: "{{ csi_output_dir }}/csi_data.bin"
+        path: "/home/{{ ansible_user }}/csi_output/csi_data.bin"
       register: csi_data_stat
+      delegate_to: "{{ groups['ran_node'][0] }}"
       tags: ['csi', 'csi-fetch']
 
     - name: Display CSI data fetch status
       debug:
-        msg: "CSI data fetched: {{ csi_data_stat.stat.exists }} ({{ csi_data_stat.stat.size | int / 1024 / 1024 | round(2) }}MB)"
+        msg: |
+          CSI data fetched on RAN node:
+          File exists: {{ csi_data_stat.stat.exists }}
+          File size: {{ (csi_data_stat.stat.size | int / 1024 / 1024) | round(2) }} MB
+          Location: /home/{{ ansible_user }}/csi_output/csi_data.bin
+      delegate_to: "{{ groups['ran_node'][0] }}"
       tags: ['csi', 'csi-fetch']
   when: csi_logger_enabled | default(false)
   tags: ['csi', 'csi-fetch']
 
-- name: CSI Logger - Visualize CSI data
+- name: CSI Logger - Generate visualizations ON RAN NODE
   block:
-    - name: Run CSI visualizer (statistics)
-      command: >
-        python3 {{ csi_visualizer_path }}
-        {{ csi_output_dir }}/csi_data.bin
-        --stats
-        --output {{ csi_plots_dir }}
+    - name: Run CSI visualizer (statistics) on RAN node
+      shell: |
+        python3 /home/{{ ansible_user }}/csi_output/csi_visualizer.py \
+        /home/{{ ansible_user }}/csi_output/csi_data.bin \
+        --stats --output /home/{{ ansible_user }}/csi_output/plots
       register: visualizer_stats
+      delegate_to: "{{ groups['ran_node'][0] }}"
       changed_when: false
       tags: ['csi', 'csi-visualize']
 
@@ -92,67 +135,124 @@
         msg: "{{ visualizer_stats.stdout_lines }}"
       tags: ['csi', 'csi-visualize']
 
-    - name: Run CSI visualizer (plots)
-      command: >
-        python3 {{ csi_visualizer_path }}
-        {{ csi_output_dir }}/csi_data.bin
-        --output {{ csi_plots_dir }}
-        --slot {{ csi_plot_slot | default(0) }}
+    - name: Run CSI visualizer (plots) on RAN node
+      shell: |
+        python3 /home/{{ ansible_user }}/csi_output/csi_visualizer.py \
+        /home/{{ ansible_user }}/csi_output/csi_data.bin \
+        --output /home/{{ ansible_user }}/csi_output/plots \
+        --slot {{ csi_plot_slot | default(0) }} \
         --prb {{ csi_plot_prb | default(0) }}
       register: visualizer_plots
+      delegate_to: "{{ groups['ran_node'][0] }}"
       changed_when: false
       tags: ['csi', 'csi-visualize']
 
-    - name: Check generated plots
+    - name: Verify plots were generated on RAN node
       find:
-        path: "{{ csi_plots_dir }}"
+        path: "/home/{{ ansible_user }}/csi_output/plots"
         patterns: "*.png"
       register: csi_plots
+      delegate_to: "{{ groups['ran_node'][0] }}"
       tags: ['csi', 'csi-visualize']
 
-    - name: Display generated plots
+    - name: Display generated plots info
       debug:
-        msg: "Generated {{ csi_plots.matched }} plots in {{ csi_plots_dir }}"
+        msg: |
+          Generated {{ csi_plots.matched }} plots on RAN node
+          Location: /home/{{ ansible_user }}/csi_output/plots/
       tags: ['csi', 'csi-visualize']
   when: 
     - csi_logger_enabled | default(false)
     - csi_data_stat.stat.exists | default(false)
   tags: ['csi', 'csi-visualize']
 
-- name: CSI Logger - Archive results
+- name: CSI Logger - Copy results from RAN node to Duckburg (Ansible controller)
   block:
-    - name: Create tarball of CSI results
-      archive:
-        path:
-          - "{{ csi_output_dir }}/csi_data.bin"
-          - "{{ csi_plots_dir }}"
-        dest: "{{ csi_archive_path }}"
-        format: gz
-      register: archive_result
-      tags: ['csi', 'csi-archive']
+    - name: Create local LOGS directory on Duckburg
+      file:
+        path: "{{ playbook_dir }}/LOGS/csi"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      tags: ['csi', 'csi-copy']
 
-    - name: Display archive location
+    - name: Fetch CSI data from RAN node to Duckburg
+      synchronize:
+        src: "/home/{{ ansible_user }}/csi_output/"
+        dest: "{{ playbook_dir }}/LOGS/csi/"
+        mode: pull
+        delete: no
+        rsync_opts:
+          - "--exclude=*.bin"
+          - "--include=plots/"
+          - "--include=*.png"
+          - "--include=csi_visualizer.py"
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      tags: ['csi', 'csi-copy']
+
+    - name: Verify CSI files on Duckburg
+      find:
+        path: "{{ playbook_dir }}/LOGS/csi/plots"
+        patterns: "*.png"
+      register: duckburg_plots
+      delegate_to: localhost
+      tags: ['csi', 'csi-copy']
+
+    - name: Display results copied to Duckburg
       debug:
-        msg: "CSI results archived to {{ csi_archive_path }}"
-      tags: ['csi', 'csi-archive']
+        msg: |
+          CSI results copied to Duckburg:
+          {{ duckburg_plots.matched }} PNG files
+          Location: {{ playbook_dir }}/LOGS/csi/plots/
+          
+          To fetch to your Mac:
+          scp -r user@duckburg:{{ playbook_dir }}/LOGS/csi ~/Downloads/
+      delegate_to: localhost
+      tags: ['csi', 'csi-copy']
   when: 
     - csi_logger_enabled | default(false)
-    - csi_data_stat.stat.exists | default(false)
-  tags: ['csi', 'csi-archive']
+    - csi_plots.matched | default(0) | int > 0
+  tags: ['csi', 'csi-copy']
+
+- name: CSI Logger - Instructions for Mac
+  debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════════╗
+      ║         CSI VISUALIZATION COMPLETE                         ║
+      ║                                                            ║
+      ║  Step 1: On Duckburg, results are in:                     ║
+      ║  {{ playbook_dir }}/LOGS/csi/plots/
+      ║                                                            ║
+      ║  Step 2: From your Mac, fetch the PNG files:              ║
+      ║  scp -r user@duckburg:{{ playbook_dir }}/LOGS/csi ~/Downloads/
+      ║                                                            ║
+      ║  Step 3: Open the images:                                 ║
+      ║  open ~/Downloads/csi/plots/                              ║
+      ║                                                            ║
+      ║  Images generated:                                        ║
+      ║  - magnitude_slot0_prb0.png                               ║
+      ║  - phase_slot0_prb0.png                                   ║
+      ║  - constellation_slot0_prb0.png                           ║
+      ║  - heatmap_slot0.png                                      ║
+      ║  - timeline_prb0.png                                      ║
+      ╚════════════════════════════════════════════════════════════╝
+  tags: ['csi', 'csi-copy']
 
 - name: CSI Logger - Cleanup (optional)
   block:
     - name: Remove CSI data from pod
-      command: >
-        kubectl exec -n {{ k8s_namespace }} {{ gnb_pod }} -c gnb
+      shell: |
+        kubectl exec -n {{ k8s_namespace }} {{ gnb_pod }} -c gnb \
         -- rm -f /tmp/csi_data.bin /tmp/csi_debug.log
+      delegate_to: "{{ groups['ran_node'][0] }}"
       when: csi_cleanup_remote | default(false)
       tags: ['csi', 'csi-cleanup']
 
-    - name: Remove local CSI binary (keep plots)
+    - name: Remove CSI binary from RAN node (keep plots)
       file:
-        path: "{{ csi_output_dir }}/csi_data.bin"
+        path: "/home/{{ ansible_user }}/csi_output/csi_data.bin"
         state: absent
-      when: csi_cleanup_local_binary | default(false)
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      when: csi_cleanup_ran_binary | default(false)
       tags: ['csi', 'csi-cleanup']
   tags: ['csi', 'csi-cleanup']
