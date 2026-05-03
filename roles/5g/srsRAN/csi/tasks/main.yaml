@@ -226,7 +226,7 @@
       ║  {{ playbook_dir }}/LOGS/csi/plots/
       ║                                                            ║
       ║  Step 2: From your Mac, fetch the PNG files:              ║
-      ║  scp -r user@duckburg:{{ playbook_dir }}/LOGS/csi ~/Downloads/
+      ║  scp -P 10022 -r turletti@duckburg.net.in.tum.de:{{ playbook_dir }}/LOGS/csi ~/Downloads/
       ║                                                            ║
       ║  Step 3: Open the images:                                 ║
       ║  open ~/Downloads/csi/plots/                              ║
