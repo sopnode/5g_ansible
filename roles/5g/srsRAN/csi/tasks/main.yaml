@@ -175,6 +175,7 @@
         recurse: yes # Create parent dirs too
         mode: '0755'
       delegate_to: localhost
+      run_once: true
       tags: ['csi', 'csi-copy']
 
     - name: Fetch CSI data from RAN node to Duckburg
@@ -188,7 +189,7 @@
           - "--include=plots/"
           - "--include=*.png"
           - "--include=csi_visualizer.py"
-      delegate_to: "{{ groups['ran_node'][0] }}"
+      delegate_to: localhost  # Run rsync FROM localhost (Duckburg) pulling FROM RAN node
       tags: ['csi', 'csi-copy']
 
     - name: Verify CSI files on Duckburg
@@ -210,9 +211,9 @@
           scp -r user@duckburg:{{ playbook_dir }}/LOGS/csi ~/Downloads/
       delegate_to: localhost
       tags: ['csi', 'csi-copy']
+
   when: 
     - csi_logger_enabled | default(false)
-    - csi_plots.matched | default(0) | int > 0
   tags: ['csi', 'csi-copy']
 
 - name: CSI Logger - Instructions for Mac
