@@ -172,6 +172,7 @@
       file:
         path: "{{ playbook_dir }}/LOGS/csi"
         state: directory
+	recurse: yes # Create parent dirs too
         mode: '0755'
       delegate_to: localhost
       tags: ['csi', 'csi-copy']
