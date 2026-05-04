@@ -51,66 +51,93 @@
 # TRAFFIC : generate UE traffic to trigger CSI logging
 # ─────────────────────────────────────────────────────────────
 
-- name: CSI Logger - Generate UE traffic to trigger CSI logging
+- name: CSI Logger - Get pod names for traffic
   block:
-    - name: Get gNB pod name for traffic phase
-      shell: |
-        kubectl get pods -n {{ ran_ns }} \
-          -l {{ srs_gnb_label_selectors | join(',') }} \
-          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo ""
+    - name: Get gNB pod name
+      command: >
+        kubectl get pods -n {{ ran_ns }}
+        -l {{ srs_gnb_label_selectors | join(',') }}
+        -o jsonpath={.items[0].metadata.name}
       register: gnb_pod_traffic
       delegate_to: "{{ groups['ran_node'][0] }}"
 
     - name: Get UE pod name
-      shell: |
-        kubectl get pods -n {{ ran_ns }} \
-          -l {{ srs_ue_label_selectors | join(',') }} \
-          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo ""
-      register: ue_pod_result
+      command: >
+        kubectl get pods -n {{ ran_ns }}
+        -l {{ srs_ue_label_selectors | join(',') }}
+        -o jsonpath={.items[0].metadata.name}
+      register: ue_pod_traffic
       delegate_to: "{{ groups['ran_node'][0] }}"
+
+    - name: Set pod facts
+      set_fact:
+        csi_gnb_pod: "{{ gnb_pod_traffic.stdout }}"
+        csi_ue_pod: "{{ ue_pod_traffic.stdout }}"
 
     - name: Display pod names
       debug:
-        msg: "gNB: {{ gnb_pod_traffic.stdout }} | UE: {{ ue_pod_result.stdout }}"
+        msg: "gNB: {{ csi_gnb_pod }} | UE: {{ csi_ue_pod }}"
 
-    - name: Generate UL traffic on all TUN interfaces
-      shell: |
-        UE_POD="{{ ue_pod_result.stdout }}"
-        if [ -z "$UE_POD" ]; then
-          echo "No UE pod found - skipping traffic"
-          exit 0
-        fi
-        echo "Generating traffic via UE pod: $UE_POD"
-        for i in 1 2 3; do
-          kubectl exec -n {{ ran_ns }} $UE_POD -- \
-            ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8 \
-            -I tun_srsue${i} -i 0.1 -W 1 2>/dev/null &
-        done
-        wait
-        echo "Traffic generation complete"
-      register: traffic_result
-      failed_when: false
-      delegate_to: "{{ groups['ran_node'][0] }}"
+  when: csi_logger_enabled | default(false)
+  tags: ['csi', 'csi-traffic']
 
-    - name: Display traffic result
-      debug:
-        msg: "{{ traffic_result.stdout_lines }}"
+- name: CSI Logger - Generate traffic on tun_srsue1
+  command: >
+    kubectl exec -n {{ ran_ns }} {{ csi_ue_pod }} --
+    ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8
+    -I tun_srsue1 -i 0.1 -W 1
+  register: ping1_result
+  failed_when: false
+  delegate_to: "{{ groups['ran_node'][0] }}"
+  when:
+    - csi_logger_enabled | default(false)
+    - csi_ue_pod is defined and csi_ue_pod != ""
+  tags: ['csi', 'csi-traffic']
 
-    - name: Wait for CSI files to appear in pod
-      shell: |
-        kubectl exec -n {{ ran_ns }} {{ gnb_pod_traffic.stdout }} -c gnb \
-          -- sh -c 'ls /tmp/csi_data_0x*.bin /tmp/csi_dl_0x*.csv 2>/dev/null | wc -l'
-      register: csi_file_count
-      retries: 12
-      delay: 5
-      until: csi_file_count.stdout | int > 0
-      failed_when: false
-      delegate_to: "{{ groups['ran_node'][0] }}"
+- name: CSI Logger - Generate traffic on tun_srsue2
+  command: >
+    kubectl exec -n {{ ran_ns }} {{ csi_ue_pod }} --
+    ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8
+    -I tun_srsue2 -i 0.1 -W 1
+  register: ping2_result
+  failed_when: false
+  delegate_to: "{{ groups['ran_node'][0] }}"
+  when:
+    - csi_logger_enabled | default(false)
+    - csi_ue_pod is defined and csi_ue_pod != ""
+  tags: ['csi', 'csi-traffic']
 
-    - name: Display CSI file count
-      debug:
-        msg: "CSI files found in pod: {{ csi_file_count.stdout }}"
+- name: CSI Logger - Generate traffic on tun_srsue3
+  command: >
+    kubectl exec -n {{ ran_ns }} {{ csi_ue_pod }} --
+    ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8
+    -I tun_srsue3 -i 0.1 -W 1
+  register: ping3_result
+  failed_when: false
+  delegate_to: "{{ groups['ran_node'][0] }}"
+  when:
+    - csi_logger_enabled | default(false)
+    - csi_ue_pod is defined and csi_ue_pod != ""
+  tags: ['csi', 'csi-traffic']
 
+- name: CSI Logger - Wait for CSI files to appear in pod
+  command: >
+    kubectl exec -n {{ ran_ns }} {{ csi_gnb_pod }} -c gnb
+    -- sh -c "ls /tmp/csi_data_0x*.bin /tmp/csi_dl_0x*.csv 2>/dev/null | wc -l"
+  register: csi_file_count
+  retries: 12
+  delay: 5
+  until: csi_file_count.stdout | int > 0
+  failed_when: false
+  delegate_to: "{{ groups['ran_node'][0] }}"
+  when:
+    - csi_logger_enabled | default(false)
+    - csi_gnb_pod is defined and csi_gnb_pod != ""
+  tags: ['csi', 'csi-traffic']
+
+- name: CSI Logger - Display CSI file count
+  debug:
+    msg: "CSI files in pod: {{ csi_file_count.stdout | default('0') }}"
   when: csi_logger_enabled | default(false)
   tags: ['csi', 'csi-traffic']
 
@@ -118,48 +145,54 @@
 # FETCH : pod → RAN node
 # ─────────────────────────────────────────────────────────────
 
+- name: CSI Logger - Copy UL binary files from pod to RAN node
+  shell: >
+    kubectl cp {{ ran_ns }}/{{ csi_gnb_pod }}:/tmp/{{ item }}
+    /home/{{ ansible_user }}/csi_output/{{ item }} -c gnb
+  with_items: "{{ csi_ul_files.stdout_lines }}"
+  failed_when: false
+  delegate_to: "{{ groups['ran_node'][0] }}"
+  when:
+    - csi_logger_enabled | default(false)
+    - csi_gnb_pod is defined and csi_gnb_pod != ""
+    - csi_ul_files is defined
+  tags: ['csi', 'csi-fetch']
+
 - name: CSI Logger - Fetch CSI data from Kubernetes pod
   block:
-    - name: Wait for gNB pod to be ready
-      shell: |
-        kubectl get pods -n {{ ran_ns }} \
-          -l {{ srs_gnb_label_selectors | join(',') }} \
-          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo ""
-      register: gnb_pod_result
-      retries: 30
-      delay: 2
-      until: gnb_pod_result.stdout != ""
-      delegate_to: "{{ groups['ran_node'][0] }}"
-
-    - name: Set gNB pod name
-      set_fact:
-        gnb_pod: "{{ gnb_pod_result.stdout }}"
-
-    - name: Copy all CSI files from pod to RAN node
-      shell: |
-        COPIED=0
-        for f in $(kubectl exec -n {{ ran_ns }} {{ gnb_pod }} -c gnb \
-            -- ls /tmp/csi_data_0x*.bin 2>/dev/null); do
-          fname=$(basename $f)
-          kubectl cp {{ ran_ns }}/{{ gnb_pod }}:${f} \
-            /home/{{ ansible_user }}/csi_output/${fname} -c gnb && \
-            echo "UL: ${fname}" && COPIED=$((COPIED+1))
-        done
-        for f in $(kubectl exec -n {{ ran_ns }} {{ gnb_pod }} -c gnb \
-            -- ls /tmp/csi_dl_0x*.csv 2>/dev/null); do
-          fname=$(basename $f)
-          kubectl cp {{ ran_ns }}/{{ gnb_pod }}:${f} \
-            /home/{{ ansible_user }}/csi_output/${fname} -c gnb && \
-            echo "DL: ${fname}" && COPIED=$((COPIED+1))
-        done
-        echo "Total copied: ${COPIED} files"
-      register: copy_result
+    - name: List UL files in pod
+      command: >
+        kubectl exec -n {{ ran_ns }} {{ csi_gnb_pod }} -c gnb
+        -- sh -c "ls /tmp/csi_data_0x*.bin 2>/dev/null | xargs -I{} basename {}"
+      register: csi_ul_files
       failed_when: false
       delegate_to: "{{ groups['ran_node'][0] }}"
 
-    - name: Display copy results
-      debug:
-        msg: "{{ copy_result.stdout_lines }}"
+    - name: List DL files in pod
+      command: >
+        kubectl exec -n {{ ran_ns }} {{ csi_gnb_pod }} -c gnb
+        -- sh -c "ls /tmp/csi_dl_0x*.csv 2>/dev/null | xargs -I{} basename {}"
+      register: csi_dl_files
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+
+    - name: Copy UL files from pod to RAN node
+      command: >
+        kubectl cp {{ ran_ns }}/{{ csi_gnb_pod }}:/tmp/{{ item }}
+        /home/{{ ansible_user }}/csi_output/{{ item }} -c gnb
+      loop: "{{ csi_ul_files.stdout_lines }}"
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      when: csi_ul_files.stdout_lines | length > 0
+
+    - name: Copy DL files from pod to RAN node
+      command: >
+        kubectl cp {{ ran_ns }}/{{ csi_gnb_pod }}:/tmp/{{ item }}
+        /home/{{ ansible_user }}/csi_output/{{ item }} -c gnb
+      loop: "{{ csi_dl_files.stdout_lines }}"
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      when: csi_dl_files.stdout_lines | length > 0
 
     - name: List all CSI files on RAN node
       find:
@@ -178,7 +211,9 @@
           - {{ f.path | basename }} ({{ (f.size / 1024) | round(1) }} KB)
           {% endfor %}
 
-  when: csi_logger_enabled | default(false)
+  when:
+    - csi_logger_enabled | default(false)
+    - csi_gnb_pod is defined and csi_gnb_pod != ""
   tags: ['csi', 'csi-fetch']
 
 # ─────────────────────────────────────────────────────────────
@@ -346,9 +381,9 @@
 - name: CSI Logger - Cleanup
   block:
     - name: Remove CSI files from pod
-      shell: |
-        kubectl exec -n {{ ran_ns }} {{ gnb_pod }} -c gnb \
-          -- rm -f /tmp/csi_data_0x*.bin /tmp/csi_dl_0x*.csv /tmp/csi_debug.log
+      command: >
+        kubectl exec -n {{ ran_ns }} {{ csi_gnb_pod }} -c gnb
+        -- sh -c "rm -f /tmp/csi_data_0x*.bin /tmp/csi_dl_0x*.csv /tmp/csi_debug.log"
       delegate_to: "{{ groups['ran_node'][0] }}"
       when: csi_cleanup_remote | default(false)
 
@@ -358,4 +393,7 @@
         echo "Binaries removed"
       delegate_to: "{{ groups['ran_node'][0] }}"
       when: csi_cleanup_ran_binary | default(false)
+  when:
+    - csi_logger_enabled | default(false)
+    - csi_gnb_pod is defined and csi_gnb_pod != ""
   tags: ['csi', 'csi-cleanup']
