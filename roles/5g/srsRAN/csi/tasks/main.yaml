@@ -1,6 +1,6 @@
 ---
 # roles/5g/srsRAN/csi/tasks/main.yaml
-# CSI Logger v1.0.0.18 : UL (binary per-RNTI) + DL (CSV per-RNTI)
+# CSI Logger v1.0.0.20 : UL (binary per-RNTI) + DL (CSV per-RNTI)
 
 # ─────────────────────────────────────────────────────────────
 # SETUP
@@ -48,6 +48,73 @@
   tags: ['csi', 'csi-setup']
 
 # ─────────────────────────────────────────────────────────────
+# TRAFFIC : generate UE traffic to trigger CSI logging
+# ─────────────────────────────────────────────────────────────
+
+- name: CSI Logger - Generate UE traffic to trigger CSI logging
+  block:
+    - name: Get gNB pod name for traffic phase
+      shell: |
+        kubectl get pods -n {{ ran_ns }} \
+          -l {{ srs_gnb_label_selectors | join(',') }} \
+          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo ""
+      register: gnb_pod_traffic
+      delegate_to: "{{ groups['ran_node'][0] }}"
+
+    - name: Get UE pod name
+      shell: |
+        kubectl get pods -n {{ ran_ns }} \
+          -l {{ srs_ue_label_selectors | join(',') }} \
+          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo ""
+      register: ue_pod_result
+      delegate_to: "{{ groups['ran_node'][0] }}"
+
+    - name: Display pod names
+      debug:
+        msg: "gNB: {{ gnb_pod_traffic.stdout }} | UE: {{ ue_pod_result.stdout }}"
+
+    - name: Generate UL traffic on all TUN interfaces
+      shell: |
+        UE_POD="{{ ue_pod_result.stdout }}"
+        if [ -z "$UE_POD" ]; then
+          echo "No UE pod found - skipping traffic"
+          exit 0
+        fi
+        echo "Generating traffic via UE pod: $UE_POD"
+        for i in 1 2 3; do
+          kubectl exec -n {{ ran_ns }} $UE_POD -- \
+            ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8 \
+            -I tun_srsue${i} -i 0.1 -W 1 2>/dev/null &
+        done
+        wait
+        echo "Traffic generation complete"
+      register: traffic_result
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+
+    - name: Display traffic result
+      debug:
+        msg: "{{ traffic_result.stdout_lines }}"
+
+    - name: Wait for CSI files to appear in pod
+      shell: |
+        kubectl exec -n {{ ran_ns }} {{ gnb_pod_traffic.stdout }} -c gnb \
+          -- sh -c 'ls /tmp/csi_data_0x*.bin /tmp/csi_dl_0x*.csv 2>/dev/null | wc -l'
+      register: csi_file_count
+      retries: 12
+      delay: 5
+      until: csi_file_count.stdout | int > 0
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+
+    - name: Display CSI file count
+      debug:
+        msg: "CSI files found in pod: {{ csi_file_count.stdout }}"
+
+  when: csi_logger_enabled | default(false)
+  tags: ['csi', 'csi-traffic']
+
+# ─────────────────────────────────────────────────────────────
 # FETCH : pod → RAN node
 # ─────────────────────────────────────────────────────────────
 
@@ -55,9 +122,8 @@
   block:
     - name: Wait for gNB pod to be ready
       shell: |
-        kubectl get pods -n {{ k8s_namespace }} \
-          -l app=srsran \
-          --field-selector=status.phase=Running \
+        kubectl get pods -n {{ ran_ns }} \
+          -l {{ srs_gnb_label_selectors | join(',') }} \
           -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo ""
       register: gnb_pod_result
       retries: 30
@@ -72,19 +138,17 @@
     - name: Copy all CSI files from pod to RAN node
       shell: |
         COPIED=0
-        # UL binary files
-        for f in $(kubectl exec -n {{ k8s_namespace }} {{ gnb_pod }} -c gnb \
+        for f in $(kubectl exec -n {{ ran_ns }} {{ gnb_pod }} -c gnb \
             -- ls /tmp/csi_data_0x*.bin 2>/dev/null); do
           fname=$(basename $f)
-          kubectl cp {{ k8s_namespace }}/{{ gnb_pod }}:${f} \
+          kubectl cp {{ ran_ns }}/{{ gnb_pod }}:${f} \
             /home/{{ ansible_user }}/csi_output/${fname} -c gnb && \
             echo "UL: ${fname}" && COPIED=$((COPIED+1))
         done
-        # DL CSV files
-        for f in $(kubectl exec -n {{ k8s_namespace }} {{ gnb_pod }} -c gnb \
+        for f in $(kubectl exec -n {{ ran_ns }} {{ gnb_pod }} -c gnb \
             -- ls /tmp/csi_dl_0x*.csv 2>/dev/null); do
           fname=$(basename $f)
-          kubectl cp {{ k8s_namespace }}/{{ gnb_pod }}:${f} \
+          kubectl cp {{ ran_ns }}/{{ gnb_pod }}:${f} \
             /home/{{ ansible_user }}/csi_output/${fname} -c gnb && \
             echo "DL: ${fname}" && COPIED=$((COPIED+1))
         done
@@ -118,7 +182,7 @@
   tags: ['csi', 'csi-fetch']
 
 # ─────────────────────────────────────────────────────────────
-# VISUALIZE : generate all plots via single shell script
+# VISUALIZE : generate all plots on RAN node
 # ─────────────────────────────────────────────────────────────
 
 - name: CSI Logger - Generate all plots on RAN node
@@ -181,7 +245,7 @@
     - name: Display plot summary
       debug:
         msg: |
-          ✅ Generated {{ all_plots.matched }} plots:
+          Generated {{ all_plots.matched }} plots:
           {% for f in all_plots.files | sort(attribute='path') %}
           - {{ f.path | basename }}
           {% endfor %}
@@ -235,12 +299,12 @@
     - name: Display results on Duckburg
       debug:
         msg: |
-          ✅ {{ duckburg_files.matched }} files on Duckburg
+          {{ duckburg_files.matched }} files on Duckburg
           {% for f in duckburg_files.files | sort(attribute='path') %}
           - {{ f.path | replace(playbook_dir + '/LOGS/csi/', '') }}
           {% endfor %}
 
-          📥 To fetch to your Mac:
+          To fetch to your Mac:
           scp -P 10022 -r turletti@duckburg.net.in.tum.de:{{ playbook_dir }}/LOGS/csi ~/Downloads/
 
   when: csi_logger_enabled | default(false)
@@ -254,7 +318,7 @@
   debug:
     msg: |
       ╔══════════════════════════════════════════════════════════════╗
-      ║         CSI VISUALIZATION COMPLETE - v1.0.0.18              ║
+      ║         CSI VISUALIZATION COMPLETE - v1.0.0.20              ║
       ║                                                              ║
       ║  UL plots (per RNTI):                                        ║
       ║    ul_magnitude_slot*_prb*.png                               ║
@@ -272,8 +336,6 @@
       ║                                                              ║
       ║  DL CSV (per RNTI):                                          ║
       ║    csi_dl_0x<rnti>.csv                                       ║
-      ║                                                              ║
-      ║  Location: {{ playbook_dir }}/LOGS/csi/
       ╚══════════════════════════════════════════════════════════════╝
   tags: ['csi', 'csi-copy']
 
@@ -285,7 +347,7 @@
   block:
     - name: Remove CSI files from pod
       shell: |
-        kubectl exec -n {{ k8s_namespace }} {{ gnb_pod }} -c gnb \
+        kubectl exec -n {{ ran_ns }} {{ gnb_pod }} -c gnb \
           -- rm -f /tmp/csi_data_0x*.bin /tmp/csi_dl_0x*.csv /tmp/csi_debug.log
       delegate_to: "{{ groups['ran_node'][0] }}"
       when: csi_cleanup_remote | default(false)
