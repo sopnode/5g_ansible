@@ -30,8 +30,8 @@ from collections import defaultdict
 
 class CSIRecord:
     """Single UL CSI measurement record (binary, 24 bytes)"""
-    RECORD_SIZE = 24
-    FORMAT = '<QIHffBB'  # timestamp, slot, subcarrier, mag, phase, symbol, port
+    RECORD_SIZE = 26
+    FORMAT = '<QIHffBBH'  # timestamp, slot, subcarrier, mag, phase, symbol, port + rnti uint16
 
     def __init__(self, data):
         if len(data) != self.RECORD_SIZE:
@@ -44,6 +44,7 @@ class CSIRecord:
         self.phase           = values[4]
         self.symbol_idx      = values[5]
         self.port_idx        = values[6]
+        self.rnti            = values[7]
         self.prb_idx         = self.subcarrier_idx // 12
         self.subcarrier_in_prb = self.subcarrier_idx % 12
 
