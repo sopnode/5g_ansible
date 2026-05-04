@@ -49,9 +49,10 @@
 
 # ─────────────────────────────────────────────────────────────
 # TRAFFIC : generate UE traffic to trigger CSI logging
+# rfsim only - UE pod available via kubectl
 # ─────────────────────────────────────────────────────────────
 
-- name: CSI Logger - Get pod names for traffic
+- name: CSI Logger - Generate UE traffic (rfsim only)
   block:
     - name: Get gNB pod name
       command: >
@@ -78,67 +79,52 @@
       debug:
         msg: "gNB: {{ csi_gnb_pod }} | UE: {{ csi_ue_pod }}"
 
-  when: csi_logger_enabled | default(false)
-  tags: ['csi', 'csi-traffic']
+    - name: Generate traffic on tun_srsue1
+      command: >
+        kubectl exec -n {{ ran_ns }} {{ csi_ue_pod }} --
+        ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8
+        -I tun_srsue1 -i 0.1 -W 1
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      when: csi_ue_pod != ""
 
-- name: CSI Logger - Generate traffic on tun_srsue1
-  command: >
-    kubectl exec -n {{ ran_ns }} {{ csi_ue_pod }} --
-    ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8
-    -I tun_srsue1 -i 0.1 -W 1
-  register: ping1_result
-  failed_when: false
-  delegate_to: "{{ groups['ran_node'][0] }}"
+    - name: Generate traffic on tun_srsue2
+      command: >
+        kubectl exec -n {{ ran_ns }} {{ csi_ue_pod }} --
+        ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8
+        -I tun_srsue2 -i 0.1 -W 1
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      when: csi_ue_pod != ""
+
+    - name: Generate traffic on tun_srsue3
+      command: >
+        kubectl exec -n {{ ran_ns }} {{ csi_ue_pod }} --
+        ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8
+        -I tun_srsue3 -i 0.1 -W 1
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      when: csi_ue_pod != ""
+
+    - name: Wait for CSI files to appear in pod
+      command: >
+        kubectl exec -n {{ ran_ns }} {{ csi_gnb_pod }} -c gnb
+        -- sh -c "ls /tmp/csi_data_0x*.bin /tmp/csi_dl_0x*.csv 2>/dev/null | wc -l"
+      register: csi_file_count
+      retries: 12
+      delay: 5
+      until: csi_file_count.stdout | int > 0
+      failed_when: false
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      when: csi_gnb_pod != ""
+
+    - name: Display CSI file count
+      debug:
+        msg: "CSI files in pod: {{ csi_file_count.stdout | default('0') }}"
+
   when:
     - csi_logger_enabled | default(false)
-    - csi_ue_pod is defined and csi_ue_pod != ""
-  tags: ['csi', 'csi-traffic']
-
-- name: CSI Logger - Generate traffic on tun_srsue2
-  command: >
-    kubectl exec -n {{ ran_ns }} {{ csi_ue_pod }} --
-    ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8
-    -I tun_srsue2 -i 0.1 -W 1
-  register: ping2_result
-  failed_when: false
-  delegate_to: "{{ groups['ran_node'][0] }}"
-  when:
-    - csi_logger_enabled | default(false)
-    - csi_ue_pod is defined and csi_ue_pod != ""
-  tags: ['csi', 'csi-traffic']
-
-- name: CSI Logger - Generate traffic on tun_srsue3
-  command: >
-    kubectl exec -n {{ ran_ns }} {{ csi_ue_pod }} --
-    ping -c {{ csi_traffic_pings | default(50) }} 8.8.8.8
-    -I tun_srsue3 -i 0.1 -W 1
-  register: ping3_result
-  failed_when: false
-  delegate_to: "{{ groups['ran_node'][0] }}"
-  when:
-    - csi_logger_enabled | default(false)
-    - csi_ue_pod is defined and csi_ue_pod != ""
-  tags: ['csi', 'csi-traffic']
-
-- name: CSI Logger - Wait for CSI files to appear in pod
-  command: >
-    kubectl exec -n {{ ran_ns }} {{ csi_gnb_pod }} -c gnb
-    -- sh -c "ls /tmp/csi_data_0x*.bin /tmp/csi_dl_0x*.csv 2>/dev/null | wc -l"
-  register: csi_file_count
-  retries: 12
-  delay: 5
-  until: csi_file_count.stdout | int > 0
-  failed_when: false
-  delegate_to: "{{ groups['ran_node'][0] }}"
-  when:
-    - csi_logger_enabled | default(false)
-    - csi_gnb_pod is defined and csi_gnb_pod != ""
-  tags: ['csi', 'csi-traffic']
-
-- name: CSI Logger - Display CSI file count
-  debug:
-    msg: "CSI files in pod: {{ csi_file_count.stdout | default('0') }}"
-  when: csi_logger_enabled | default(false)
+    - rru == "rfsim"
   tags: ['csi', 'csi-traffic']
 
 # ─────────────────────────────────────────────────────────────
