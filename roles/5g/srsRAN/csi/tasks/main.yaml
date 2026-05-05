@@ -1,6 +1,6 @@
 ---
 # roles/5g/srsRAN/csi/tasks/main.yaml
-# CSI Logger v1.0.0.20 : UL (binary per-RNTI) + DL (CSV per-RNTI)
+# CSI Logger v1.0.0.21 : UL (binary per-RNTI) + DL (CSV per-RNTI)
 
 # ─────────────────────────────────────────────────────────────
 # SETUP
@@ -131,21 +131,22 @@
 # FETCH : pod → RAN node
 # ─────────────────────────────────────────────────────────────
 
-- name: CSI Logger - Copy UL binary files from pod to RAN node
-  shell: >
-    kubectl cp {{ ran_ns }}/{{ csi_gnb_pod }}:/tmp/{{ item }}
-    /home/{{ ansible_user }}/csi_output/{{ item }} -c gnb
-  with_items: "{{ csi_ul_files.stdout_lines }}"
-  failed_when: false
-  delegate_to: "{{ groups['ran_node'][0] }}"
-  when:
-    - csi_logger_enabled | default(false)
-    - csi_gnb_pod is defined and csi_gnb_pod != ""
-    - csi_ul_files is defined
-  tags: ['csi', 'csi-fetch']
-
 - name: CSI Logger - Fetch CSI data from Kubernetes pod
   block:
+    - name: Get gNB pod name (if not already set by traffic block)
+      command: >
+        kubectl get pods -n {{ ran_ns }}
+        -l {{ srs_gnb_label_selectors | join(',') }}
+        -o jsonpath={.items[0].metadata.name}
+      register: gnb_pod_fetch
+      delegate_to: "{{ groups['ran_node'][0] }}"
+      when: csi_gnb_pod is not defined
+
+    - name: Set gNB pod fact (if not already set)
+      set_fact:
+        csi_gnb_pod: "{{ gnb_pod_fetch.stdout }}"
+      when: csi_gnb_pod is not defined
+
     - name: List UL files in pod
       command: >
         kubectl exec -n {{ ran_ns }} {{ csi_gnb_pod }} -c gnb
@@ -161,6 +162,12 @@
       register: csi_dl_files
       failed_when: false
       delegate_to: "{{ groups['ran_node'][0] }}"
+
+    - name: Display files found in pod
+      debug:
+        msg: |
+          UL files: {{ csi_ul_files.stdout_lines | default([]) }}
+          DL files: {{ csi_dl_files.stdout_lines | default([]) }}
 
     - name: Copy UL files from pod to RAN node
       command: >
@@ -197,9 +204,7 @@
           - {{ f.path | basename }} ({{ (f.size / 1024) | round(1) }} KB)
           {% endfor %}
 
-  when:
-    - csi_logger_enabled | default(false)
-    - csi_gnb_pod is defined and csi_gnb_pod != ""
+  when: csi_logger_enabled | default(false)
   tags: ['csi', 'csi-fetch']
 
 # ─────────────────────────────────────────────────────────────
@@ -212,16 +217,20 @@
       shell: |
         VISUALIZER=/home/{{ ansible_user }}/csi_output/csi_visualizer.py
         OUTPUT=/home/{{ ansible_user }}/csi_output/plots
+        TAIL={{ csi_tail_records | default(100000) }}
+        MAX_SLOTS={{ csi_max_slots | default(200) }}
         ERRORS=0
 
-        echo "=== UL plots ==="
-        for f in /home/{{ ansible_user }}/csi_output/csi_data_0x*.bin; do
+        echo "=== UL plots (last ${TAIL} records) ==="
+        for f in /home/{{ ansible_user }}/csi_output/csi_data_0x4*.bin; do
           [ -f "$f" ] || { echo "No UL files found"; continue; }
           echo "Processing UL: $(basename $f)"
           python3 $VISUALIZER "$f" \
             --output $OUTPUT \
-            --slot {{ csi_plot_slot | default(0) }} \
-            --prb  {{ csi_plot_prb  | default(0) }} \
+            --tail-records $TAIL \
+            --max-slots $MAX_SLOTS \
+            {% if csi_plot_slot is defined %}--slot {{ csi_plot_slot }}{% endif %} \
+            {% if csi_plot_prb is defined %}--prb {{ csi_plot_prb }}{% endif %} \
             && echo "OK: $(basename $f)" \
             || { echo "WARN: failed $(basename $f)"; ERRORS=$((ERRORS+1)); }
         done
@@ -339,14 +348,15 @@
   debug:
     msg: |
       ╔══════════════════════════════════════════════════════════════╗
-      ║         CSI VISUALIZATION COMPLETE - v1.0.0.20              ║
+      ║         CSI VISUALIZATION COMPLETE - v1.0.0.21              ║
       ║                                                              ║
-      ║  UL plots (per RNTI):                                        ║
-      ║    ul_magnitude_slot*_prb*.png                               ║
-      ║    ul_phase_slot*_prb*.png                                   ║
-      ║    ul_constellation_slot*_prb*.png                           ║
-      ║    ul_heatmap_slot*.png                                      ║
-      ║    ul_timeline_prb*.png                                      ║
+      ║  UL plots (per RNTI, last {{ csi_tail_records | default(100000) }} records):
+      ║    ul_magnitude_slot*_prb*_<rnti>.png                        ║
+      ║    ul_phase_slot*_prb*_<rnti>.png                            ║
+      ║    ul_constellation_slot*_prb*_<rnti>.png                    ║
+      ║    ul_heatmap_slot*_<rnti>.png                               ║
+      ║    ul_timeline_prb*_<rnti>.png                               ║
+      ║    ul_prb_time_<rnti>.png  <- PRB x Time heatmap NEW        ║
       ║                                                              ║
       ║  DL plots (per RNTI):                                        ║
       ║    dl_cqi_<rnti>.png       <- CQI timeline                  ║
@@ -357,6 +367,12 @@
       ║                                                              ║
       ║  DL CSV (per RNTI):                                          ║
       ║    csi_dl_0x<rnti>.csv                                       ║
+      ║                                                              ║
+      ║  Variables optionnelles:                                     ║
+      ║    csi_tail_records (def: 100000 ~ 40s)                     ║
+      ║    csi_max_slots    (def: 200)                               ║
+      ║    csi_plot_slot    (def: auto)                              ║
+      ║    csi_plot_prb     (def: auto)                              ║
       ╚══════════════════════════════════════════════════════════════╝
   tags: ['csi', 'csi-copy']
 
