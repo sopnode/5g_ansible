@@ -2,15 +2,12 @@
 """
 CSI Logger Data Parser and Visualizer - v1.0.0.20
 Supports:
-  UL mode : binary /tmp/csi_data_0x<rnti>.bin
-            → magnitude/phase per subcarrier/symbol/port
-            Record format: 26 bytes = timestamp(8) + slot(4) + subcarrier(2)
-                           + magnitude(4) + phase(4) + symbol(1) + port(1) + rnti(2)
+  UL mode : binary /tmp/csi_data_0x<rnti>.bin  (26 bytes/record)
   DL mode : CSV    /tmp/csi_dl_0x<rnti>.csv
-            → CQI/RI timeline per UE
 
 Usage:
   UL: python3 csi_visualizer.py csi_data_0x1234.bin [--slot N] [--prb N]
+                                                      [--tail-records N]
   DL: python3 csi_visualizer.py csi_dl_0x1234.csv --dl
   DL multi-UE: python3 csi_visualizer.py --dl-dir /tmp [--output /tmp/plots]
 """
@@ -52,16 +49,16 @@ class CSIRecord:
 
     def __repr__(self):
         return (f"CSIRecord(slot={self.slot_idx}, sub={self.subcarrier_idx}, "
-                f"mag={self.magnitude:.3f}, phase={self.phase:.3f}, "
-                f"rnti=0x{self.rnti:04x})")
+                f"mag={self.magnitude:.3f}, rnti=0x{self.rnti:04x})")
 
 
 class CSIParser:
     """Parse binary UL CSI file"""
 
-    def __init__(self, filepath):
-        self.filepath = Path(filepath)
-        self.records  = []
+    def __init__(self, filepath, tail_records=None):
+        self.filepath     = Path(filepath)
+        self.records      = []
+        self.tail_records = tail_records  # None = load all
 
     def parse(self):
         if not self.filepath.exists():
@@ -69,24 +66,33 @@ class CSIParser:
             return False
 
         file_size        = self.filepath.stat().st_size
-        expected_records = file_size // CSIRecord.RECORD_SIZE
+        total_records    = file_size // CSIRecord.RECORD_SIZE
         remainder        = file_size % CSIRecord.RECORD_SIZE
-        print(f"[UL Parser] Reading {self.filepath}")
-        print(f"[UL Parser] File size: {file_size} bytes | "
-              f"Expected records: {expected_records} | "
-              f"Remainder: {remainder} bytes")
+
+        print(f"[UL Parser] Reading {self.filepath.name}")
+        print(f"[UL Parser] File size: {file_size/1024/1024:.1f} MB | "
+              f"Total records: {total_records}")
         if remainder != 0:
-            print(f"WARNING: File size not a multiple of {CSIRecord.RECORD_SIZE} bytes "
-                  f"— possible corruption or wrong format")
+            print(f"WARNING: {remainder} trailing bytes ignored")
+
+        # Compute offset for tail reading
+        if self.tail_records is not None and self.tail_records < total_records:
+            skip_records = total_records - self.tail_records
+            offset       = skip_records * CSIRecord.RECORD_SIZE
+            print(f"[UL Parser] Loading last {self.tail_records} records "
+                  f"(skipping {skip_records})")
+        else:
+            offset = 0
+            print(f"[UL Parser] Loading all {total_records} records")
 
         try:
             with open(self.filepath, 'rb') as f:
+                f.seek(offset)
                 while True:
                     data = f.read(CSIRecord.RECORD_SIZE)
                     if not data:
                         break
                     if len(data) < CSIRecord.RECORD_SIZE:
-                        print(f"WARNING: Incomplete record ({len(data)} bytes) — skipped")
                         break
                     self.records.append(CSIRecord(data))
             print(f"[UL Parser] Parsed {len(self.records)} records")
@@ -119,15 +125,18 @@ class CSIParser:
         symbols = set(r.symbol_idx for r in self.records)
         ports   = set(r.port_idx   for r in self.records)
         rntis   = set(r.rnti       for r in self.records)
+        ts_min  = min(r.timestamp_us for r in self.records)
+        ts_max  = max(r.timestamp_us for r in self.records)
         print("\n=== UL CSI Statistics ===")
         print(f"Total records : {len(self.records)}")
+        print(f"Duration      : {(ts_max-ts_min)/1e6:.2f} s")
         print(f"RNTIs         : {[hex(r) for r in sorted(rntis)]}")
         print(f"Slots         : {len(slots)} (range: {min(slots)}-{max(slots)})")
         print(f"PRBs          : {len(prbs)} (range: {min(prbs)}-{max(prbs)})")
         print(f"Symbols       : {sorted(symbols)}")
         print(f"Ports         : {sorted(ports)}")
-        print(f"Magnitude     : {min(r.magnitude for r in self.records):.3f} - "
-              f"{max(r.magnitude for r in self.records):.3f}")
+        print(f"Magnitude     : {min(r.magnitude for r in self.records):.1f} - "
+              f"{max(r.magnitude for r in self.records):.1f}")
         print(f"Phase         : {min(r.phase for r in self.records):.3f} - "
               f"{max(r.phase for r in self.records):.3f}")
 
@@ -161,7 +170,7 @@ class DLCSIParser:
             print(f"ERROR: File not found: {self.filepath}")
             return False
 
-        print(f"[DL Parser] Reading {self.filepath}")
+        print(f"[DL Parser] Reading {self.filepath.name}")
         try:
             with open(self.filepath, 'r') as f:
                 reader = csv.DictReader(f)
@@ -180,18 +189,21 @@ class DLCSIParser:
         if not self.records:
             print("No DL records")
             return
-        cqis  = [r.cqi for r in self.records]
-        ris   = [r.ri  for r in self.records]
-        slots = [r.slot_idx for r in self.records]
-        duration_s = (self.records[-1].timestamp_us - self.records[0].timestamp_us) / 1e6
-
+        cqis      = [r.cqi for r in self.records]
+        ris       = [r.ri  for r in self.records]
+        slots     = [r.slot_idx for r in self.records]
+        duration_s = (self.records[-1].timestamp_us -
+                      self.records[0].timestamp_us) / 1e6
         print(f"\n=== DL CSI Statistics — RNTI {self.rnti} ===")
         print(f"Total records : {len(self.records)}")
         print(f"Duration      : {duration_s:.2f} s")
         print(f"Slots         : {min(slots)} → {max(slots)}")
-        print(f"CQI           : min={min(cqis)} max={max(cqis)} mean={np.mean(cqis):.2f}")
-        print(f"RI            : min={min(ris)}  max={max(ris)}  mean={np.mean(ris):.2f}")
-        print(f"PMI present   : {sum(r.pmi_present for r in self.records)}/{len(self.records)}")
+        print(f"CQI           : min={min(cqis)} max={max(cqis)} "
+              f"mean={np.mean(cqis):.2f}")
+        print(f"RI            : min={min(ris)}  max={max(ris)}  "
+              f"mean={np.mean(ris):.2f}")
+        print(f"PMI present   : {sum(r.pmi_present for r in self.records)}"
+              f"/{len(self.records)}")
 
 
 # ─────────────────────────────────────────────
@@ -204,6 +216,11 @@ class CSIVisualizer:
     def __init__(self, parser):
         self.parser = parser
 
+    def _rnti_str(self):
+        if not self.parser.records:
+            return "unknown"
+        return f"0x{self.parser.records[0].rnti:04x}"
+
     def plot_prb_magnitude(self, slot_idx, prb_idx, symbol_idx=None, port_idx=None):
         records = [r for r in self.parser.records
                    if r.slot_idx == slot_idx and r.prb_idx == prb_idx]
@@ -215,13 +232,13 @@ class CSIVisualizer:
             print(f"No data for slot={slot_idx}, prb={prb_idx}")
             return None
         records.sort(key=lambda r: r.subcarrier_in_prb)
-        rnti = f"0x{records[0].rnti:04x}"
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.stem([r.subcarrier_in_prb for r in records],
                 [r.magnitude for r in records], basefmt=' ')
         ax.set_xlabel('Subcarrier Index (within PRB)')
         ax.set_ylabel('Magnitude')
-        ax.set_title(f'UL CSI Magnitude — Slot {slot_idx}, PRB {prb_idx}, UE {rnti}')
+        ax.set_title(f'UL CSI Magnitude — Slot {slot_idx}, PRB {prb_idx}, '
+                     f'UE {self._rnti_str()}')
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
         return fig
@@ -237,13 +254,13 @@ class CSIVisualizer:
             print(f"No data for slot={slot_idx}, prb={prb_idx}")
             return None
         records.sort(key=lambda r: r.subcarrier_in_prb)
-        rnti = f"0x{records[0].rnti:04x}"
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.stem([r.subcarrier_in_prb for r in records],
                 [r.phase for r in records], basefmt=' ')
         ax.set_xlabel('Subcarrier Index (within PRB)')
         ax.set_ylabel('Phase (radians)')
-        ax.set_title(f'UL CSI Phase — Slot {slot_idx}, PRB {prb_idx}, UE {rnti}')
+        ax.set_title(f'UL CSI Phase — Slot {slot_idx}, PRB {prb_idx}, '
+                     f'UE {self._rnti_str()}')
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
         return fig
@@ -258,20 +275,21 @@ class CSIVisualizer:
         if not records:
             print(f"No data for slot={slot_idx}, prb={prb_idx}")
             return None
-        rnti = f"0x{records[0].rnti:04x}"
         i_vals = [r.magnitude * np.cos(r.phase) for r in records]
         q_vals = [r.magnitude * np.sin(r.phase) for r in records]
         fig, ax = plt.subplots(figsize=(8, 8))
         ax.scatter(i_vals, q_vals, alpha=0.6, s=30)
         ax.set_xlabel('I')
         ax.set_ylabel('Q')
-        ax.set_title(f'UL CSI Constellation — Slot {slot_idx}, PRB {prb_idx}, UE {rnti}')
+        ax.set_title(f'UL CSI Constellation — Slot {slot_idx}, PRB {prb_idx}, '
+                     f'UE {self._rnti_str()}')
         ax.grid(True, alpha=0.3)
         ax.axis('equal')
         plt.tight_layout()
         return fig
 
     def plot_prb_heatmap(self, slot_idx):
+        """Magnitude heatmap: PRB × subcarrier for one slot"""
         records_by_prb = defaultdict(list)
         for r in self.parser.records:
             if r.slot_idx == slot_idx:
@@ -288,17 +306,20 @@ class CSIVisualizer:
                 counts[i, rec.subcarrier_in_prb] += 1
         with np.errstate(invalid='ignore'):
             data = np.where(counts > 0, data / counts, 0)
-        rnti = f"0x{self.parser.records[0].rnti:04x}"
         fig, ax = plt.subplots(figsize=(12, 6))
         im = ax.imshow(data, aspect='auto', cmap='viridis', origin='lower')
         plt.colorbar(im, ax=ax, label='Magnitude (avg)')
         ax.set_xlabel('Subcarrier Index (within PRB)')
         ax.set_ylabel('PRB Index')
-        ax.set_title(f'UL CSI Magnitude Heatmap — Slot {slot_idx}, UE {rnti}')
+        ax.set_yticks(range(len(prbs)))
+        ax.set_yticklabels(prbs)
+        ax.set_title(f'UL CSI Magnitude Heatmap — Slot {slot_idx}, '
+                     f'UE {self._rnti_str()}')
         plt.tight_layout()
         return fig
 
     def plot_timeline(self, prb_idx=0, symbol_idx=None, port_idx=None):
+        """Magnitude vs time for one PRB"""
         records = [r for r in self.parser.records if r.prb_idx == prb_idx]
         if symbol_idx is not None:
             records = [r for r in records if r.symbol_idx == symbol_idx]
@@ -308,14 +329,78 @@ class CSIVisualizer:
             print(f"No data for prb={prb_idx}")
             return None
         records.sort(key=lambda r: r.timestamp_us)
-        times = [(r.timestamp_us - records[0].timestamp_us) / 1000 for r in records]
-        rnti = f"0x{records[0].rnti:04x}"
-        fig, ax = plt.subplots(figsize=(14, 4))
-        ax.plot(times, [r.magnitude for r in records], '.-', linewidth=0.5, markersize=3)
+        # Average magnitude per slot
+        slot_mag = defaultdict(list)
+        slot_ts  = {}
+        for r in records:
+            slot_mag[r.slot_idx].append(r.magnitude)
+            slot_ts[r.slot_idx] = r.timestamp_us
+        slots    = sorted(slot_mag.keys())
+        t0       = slot_ts[slots[0]]
+        times    = [(slot_ts[s] - t0) / 1000 for s in slots]
+        mags     = [np.mean(slot_mag[s]) for s in slots]
+        fig, ax  = plt.subplots(figsize=(14, 4))
+        ax.plot(times, mags, '.-', linewidth=0.8, markersize=4)
         ax.set_xlabel('Time (ms)')
-        ax.set_ylabel('Magnitude')
-        ax.set_title(f'UL CSI Magnitude Timeline — PRB {prb_idx}, UE {rnti}')
+        ax.set_ylabel('Magnitude (avg per slot)')
+        ax.set_title(f'UL CSI Magnitude Timeline — PRB {prb_idx}, '
+                     f'UE {self._rnti_str()}')
         ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        return fig
+
+    def plot_prb_time_heatmap(self, max_slots=200):
+        """
+        NEW: Heatmap PRB × time — evolution of channel magnitude per PRB over time.
+        X axis : time (ms from first record)
+        Y axis : PRB index
+        Color  : average magnitude over subcarriers of that PRB at that slot
+        """
+        if not self.parser.records:
+            print("No records")
+            return None
+
+        # Build dict: slot → prb → [magnitudes]
+        slot_prb_mag = defaultdict(lambda: defaultdict(list))
+        slot_ts      = {}
+        for r in self.parser.records:
+            slot_prb_mag[r.slot_idx][r.prb_idx].append(r.magnitude)
+            slot_ts[r.slot_idx] = r.timestamp_us
+
+        slots = sorted(slot_prb_mag.keys())
+        prbs  = sorted(set(r.prb_idx for r in self.parser.records))
+
+        if len(slots) > max_slots:
+            # Downsample: pick max_slots evenly spaced slots
+            indices = np.linspace(0, len(slots)-1, max_slots, dtype=int)
+            slots   = [slots[i] for i in indices]
+            print(f"[PRB-Time Heatmap] Downsampled to {max_slots} slots")
+
+        t0   = slot_ts[slots[0]]
+        times = [(slot_ts[s] - t0) / 1000 for s in slots]  # ms
+
+        # Build matrix: rows=PRBs, cols=slots
+        matrix = np.zeros((len(prbs), len(slots)))
+        for j, slot in enumerate(slots):
+            for i, prb in enumerate(prbs):
+                mags = slot_prb_mag[slot].get(prb, [])
+                matrix[i, j] = np.mean(mags) if mags else np.nan
+
+        fig, ax = plt.subplots(figsize=(16, 6))
+        im = ax.imshow(matrix,
+                       aspect='auto',
+                       cmap='viridis',
+                       origin='lower',
+                       extent=[times[0], times[-1],
+                               prbs[0] - 0.5, prbs[-1] + 0.5],
+                       interpolation='nearest')
+        plt.colorbar(im, ax=ax, label='Magnitude (avg over subcarriers)')
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('PRB Index')
+        ax.set_title(f'UL Channel Evolution — PRB × Time, '
+                     f'UE {self._rnti_str()} '
+                     f'({len(slots)} slots, {len(prbs)} PRBs)')
+        ax.set_yticks(prbs[::max(1, len(prbs)//10)])
         plt.tight_layout()
         return fig
 
@@ -378,7 +463,8 @@ class DLCSIVisualizer:
         ax.set_xlabel('CQI')
         ax.set_ylabel('Count')
         ax.set_xticks(range(0, 16))
-        ax.set_title(f'DL CQI Distribution — UE {self.parser.rnti} ({len(cqis)} samples)')
+        ax.set_title(f'DL CQI Distribution — UE {self.parser.rnti} '
+                     f'({len(cqis)} samples)')
         ax.grid(True, alpha=0.3, axis='y')
         plt.tight_layout()
         return fig
@@ -464,8 +550,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # UL - auto slot/prb detection
+  # UL - last 100k records, auto slot/prb
   python3 csi_visualizer.py csi_data_0x1234.bin
+
+  # UL - last 30s of data (~73000 records)
+  python3 csi_visualizer.py csi_data_0x1234.bin --tail-records 73000
 
   # UL - specific slot and prb
   python3 csi_visualizer.py csi_data_0x1234.bin --slot 503 --prb 5
@@ -473,24 +562,30 @@ Examples:
   # DL single UE
   python3 csi_visualizer.py csi_dl_0x1234.csv --dl
 
-  # DL multi-UE (all files in /tmp)
+  # DL multi-UE
   python3 csi_visualizer.py --dl-dir /tmp --output /tmp/plots
-
-  # Stats only
-  python3 csi_visualizer.py csi_data_0x1234.bin --stats
         """)
 
-    parser.add_argument('csi_file', nargs='?',  help='Path to CSI file (UL .bin or DL .csv)')
-    parser.add_argument('--dl',     action='store_true', help='DL mode: parse CSV file')
-    parser.add_argument('--dl-dir', help='DL multi-UE mode: directory with csi_dl_0x*.csv')
-    parser.add_argument('--slot',   type=int, default=None,
-                        help='[UL] Slot index (default: auto = first available)')
-    parser.add_argument('--prb',    type=int, default=None,
-                        help='[UL] PRB index (default: auto = first available)')
-    parser.add_argument('--symbol', type=int, default=None, help='[UL] Symbol index')
-    parser.add_argument('--port',   type=int, default=None, help='[UL] Port index')
-    parser.add_argument('--output', help='Output directory for PNG files')
-    parser.add_argument('--stats',  action='store_true', help='Show statistics only')
+    parser.add_argument('csi_file', nargs='?',
+                        help='Path to CSI file (UL .bin or DL .csv)')
+    parser.add_argument('--dl',      action='store_true',
+                        help='DL mode: parse CSV file')
+    parser.add_argument('--dl-dir',  help='DL multi-UE: directory with csi_dl_0x*.csv')
+    parser.add_argument('--slot',    type=int, default=None,
+                        help='[UL] Slot index (default: auto)')
+    parser.add_argument('--prb',     type=int, default=None,
+                        help='[UL] PRB index (default: auto)')
+    parser.add_argument('--symbol',  type=int, default=None,
+                        help='[UL] Symbol index filter')
+    parser.add_argument('--port',    type=int, default=None,
+                        help='[UL] Port index filter')
+    parser.add_argument('--tail-records', type=int, default=100000,
+                        help='[UL] Load only last N records (default: 100000 ~40s)')
+    parser.add_argument('--max-slots', type=int, default=200,
+                        help='[UL] Max slots in PRB-time heatmap (default: 200)')
+    parser.add_argument('--output',  help='Output directory for PNG files')
+    parser.add_argument('--stats',   action='store_true',
+                        help='Show statistics only')
 
     args = parser.parse_args()
 
@@ -536,7 +631,7 @@ Examples:
         return
 
     # ── UL mode ───────────────────────────────────────────────
-    ul_parser = CSIParser(args.csi_file)
+    ul_parser = CSIParser(args.csi_file, tail_records=args.tail_records)
     if not ul_parser.parse():
         sys.exit(1)
     ul_parser.get_statistics()
@@ -555,16 +650,14 @@ Examples:
         args.prb = prbs[0] if prbs else 0
         print(f"[Visualizer] Auto-selected prb={args.prb}")
 
-    viz = CSIVisualizer(ul_parser)
-
-    # Derive RNTI string for filenames
-    rntis = set(r.rnti for r in ul_parser.records)
+    viz      = CSIVisualizer(ul_parser)
     rnti_str = f"{ul_parser.records[0].rnti:04x}"
 
     if args.output:
         out = Path(args.output)
         out.mkdir(parents=True, exist_ok=True)
-        for name, fig in [
+
+        plots = [
             (f'ul_magnitude_slot{args.slot}_prb{args.prb}_{rnti_str}.png',
              viz.plot_prb_magnitude(args.slot, args.prb, args.symbol, args.port)),
             (f'ul_phase_slot{args.slot}_prb{args.prb}_{rnti_str}.png',
@@ -575,11 +668,17 @@ Examples:
              viz.plot_prb_heatmap(args.slot)),
             (f'ul_timeline_prb{args.prb}_{rnti_str}.png',
              viz.plot_timeline(args.prb, args.symbol, args.port)),
-        ]:
+            (f'ul_prb_time_{rnti_str}.png',
+             viz.plot_prb_time_heatmap(max_slots=args.max_slots)),
+        ]
+
+        for name, fig in plots:
             if fig:
                 fig.savefig(out / name, dpi=100)
                 plt.close(fig)
-        print(f"[Visualizer] Saved UL plots to {out}")
+                print(f"[Visualizer] Saved {name}")
+
+        print(f"[Visualizer] Done — {sum(1 for _,f in plots if f)} plots saved to {out}")
     else:
         viz.plot_prb_magnitude(args.slot, args.prb, args.symbol, args.port)
         plt.show()
@@ -591,7 +690,10 @@ Examples:
         plt.show()
         viz.plot_timeline(args.prb, args.symbol, args.port)
         plt.show()
+        viz.plot_prb_time_heatmap(max_slots=args.max_slots)
+        plt.show()
 
 
 if __name__ == '__main__':
     main()
+
