@@ -3,10 +3,10 @@ dir_oai: "{{ ansible_env.HOME }}/oai"
 repo_dest: "{{ dir_oai }}/oai5g-rru"
 prefix_oai5g: "sopnode/oai5g-rru"
 repo_oai5g_rru: "https://github.com/{{ prefix_oai5g }}.git"
-tag_oai5g_rru: "main"
+tag_oai5g_rru: "metrics" # "main"
 
 repo_oai_cn5g_fed: "https://gitlab.eurecom.fr/turletti/charts.git"
-tag_oai_cn5g_fed: "main"
+tag_oai_cn5g_fed: "metrics"
 
 conf: "{{ hostvars[groups['faraday'][0]].conf }}"
 prepare_demo_script: "{{ dir_oai }}/prepare-demo-oai.sh"
