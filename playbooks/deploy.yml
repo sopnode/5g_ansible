@@ -268,6 +268,8 @@
       when: core == 'oai'
     - role: 5g/oai/ran
       when: ran == 'oai'
+    - role: 5g/oai/csi_logging
+      when: ran == 'oai' and oai_csi_logging_enabled | default(false)
 
 - name: Deploy srsRAN
   hosts: ran_node
