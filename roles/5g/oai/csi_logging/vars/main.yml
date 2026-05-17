@@ -1,0 +1,7 @@
+---
+# CSI Logging Role Variables
+# Note: Actual CSI logging is built into OAI Docker image (oai-gnb-csi:2026.w15)
+# This role only provides Python visualization tools
+
+csi_output_path: /data/csi/csi_per_rb.csv
+csi_script_path: /usr/local/bin/csi_visualizer_oai.py
