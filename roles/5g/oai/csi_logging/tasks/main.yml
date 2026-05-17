@@ -1,8 +1,4 @@
 ---
-# CSI Logging Visualization Setup
-# WARNING: OAI must be built with CSI patches and libcsi_logging already linked
-# This role only sets up the Python visualization environment
-
 - name: Create CSI output directory
   file:
     path: "/data/csi"
@@ -17,7 +13,14 @@
     mode: '0755'
   become: true
 
-- name: Install Python dependencies for CSI visualization
+- name: Copy CSI filter script
+  copy:
+    src: csi_filter.py
+    dest: "/usr/local/bin/csi_filter.py"
+    mode: '0755'
+  become: true
+
+- name: Install Python dependencies
   package:
     name:
       - python3-numpy
@@ -25,17 +28,26 @@
     state: present
   become: true
 
-- name: Create convenience symlink
+- name: Create convenience symlinks
   file:
-    src: /usr/local/bin/csi_visualizer_oai.py
-    dest: /usr/local/bin/csi_viz
+    src: "/usr/local/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item | regex_replace('.py$', '') }}"
     state: link
   become: true
   ignore_errors: true
+  loop:
+    - csi_visualizer_oai.py
+    - csi_filter.py
 
-- name: CSI visualization configured
+- name: CSI tools configured
   debug:
     msg: |
-      CSI visualization ready
-      Usage: csi_visualizer_oai.py /data/csi/csi_per_rb.csv
-      Or:    csi_viz /data/csi/csi_per_rb.csv --realtime
+      CSI visualization and filtering tools ready
+      
+      Visualization:
+        csi_visualizer_oai.py /data/csi/csi_per_rb.csv
+        csi_visualizer_oai.py /data/csi/csi_per_rb.csv --realtime
+      
+      Filtering (RB range):
+        csi_filter.py --input raw.csv --output filtered.csv --level rb
+        csi_filter.py --input raw.csv --output filtered.csv --level rb --rb-selection range --rb-start 0 --rb-end 50

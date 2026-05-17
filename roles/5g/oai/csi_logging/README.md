@@ -2,7 +2,7 @@
 
 **Prerequisites:** OAI must be built with CSI logging support (Docker image: `oai-gnb-csi:2026.w15`)
 
-This role provides Python visualization tools for CSI measurements logged by OAI.
+This role provides Python visualization and filtering tools for CSI measurements logged by OAI.
 
 ## Usage
 
@@ -18,8 +18,13 @@ csi_visualizer_oai.py /data/csi/csi_per_rb.csv --output /tmp/plots
 Statistics only:
 csi_visualizer_oai.py /data/csi/csi_per_rb.csv --stats
 
-Convenience alias:
-csi_viz /data/csi/csi_per_rb.csv --realtime
+## Filtering by RB Range
+
+Extract only RBs 0-50:
+csi_filter.py --input raw.csv --output filtered.csv --level rb --rb-selection range --rb-start 0 --rb-end 50
+
+Aggregate all RBs to RB level (average 12 subcarriers):
+csi_filter.py --input raw.csv --output filtered.csv --level rb
 
 ## Output Format
 
@@ -56,3 +61,4 @@ ansible-playbook playbooks/deploy.yml -e oai_csi_logging_enabled=true -e ran=oai
 - CSI logging must be enabled at OAI build time (included in oai-gnb-csi Docker image)
 - Output directory /data/csi must have write permissions
 - CSV grows ~1-2MB per minute depending on bandwidth
+- Currently supports RB range filtering only (antenna/source filtering not yet implemented)
