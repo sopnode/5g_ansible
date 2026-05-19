@@ -300,6 +300,19 @@
 #       delegate_to: localhost
 #       become: false
 
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
+
 - name: Setup sniffers on SMFs and AMF (Improved)
   hosts: core_node
   gather_facts: false
@@ -354,19 +367,6 @@
       when: monitoring_enabled
       vars:
         core_ns: "{{ core }}"
-
-############################################################################
-# Move this block where you want to restart with start-at-task=RESTART_HERE"
-#
-- hosts: localhost,core_node,ran_node
-  gather_facts: false
-  tasks:
-    - name: RESTART_HERE
-      ansible.builtin.meta: noop
-
-    - import_tasks: ../tasks/reload_booleans.yml
-#
-############################################################################
 
 - name: Deploy Kopf Controller and eBPF Probes
   hosts: "{{ (groups['monitor_node'] | default([]) | length > 0) | ternary('monitor_node', 'core_node') }}"
@@ -463,6 +463,8 @@
         - (monitor_node_name | default('')) | length > 0
         - core_node_name != ran_node_name
         - core_node_name != (monitor_node_name | default(''))
+
+
 
 - name: 5G-Monarch Final Operations
   hosts: monitor_node
