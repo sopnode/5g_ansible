@@ -11,7 +11,9 @@ SETUP_INTERFERENCE_PLAYBOOK="playbooks/setup_interference.yml"
 MULTI_UE_PLAYBOOK="playbooks/run_scenario_iperf_multi.yml"
 SETUP_MULTI_UE_PLAYBOOK="playbooks/setup_iperf.yml" # setup is the same as normal
 PING_PLAYBOOK="playbooks/run_scenario_ping.yml"
-SETUP_PING_PLAYBOOK="playbooks/setup_iperf.yml"
+SETUP_PING_PLAYBOOK="playbooks/setup_iperf.yml" # setup is the same as normal
+NUTTCP_PLAYBOOK="playbooks/run_scenario_nuttcp.yml"
+SETUP_NUTTCP_PLAYBOOK="playbooks/setup_iperf.yml" # setup is the same as normal
 
 RUN_SETUP=true
 RUN_SCENARIO=true
@@ -34,12 +36,13 @@ run_cmd() {
 }
 
 usage() {
-    echo "Usage: $0 [-d|-i|-m|--ping] [--no-setup] [--inventory=name] [-e vars] [--dry-run]"
+    echo "Usage: $0 [-d|-i|-m|--ping|--nuttcp] [--no-setup] [--inventory=name] [-e vars] [--dry-run]"
     echo ""
     echo "-d                       Deploy the default iperf scenario"
     echo "-i                       Deploy the interference scenario"
     echo "-m                       Deploy the multi-UE iperf scenario"
     echo "--ping                   Deploy the multi-UE ping scenario"
+    echo "--nuttcp                 Deploy the multi-UE nuttcp scenario"
     echo "-n, --no-setup           Do not run the setup, use this option if R2lab devices already up and running"
     echo "-s, --only-setup         Only run the setup"
     echo "-e <vars>                Extra ansible vars, e.g., -e \"nb_ues=5\" -e \"duration=20\""
@@ -93,6 +96,11 @@ while [[ $# -gt 0 ]]; do
         --ping)
             SETUP_PLAYBOOK="${SETUP_PING_PLAYBOOK}"
             TARGET_PLAYBOOK="${PING_PLAYBOOK}"
+            shift
+            ;;
+        --nuttcp)
+            SETUP_PLAYBOOK="${SETUP_NUTTCP_PLAYBOOK}"
+            TARGET_PLAYBOOK="${NUTTCP_PLAYBOOK}"
             shift
             ;;
         -h|--help)
