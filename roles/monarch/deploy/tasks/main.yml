@@ -134,13 +134,22 @@
     name:
       - python3-venv
       - python3-pip
+      - python3-setuptools
+      - python3-wheel
     state: present
     update_cache: yes
 
-- name: Remove broken or existing ansible venv
-  ansible.builtin.file:
-    path: /opt/ansible-venv
-    state: absent
+- name: Check if valid venv exists
+  ansible.builtin.stat:
+    path: /opt/ansible-venv/bin/pip
+  register: venv_exists
+
+- name: Recreate venv if missing or broken
+  block:
+    - name: Remove broken venv
+      ansible.builtin.file:
+        path: /opt/ansible-venv
+        state: absent
 
 - name: Create fresh ansible virtualenv using shell
   ansible.builtin.shell: /usr/bin/python3 -m venv /opt/ansible-venv
@@ -286,3 +295,7 @@
 
 - import_tasks: deploy_kepler.yml
   when: enable_kepler
+
+- name: Reset ansible_python_interpreter to system python3
+  ansible.builtin.set_fact:
+    ansible_python_interpreter: /usr/bin/python3

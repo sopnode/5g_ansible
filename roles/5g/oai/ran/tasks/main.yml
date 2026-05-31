@@ -2,6 +2,11 @@
 - name: START_OAI_RAN
   ansible.builtin.meta: noop
 
+- name: Remove previous OAI RAN deployment if any
+  ansible.builtin.command: "{{ demo_oai_script }} stop-ran"
+  args:
+    chdir: "{{ repo_dest }}"
+
 - name: Launch OAI gNB pod
   ansible.builtin.command: "{{ demo_oai_script }} start-gnb"
   args:

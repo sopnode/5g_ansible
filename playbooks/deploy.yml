@@ -166,6 +166,8 @@
     - role: setup/k8s/benetel_specific_tuning_f3
       when: fhi72 and f3_ran
 
+
+
 - name: Deploy 5G-Monarch for monitoring
   hosts: monitor_node
   tasks:
@@ -174,14 +176,16 @@
         name: monarch/deploy
       vars:
         branch: srsRAN_metrics
-      when: monitoring_enabled and ran == 'srsRAN'
+      when: monitoring_enabled and ran == 'srsRAN' and monarch
 
     - name: Deploy Monarch for OAI
       include_role:
         name: monarch/deploy
       vars:
         branch: with_data_persistance_for_sopnodes
-      when: monitoring_enabled and ran == 'oai'
+      when: monitoring_enabled and ran == 'oai' and monarch
+
+
 
 - name: Add NoSchedule taint on Monitor node (core/ran pods should not run on monitor_node)
   hosts: core_node
@@ -189,8 +193,13 @@
   roles:
     - role: setup/k8s/add_taint
       vars:
-        target_node: "{{ monitor_node_name }}"
-      when: monitoring_enabled and core_node_name != ran_node_name and core_node_name != monitor_node_name | default('')
+        target_node: "{{ monitor_node_name | default('') }}"
+      when:
+        - monitoring_enabled | bool
+        - monarch | bool
+        - (monitor_node_name | default('')) | length > 0
+        - core_node_name != ran_node_name
+        - core_node_name != (monitor_node_name | default(''))
 
 - name: SRIOV setup
   hosts: ran_node
@@ -213,6 +222,9 @@
   roles:
     - role: setup/gre_tunnel
       when: bridge_enabled
+
+
+
 
 - name: Deploy Open5GS CN
   hosts: core_node
@@ -240,8 +252,8 @@
     - role: 5g/free5gc/deploy
       when: core == 'free5gc'
 
-- name: Deploy OAI CN/RAN
-  hosts: ran_node
+- name: OAI Setup
+  hosts: core_node,ran_node
   pre_tasks:
     - name: Load 5G profile
       include_vars:
@@ -251,8 +263,152 @@
       when: core == 'oai' or ran == 'oai'
     - role: 5g/oai/setup
       when: core == 'oai' or ran == 'oai'
+
+- name: Deploy OAI CN
+  hosts: core_node
+  pre_tasks:
+    - name: Load 5G profile
+      include_vars:
+        file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+  roles:
     - role: 5g/oai/core
       when: core == 'oai'
+
+# - name: Copy monitoring folder
+#   hosts: "{{ (groups['monitor_node'] | default([]) | length > 0) | ternary('monitor_node', 'core_node') }}"
+#   become: true
+#   gather_facts: false
+#   when: monitoring_enabled
+
+#   tasks:
+
+#     - name: Sync monitoring directory from control node
+#       ansible.posix.synchronize:
+#         src: "{{ lookup('env','HOME') }}/5g_ansible/monitoring/"
+#         dest: /root/monitoring/
+#         recursive: yes
+#         rsync_path: "sudo rsync"
+#       delegate_to: localhost
+#       become: false
+
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
+
+- name: Setup sniffers on SMFs and AMF (Improved)
+  hosts: core_node
+  gather_facts: false
+  roles:
+    - role: monarch/sniffers/amf
+      when: monitoring_enabled
+      vars:
+        # redis_host: redis
+        redis_host: "redis.{{ core }}.svc.cluster.local"
+    - role: monarch/sniffers/smf
+      when: monitoring_enabled
+      vars:
+        # redis_host: redis
+        redis_host: "redis.{{ core }}.svc.cluster.local"
+
+- name: Deploy SliceAware Mechanisms
+  hosts: "{{ (groups['monitor_node'] | default([]) | length > 0) | ternary('monitor_node', 'core_node') }}"
+  gather_facts: false
+
+  vars:
+    core_ns: "{{ core }}"
+
+  pre_tasks:
+    - name: Render Redis manifest for cleanup
+      ansible.builtin.template:
+        src: ../roles/monarch/sliceawareness/templates/redis.yaml.j2
+        dest: /tmp/redis.yaml
+        mode: "0644"
+
+    - name: Delete Redis resources if present
+      ansible.builtin.command: >
+        kubectl -n {{ core }} delete -f /tmp/redis.yaml --ignore-not-found=true
+      register: redis_cleanup
+      changed_when: "'deleted' in redis_cleanup.stdout or 'deleted' in redis_cleanup.stderr"
+      failed_when: false
+
+    - name: Render UE Mapper manifest for cleanup
+      ansible.builtin.template:
+        src: ../roles/monarch/sliceawareness/templates/ue-mapper.yaml.j2
+        dest: /tmp/ue-mapper.yaml
+        mode: "0644"
+
+    - name: Delete UE Mapper resources if present
+      ansible.builtin.command: >
+        kubectl -n {{ core }} delete -f /tmp/ue-mapper.yaml --ignore-not-found=true
+      register: ue_mapper_cleanup
+      changed_when: "'deleted' in ue_mapper_cleanup.stdout or 'deleted' in ue_mapper_cleanup.stderr"
+      failed_when: false
+
+  roles:
+    - role: monarch/sliceawareness
+      when: monitoring_enabled
+      vars:
+        core_ns: "{{ core }}"
+
+- name: Deploy Kopf Controller and eBPF Probes
+  hosts: "{{ (groups['monitor_node'] | default([]) | length > 0) | ternary('monitor_node', 'core_node') }}"
+  gather_facts: false
+
+  vars:
+    core_ns: "{{ core }}"
+    # kopf_image: "r2labuser/kopf-controller:2026w10"
+    # probe_image: "r2labuser/ebpf-latency-probe:2026"
+    kopf_image: "r2labuser/kopf-controller:2026e2eLatest"
+    probe_image: "r2labuser/ebpf-latency-probe:2026e2eLatestDebug"
+    image_pull_policy: "Always"
+    exporter_port: "9100"
+    exporter_path: "/latency"
+    ue_mapper_limit: "2000"
+    dry_run: "0"
+    probe_mode: "both"
+    gnb_latency_mode: "BOTH"
+    upf_latency_mode: "BOTH"
+    match_debug: "0"
+
+  tasks:
+    - name: Deploy Kopf Controller and eBPF Probes
+      when: monitoring_enabled | bool
+      block:
+        - name: Render controller manifest for cleanup
+          ansible.builtin.template:
+            src: ../roles/monarch/controller/templates/kopf-controller.yaml.j2
+            dest: /tmp/kopf-controller.yaml
+            mode: "0644"
+
+        - name: Delete existing controller resources if present
+          ansible.builtin.command: >
+            kubectl delete -f /tmp/kopf-controller.yaml --ignore-not-found=true
+          register: cleanup_result
+          changed_when: "'deleted' in cleanup_result.stdout"
+          failed_when: false
+
+        - name: Run monarch controller role
+          ansible.builtin.include_role:
+            name: monarch/controller
+
+
+
+- name: Deploy OAI CN/RAN
+  hosts: ran_node
+  pre_tasks:
+    - name: Load 5G profile
+      include_vars:
+        file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+  roles:
     - role: 5g/oai/ran
       when: ran == 'oai'
 
@@ -319,14 +475,23 @@
         - ran == 'ueransim'
         - core != 'oai'
 
+
+
 - name: Remove NoSchedule taint on Monitor node
   hosts: core_node
   become: true
   roles:
     - role: setup/k8s/remove_taint
       vars:
-        target_node: "{{ monitor_node_name }}"
-      when: monitoring_enabled and bridge_enabled
+        target_node: "{{ monitor_node_name | default('') }}"
+      when:
+        - monitoring_enabled | bool
+        - bridge_enabled | bool
+        - monarch | bool
+        - (monitor_node_name | default('')) | length > 0
+        - core_node_name != ran_node_name
+        - core_node_name != (monitor_node_name | default(''))
+      
 
 - name: 5G-Monarch Final Operations
   hosts: monitor_node
@@ -336,9 +501,9 @@
         name: monarch/monitoring
       vars:
         set_gnb_monitoring: false
-      when: monitoring_enabled and ran == 'oai'
+      when: monitoring_enabled and ran == 'oai' and monarch
 
     - name: Launch monitoring for srsRAN
       include_role:
         name: monarch/monitoring
-      when: monitoring_enabled and ran == 'srsRAN'
+      when: monitoring_enabled and ran == 'srsRAN' and monarch
