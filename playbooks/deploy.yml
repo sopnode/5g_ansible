@@ -78,17 +78,9 @@
       when: item.rc != 0
       loop: "{{ job_status.results }}"
 
-
 # The following task requires all nodes be ssh-reachable
 # so it can't be the first task of the playbook
-# avoid hosts: all to not include fit_nodes since they are not running before sceanrio setup and will fail
-- hosts: sopnodes
-  gather_facts: true
-  tasks:
-    - name: Normalize booleans at playbook start
-      import_tasks: ../tasks/reload_booleans.yml
-
-- hosts: qhats
+- hosts: localhost,sopnodes
   gather_facts: true
   tasks:
     - name: Normalize booleans at playbook start
@@ -105,7 +97,7 @@
     - role: setup/k8s/k8s_env
     - role: setup/optimization/cpu
     - role: setup/ovs
-      when: not fhi72
+      #when: bridge_enabled
 
 - name: PTP setup on ran_node
   hosts: ran_node
@@ -140,7 +132,6 @@
   become: true
   roles:
     - role: setup/k8s/remove_cp_taint
-      when: not (core_node_name != ran_node_name and fhi72)
 
 - name: Join Kubernetes Cluster on Workers
   hosts: k8s_workers
@@ -156,7 +147,7 @@
     - role: setup/k8s/add_taint
       vars:
         target_node: "{{ ran_node_name }}"
-      when: core_node_name != ran_node_name and not fhi72
+      when: bridge_enabled
 
 - name: Install Multus / CNAO
   hosts: core_node
@@ -411,7 +402,7 @@
 
 
 
-- name: Deploy OAI RAN
+- name: Deploy OAI CN/RAN
   hosts: ran_node
   pre_tasks:
     - name: Load 5G profile
@@ -420,6 +411,19 @@
   roles:
     - role: 5g/oai/ran
       when: ran == 'oai'
+
+############################################################################
+# Move this block where you want to restart with start-at-task=RESTART_HERE"
+#
+- hosts: localhost,core_node,ran_node
+  gather_facts: false
+  tasks:
+    - name: RESTART_HERE
+      ansible.builtin.meta: noop
+
+    - import_tasks: ../tasks/reload_booleans.yml
+#
+############################################################################
 
 - name: Deploy srsRAN
   hosts: ran_node
@@ -435,8 +439,9 @@
     - role: 5g/srsRAN/deploy
       when: ran == 'srsRAN'
 
-- name: Deploy ueransim
-  hosts: core_node # use ueransim repo included within open5gs_k8s|free5gc-helm already on core_node
+- name: Deploy ueransim for oai core
+  hosts: ran_node
+
   pre_tasks:
     - name: Load 5G profile
       include_vars:
@@ -444,9 +449,31 @@
         name: fiveg
   roles:
     - role: 5g/ueransim/config
-      when: ran == 'ueransim'
+      when:
+        - ran == 'ueransim'
+        - core == 'oai'
     - role: 5g/ueransim/deploy
-      when: ran == 'ueransim'
+      when:
+        - ran == 'ueransim'
+        - core == 'oai'
+
+- name: Deploy ueransim for other 5G cores than oai
+  hosts: core_node
+
+  pre_tasks:
+    - name: Load 5G profile
+      include_vars:
+        file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
+        name: fiveg
+  roles:
+    - role: 5g/ueransim/config
+      when:
+        - ran == 'ueransim'
+        - core != 'oai'
+    - role: 5g/ueransim/deploy
+      when:
+        - ran == 'ueransim'
+        - core != 'oai'
 
 
 
@@ -459,12 +486,12 @@
         target_node: "{{ monitor_node_name | default('') }}"
       when:
         - monitoring_enabled | bool
+        - bridge_enabled | bool
         - monarch | bool
         - (monitor_node_name | default('')) | length > 0
         - core_node_name != ran_node_name
         - core_node_name != (monitor_node_name | default(''))
-
-
+      
 
 - name: 5G-Monarch Final Operations
   hosts: monitor_node

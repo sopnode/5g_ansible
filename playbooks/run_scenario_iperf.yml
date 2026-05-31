@@ -67,7 +67,7 @@
         name: scenarios/iperf/rfsim-ue-to-target_server
       when: rru == "rfsim"
 
-- name: Optionally run UE to target_server iperf tests from Faraday
+- name: Run R2lab UEs to target_server iperf tests from Faraday
   hosts: faraday
   vars:
     target_server_host: "{{ hostvars['localhost'].get('target_server_host', groups['iperf_server_node'][0]) }}"

@@ -82,6 +82,13 @@
                 spec:
                   nodeSelector:
                     monarch-node: "true"
+                  tolerations:
+                    - key: "node-role.kubernetes.io/control-plane"
+                      operator: "Exists"
+                      effect: "NoSchedule"
+                    - key: "test-eviction"
+                      operator: "Exists"
+                      effect: "NoSchedule"
 
 - name: Apply Kyverno policy
   command: kubectl apply -f /tmp/monarch-force-node.yaml
@@ -164,14 +171,10 @@
       requests \
       cryptography
 
-# === CRITICAL: Reactivate venv Python interpreter BEFORE any k8s modules ===
-# deploy_core.yml, deploy_nss.yml, and deploy_kepler.yml use kubernetes.core modules
-# which require the venv Python interpreter to be active
 - name: Force Ansible to use new venv Python (BEFORE all k8s operations)
   ansible.builtin.set_fact:
     ansible_python_interpreter: /opt/ansible-venv/bin/python
 
-# --- Deploy external Monarch components robustly (MUST BE BEFORE deploy_core) ---
 - name: Stop and remove old Monarch services
   ansible.builtin.systemd:
     name: "{{ item }}"
@@ -204,7 +207,6 @@
   failed_when: false
   changed_when: true
 
-# --- Patch systemd services to use venv Python ---
 - name: Replace Python interpreter in systemd service
   ansible.builtin.replace:
     path: "/etc/systemd/system/{{ item }}.service"
@@ -265,7 +267,6 @@
   when: item.stdout != "active"
   loop: "{{ service_status.results }}"
 
-# --- MongoDB nodeSelector patch ---
 - name: Append nodeSelector for MongoDB (exact indent, end of file)
   blockinfile:
     path: "{{ repo_dest }}/data_store/mongodb/mongodb-deployment.yaml"
@@ -276,21 +277,18 @@
             nodeSelector:
               kubernetes.io/hostname: {{ groups['monitor_node'][0] }}
 
-# --- Deploy Monarch core components (AFTER services are running) ---
 - name: Deploy Monarch Core Components (Data, Monitoring)
   ansible.builtin.debug:
     msg: "Starting deployment of Monarch core components..."
 
 - import_tasks: deploy_core.yml
 
-# --- Deploy Monarch NSS components ---
 - name: Deploy Monarch NSS Components (NSSDC, Prometheus)
   ansible.builtin.debug:
     msg: "Starting deployment of Monarch NSS components..."
 
 - import_tasks: deploy_nss.yml
 
-# --- Deploy Kepler (if enabled) ---
 - name: Deploy Kepler for monitoring (if enabled)
   ansible.builtin.debug:
     msg: "Starting deployment of Kepler for monitoring..."
