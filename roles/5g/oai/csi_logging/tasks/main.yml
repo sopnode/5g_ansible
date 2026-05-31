@@ -1,22 +1,9 @@
 ---
-- name: Create CSI output directory
-  file:
-    path: "/data/csi"
-    state: directory
-    mode: '0777'
-  become: true
 
 - name: Copy CSI visualization script
   copy:
-    src: csi_visualizer_oai.py
-    dest: "/usr/local/bin/csi_visualizer_oai.py"
-    mode: '0755'
-  become: true
-
-- name: Copy CSI filter script
-  copy:
-    src: csi_filter.py
-    dest: "/usr/local/bin/csi_filter.py"
+    src: streamlit_csi_visualizer_v6.0.py
+    dest: "/usr/local/bin/streamlit_csi_visualizer_v6.0.py"
     mode: '0755'
   become: true
 
@@ -28,26 +15,8 @@
     state: present
   become: true
 
-- name: Create convenience symlinks
-  file:
-    src: "/usr/local/bin/{{ item }}"
-    dest: "/usr/local/bin/{{ item | regex_replace('.py$', '') }}"
-    state: link
-  become: true
-  ignore_errors: true
-  loop:
-    - csi_visualizer_oai.py
-    - csi_filter.py
-
 - name: CSI tools configured
   debug:
     msg: |
-      CSI visualization and filtering tools ready
+      CSI visualization ready
       
-      Visualization:
-        csi_visualizer_oai.py /data/csi/csi_per_rb.csv
-        csi_visualizer_oai.py /data/csi/csi_per_rb.csv --realtime
-      
-      Filtering (RB range):
-        csi_filter.py --input raw.csv --output filtered.csv --level rb
-        csi_filter.py --input raw.csv --output filtered.csv --level rb --rb-selection range --rb-start 0 --rb-end 50
