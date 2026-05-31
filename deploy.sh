@@ -561,7 +561,7 @@ optional_scenarios() {
       "20_decomp_baseline_all_ues"
       "21_decomp_far_ue_radio"
       "22_decomp_upf_cpu_stress"
-      "23_decomp_iperf_server_cpu_stress"
+      "23_decomp_target_server_netem_delay"
     )
     VALIDATION_SCENARIOS=(
       "v01_candidate_signal_baseline"
@@ -616,7 +616,7 @@ optional_scenarios() {
                   add_tcp_paper_required_ue "qhat21"
                   add_tcp_paper_required_ue "qhat22"
                   ;;
-                "04_cross_slice_contention"|"06_mixed_ul_dl_near"|"07_fit02_interference_near_ul_dl"|"09_fit28_spatial_control_near_ul_dl"|"10_fit02_bidir_interference_near_trio"|"11_fit28_bidir_interference_near_trio"|"12_physical_near_far_qhat02"|"13_far_light_under_near_heavy_load"|"20_decomp_baseline_all_ues"|"21_decomp_far_ue_radio"|"22_decomp_upf_cpu_stress"|"23_decomp_iperf_server_cpu_stress")
+                "04_cross_slice_contention"|"06_mixed_ul_dl_near"|"07_fit02_interference_near_ul_dl"|"09_fit28_spatial_control_near_ul_dl"|"10_fit02_bidir_interference_near_trio"|"11_fit28_bidir_interference_near_trio"|"12_physical_near_far_qhat02"|"13_far_light_under_near_heavy_load"|"20_decomp_baseline_all_ues"|"21_decomp_far_ue_radio"|"22_decomp_upf_cpu_stress"|"23_decomp_target_server_netem_delay")
                   add_tcp_paper_required_ue "qhat01"
                   add_tcp_paper_required_ue "qhat02"
                   add_tcp_paper_required_ue "qhat03"
@@ -820,7 +820,7 @@ EOF
                   add_tcp_paper_required_ue "qhat21"
                   add_tcp_paper_required_ue "qhat22"
                   ;;
-                "04_cross_slice_contention"|"06_mixed_ul_dl_near"|"07_fit02_interference_near_ul_dl"|"09_fit28_spatial_control_near_ul_dl"|"10_fit02_bidir_interference_near_trio"|"11_fit28_bidir_interference_near_trio"|"12_physical_near_far_qhat02"|"13_far_light_under_near_heavy_load"|"20_decomp_baseline_all_ues"|"21_decomp_far_ue_radio"|"22_decomp_upf_cpu_stress"|"23_decomp_iperf_server_cpu_stress")
+                "04_cross_slice_contention"|"06_mixed_ul_dl_near"|"07_fit02_interference_near_ul_dl"|"09_fit28_spatial_control_near_ul_dl"|"10_fit02_bidir_interference_near_trio"|"11_fit28_bidir_interference_near_trio"|"12_physical_near_far_qhat02"|"13_far_light_under_near_heavy_load"|"20_decomp_baseline_all_ues"|"21_decomp_far_ue_radio"|"22_decomp_upf_cpu_stress"|"23_decomp_target_server_netem_delay")
                   add_tcp_paper_required_ue "qhat01"
                   add_tcp_paper_required_ue "qhat02"
                   add_tcp_paper_required_ue "qhat03"
@@ -1672,8 +1672,18 @@ run_scenario() {
     fi
 
     if [[ -n "${REQUESTED_EXPERIMENT_DURATION:-}" && -z "${paper_duration_override:-}" && -z "${validation_duration_override:-}" ]]; then
-      ANSIBLE_EXTRA_ARGS+=(-e "paper_duration=${REQUESTED_EXPERIMENT_DURATION}")
-      ANSIBLE_EXTRA_ARGS+=(-e "validation_duration=${REQUESTED_EXPERIMENT_DURATION}")
+      case "${REQUESTED_EXPERIMENT_MODE:-}" in
+        "tcp-paper")
+          ANSIBLE_EXTRA_ARGS+=(-e "paper_duration=${REQUESTED_EXPERIMENT_DURATION}")
+          ;;
+        "validation")
+          ANSIBLE_EXTRA_ARGS+=(-e "validation_duration=${REQUESTED_EXPERIMENT_DURATION}")
+          ;;
+        *)
+          ANSIBLE_EXTRA_ARGS+=(-e "paper_duration=${REQUESTED_EXPERIMENT_DURATION}")
+          ANSIBLE_EXTRA_ARGS+=(-e "validation_duration=${REQUESTED_EXPERIMENT_DURATION}")
+          ;;
+      esac
     fi
 
     if [[ -n "${REQUESTED_VALIDATION_TCP_BITRATE:-}" ]]; then
