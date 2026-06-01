@@ -22,11 +22,11 @@
 - name: Build final command
   set_fact:
     noise_cmd: >-
-      "timeout {{ time }} uhd_siggen --gaussian
+      timeout {{ time }} uhd_siggen --gaussian
       -f '{{ hostvars[groups['faraday'][0]].freq }}'
       -g '{{ hostvars[groups['faraday'][0]].gain }}'
       -s '{{ hostvars[groups['faraday'][0]].noise_bandwidth }}'
-      {{ usrp_args }} < /dev/null"
+      {{ usrp_args }} < /dev/null
   when: node == "n300" or node == "n320"
 
 - name: Show uhd_siggen command that will be executed
@@ -41,9 +41,12 @@
   when: node != "n300" and node != "n320"
 
 - name: Start Gaussian Noise Emission from {{ target_server_host }}
-  shell: "{{ noise_cmd }}"
+  shell: "{{ noise_cmd }} < /dev/null"
+  args:
+    executable: /bin/bash
+  environment:
+    LD_LIBRARY_PATH: "/usr/local/lib"
   delegate_to: "{{ target_server_host }}"
   ignore_errors: true
-  #no_log: true
   when: node == "n300" or node == "n320"
 
