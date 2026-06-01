@@ -159,11 +159,10 @@
     EXPECTED="{{ uhd_version | regex_replace('^[vV]', '') }}"
     [ "$VERSION" = "$EXPECTED" ] || \
       { echo "Version mismatch: got $VERSION expected $EXPECTED"; exit 1; }
-    BINS=$(find /usr/bin /usr/local/bin {{ install_prefix }}/bin \
-      -name "uhd_siggen" 2>/dev/null)
-    COUNT=$(echo "$BINS" | grep -c . || true)
+    COUNT=$(find /usr/bin /usr/local/bin {{ install_prefix }}/bin \
+      -name "uhd_siggen" 2>/dev/null | sort -u | wc -l)
     [ "$COUNT" -eq 1 ] || \
-      { echo "Expected 1 uhd_siggen binary, found $COUNT: $BINS"; exit 1; }
+      { echo "Expected 1 uhd_siggen, found $COUNT"; exit 1; }
     echo "OK: UHD $VERSION installed at {{ install_prefix }}"
   args:
     executable: /bin/bash
