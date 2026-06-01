@@ -45,7 +45,8 @@
   args:
     executable: /bin/bash
   environment:
-    LD_LIBRARY_PATH: "{{ install_prefix }}/lib:/usr/local/lib"
+    LD_LIBRARY_PATH: "{{ install_prefix }}/lib"
+    LD_PRELOAD: "{{ install_prefix }}/lib/libuhd.so.4.7.0"
   delegate_to: "{{ target_server_host }}"
   ignore_errors: true
   when: node == "n300" or node == "n320"
