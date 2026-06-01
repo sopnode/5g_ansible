@@ -1,5 +1,5 @@
 ---
-uhd_version: "UHD-4.7"
+uhd_version: "v4.7.0.0"
 install_prefix: "/usr/local"
 uhd_src_dir: "/tmp/uhd"       
 # Determine number of parallel make jobs automatically

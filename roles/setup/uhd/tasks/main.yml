@@ -2,11 +2,13 @@
 # ============================================================
 # Step 1: Detect Ubuntu version specifics
 # ============================================================
+
 - name: Set version-specific packages
   set_fact:
-    uhd_extra_pkgs: "{{ ['libvolk2-dev', 'libthrift-dev', 'thrift-compiler']
-                        if ansible_distribution_version is version('24.04', '<')
-                        else ['libvolk-dev', 'thrift'] }}"
+    uhd_extra_pkgs: "{{ ['libvolk-dev', 'thrift']
+                        if ansible_distribution_version is version('24.04', '>=')
+                        else ['libvolk2-dev', 'libthrift-dev', 'thrift-compiler'] }}"
+
 
 # ============================================================
 # Step 2: Check available disk space
@@ -108,8 +110,8 @@
       fail:
         msg: |
           UHD build failed.
-          - Check tag format: '{{ uhd_version }}' (expected e.g. 'UHD-4.7.0.0')
-          - Check disk space: {{ disk_space.stdout }}G available
+          - Check tag format: '{{ uhd_version }}' (expected e.g. 'v4.7.0.0')
+          - Disk space available: {{ disk_space.stdout }}G
           - Git clone status: {{ git_clone.failed | default('unknown') }}
 
 # ============================================================
