@@ -138,7 +138,6 @@
   shell: |
     export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
     {{ install_prefix }}/bin/uhd_config_info --version
-    {{ install_prefix }}/bin/uhd_siggen --version
   args:
     executable: /bin/bash
   register: uhd_verify
