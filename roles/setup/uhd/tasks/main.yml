@@ -9,6 +9,9 @@
                         if ansible_distribution_version is version('24.04', '>=')
                         else ['libvolk2-dev', 'libthrift-dev', 'thrift-compiler'] }}"
 
+- name: Debug volk package selection
+  debug:
+    msg: "Ubuntu {{ ansible_distribution_version }} -> pkgs: {{ uhd_extra_pkgs }}"
 
 # ============================================================
 # Step 2: Check available disk space
