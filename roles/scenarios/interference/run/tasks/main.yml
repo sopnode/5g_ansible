@@ -26,7 +26,7 @@
       -f '{{ hostvars[groups['faraday'][0]].freq }}'
       -g '{{ hostvars[groups['faraday'][0]].gain }}'
       -s '{{ hostvars[groups['faraday'][0]].noise_bandwidth }}'
-      {{ usrp_args }} < /dev/null
+      {{ usrp_args }}
   when: node == "n300" or node == "n320"
 
 - name: Show uhd_siggen command that will be executed
