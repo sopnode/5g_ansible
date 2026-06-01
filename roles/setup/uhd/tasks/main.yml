@@ -16,6 +16,13 @@
 
 - name: Build UHD only if target versions not installed
   block:
+    - name: Remove conflicting system UHD libs
+      shell: |
+        find /usr/lib -name "libuhd*" -delete 2>/dev/null || true
+        ldconfig
+      args:
+        executable: /bin/bash
+
     - name: Ensure required packages are installed (Ubuntu/Debian)
       apt:
         name:

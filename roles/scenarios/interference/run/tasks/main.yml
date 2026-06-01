@@ -41,11 +41,11 @@
   when: node != "n300" and node != "n320"
 
 - name: Start Gaussian Noise Emission from {{ target_server_host }}
-  shell: "{{ noise_cmd }} < /dev/null"
+  shell: "{{ noise_cmd }}"
   args:
     executable: /bin/bash
   environment:
-    LD_LIBRARY_PATH: "/usr/local/lib"
+    LD_LIBRARY_PATH: "{{ install_prefix }}/lib:/usr/local/lib"
   delegate_to: "{{ target_server_host }}"
   ignore_errors: true
   when: node == "n300" or node == "n320"
