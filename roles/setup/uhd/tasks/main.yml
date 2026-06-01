@@ -33,36 +33,16 @@
   when: disk_space.stdout | int < 5
 
 # ============================================================
-# Step 4: Purge all existing UHD installations
+# Step 4: Install uhd-host apt package (provides uhd_siggen)
 # ============================================================
-- name: Get installed UHD apt packages
-  shell: dpkg -l | awk '/uhd/ {print $2}'
-  args:
-    executable: /bin/bash
-  register: uhd_packages
-  changed_when: false
-
-- name: Purge system UHD apt packages
+- name: Install uhd-host from apt
   apt:
-    name: "{{ uhd_packages.stdout_lines }}"
-    state: absent
-    purge: yes
-  when: uhd_packages.stdout_lines | length > 0
-
-- name: Remove all UHD binaries, libs and Python bindings
-  shell: |
-    find /usr/bin /usr/local/bin {{ install_prefix }}/bin \
-      -name "uhd_*" -type f -delete 2>/dev/null || true
-    find /usr/lib /usr/local/lib {{ install_prefix }}/lib \
-      -name "libuhd*" -delete 2>/dev/null || true
-    find /usr/lib/python3 /usr/local/lib/python3* {{ install_prefix }}/lib/python3* \
-      -type d -name "uhd" -exec rm -rf {} + 2>/dev/null || true
-    ldconfig
-  args:
-    executable: /bin/bash
+    name: uhd-host
+    state: present
+    update_cache: yes
 
 # ============================================================
-# Step 5: Check if correct version already installed
+# Step 5: Check if correct UHD version already installed
 # ============================================================
 - name: Check installed UHD version
   shell: |
@@ -86,7 +66,6 @@
                    'libusb-1.0-0-dev', 'libspdlog-dev',
                    'python3-mako', 'python3-numpy', 'python3-ruamel.yaml'] + uhd_extra_pkgs }}"
         state: present
-        update_cache: yes
 
     - name: Clone UHD {{ uhd_version }}
       git:
@@ -105,7 +84,6 @@
         cmake ../ \
           -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
           -DENABLE_PYTHON_API=ON \
-          -DENABLE_UTILS=ON \
           -DENABLE_TESTS=OFF
         make -j{{ make_jobs | default(ansible_processor_vcpus | default(4)) }}
         make install
@@ -142,7 +120,19 @@
     executable: /bin/bash
 
 # ============================================================
-# Step 8: Final verification
+# Step 8: Wrap uhd_siggen to use correct libs
+# ============================================================
+- name: Create uhd_siggen wrapper
+  copy:
+    dest: "{{ install_prefix }}/bin/uhd_siggen"
+    content: |
+      #!/bin/bash
+      export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
+      exec /usr/bin/uhd_siggen "$@"
+    mode: '0755'
+
+# ============================================================
+# Step 9: Final verification
 # ============================================================
 - name: Verify UHD installation
   shell: |
