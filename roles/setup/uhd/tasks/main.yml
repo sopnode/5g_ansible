@@ -1,148 +1,113 @@
 ---
-# ============================================================
-# Step 1: Gather facts on delegated host
-# ============================================================
-- name: Gather facts on delegated host
-  setup:
-    gather_subset: ['distribution']
-  delegate_to: "{{ target_server_host }}"
-  delegate_facts: true
-
-# ============================================================
-# Step 2: Set version-specific packages
-# ============================================================
-- name: Set version-specific packages
-  set_fact:
-    uhd_extra_pkgs: "{{ ['libvolk-dev', 'thrift']
-                        if hostvars[target_server_host]['ansible_distribution_version'] is version('24.04', '>=')
-                        else ['libvolk2-dev', 'libthrift-dev', 'thrift-compiler'] }}"
-
-# ============================================================
-# Step 3: Check available disk space
-# ============================================================
-- name: Check available disk space
-  shell: df -BG {{ uhd_src_dir | dirname }} | awk 'NR==2 {print $4}' | tr -d 'G'
-  args:
-    executable: /bin/bash
-  register: disk_space
-  changed_when: false
-
-- name: Fail if insufficient disk space
-  fail:
-    msg: "Insufficient disk space: {{ disk_space.stdout }}G available, 5G required"
-  when: disk_space.stdout | int < 5
-
-# ============================================================
-# Step 4: Install uhd-host apt package (provides uhd_siggen)
-# ============================================================
-- name: Install uhd-host from apt
-  apt:
-    name: uhd-host
-    state: present
-    update_cache: yes
-
-# ============================================================
-# Step 5: Check if correct UHD version already installed
-# ============================================================
-- name: Check installed UHD version
+- name: Check if UHD is installed
   shell: |
+    export PATH={{ install_prefix }}/bin:$PATH
     export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
-    {{ install_prefix }}/bin/uhd_config_info --version 2>/dev/null || echo "none"
+    uhd_config_info --version || echo "none"
   args:
     executable: /bin/bash
   register: uhd_check
   changed_when: false
 
-# ============================================================
-# Step 6: Build and install UHD if needed
-# ============================================================
-- name: Build and install UHD
-  when: uhd_version not in uhd_check.stdout
-  block:
-    - name: Install build dependencies
-      apt:
-        name: "{{ ['build-essential', 'cmake', 'git', 'python3-dev',
-                   'libboost-all-dev', 'libgmp-dev', 'libfftw3-dev',
-                   'libusb-1.0-0-dev', 'libspdlog-dev',
-                   'python3-mako', 'python3-numpy', 'python3-ruamel.yaml'] + uhd_extra_pkgs }}"
-        state: present
+- name: Display installed UHD/GNU Radio versions
+  debug:
+    msg: |
+      UHD installed: {{ uhd_check.stdout | default('none') }}
 
-    - name: Clone UHD {{ uhd_version }}
+- name: Build UHD only if target versions not installed
+  block:
+    - name: Ensure required packages are installed (Ubuntu/Debian)
+      apt:
+        name:
+          - build-essential
+          - cmake
+          - git
+          - python3-dev
+          - python3-numpy
+          - python3-mako
+          - python3-ruamel.yaml
+          - libboost-all-dev
+          - libgmp-dev
+          - libfftw3-dev
+          - libusb-1.0-0-dev
+          - libvolk2-dev
+          - libspdlog-dev
+        state: present
+        update_cache: yes
+
+    # --- Clean old UHD/GNU Radio builds ---
+    - name: Clean previous UHD build
+      file:
+        path: "{{ uhd_src_dir }}"
+        state: absent
+
+    # --- Clone UHD ---
+    - name: Clone UHD sources
       git:
-        repo: https://github.com/EttusResearch/uhd.git
+        repo: "https://github.com/EttusResearch/uhd.git"
         version: "{{ uhd_version }}"
         dest: "{{ uhd_src_dir }}"
         depth: 1
         force: yes
 
+    # --- Build UHD ---
     - name: Build and install UHD
       shell: |
         set -e
-        rm -rf {{ uhd_src_dir }}/host/build
         mkdir -p {{ uhd_src_dir }}/host/build
         cd {{ uhd_src_dir }}/host/build
         cmake ../ \
           -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
           -DENABLE_PYTHON_API=ON \
           -DENABLE_TESTS=OFF
-        make -j{{ make_jobs | default(ansible_processor_vcpus | default(4)) }}
+        make -j{{ make_jobs }}
         make install
         ldconfig
       args:
         executable: /bin/bash
 
-  rescue:
-    - name: Fail with context
-      fail:
-        msg: "UHD build failed for version '{{ uhd_version }}' on {{ target_server_host }}"
-
-# ============================================================
-# Step 7: Configure environment
-# ============================================================
-- name: Configure UHD environment
-  copy:
-    dest: "{{ item.dest }}"
-    content: "{{ item.content }}"
-    mode: "{{ item.mode }}"
-  loop:
-    - dest: /etc/profile.d/uhd.sh
-      content: |
+    # --- Verify UHD installation ---
+    - name: Verify UHD installation
+      shell: |
         export PATH={{ install_prefix }}/bin:$PATH
         export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
-      mode: "0755"
-    - dest: /etc/ld.so.conf.d/uhd.conf
-      content: "{{ install_prefix }}/lib\n"
-      mode: "0644"
+        uhd_config_info --version
+      args:
+        executable: /bin/bash
+      register: uhd_verify
+      failed_when: uhd_verify.rc != 0
 
-- name: Reload library cache
-  shell: ldconfig
-  args:
-    executable: /bin/bash
+    - name: Display UHD version
+      debug:
+        msg: "UHD installed: {{ uhd_verify.stdout }}"
 
-# ============================================================
-# Step 8: Wrap uhd_siggen to use correct libs
-# ============================================================
-- name: Create uhd_siggen wrapper
-  copy:
-    dest: "{{ install_prefix }}/bin/uhd_siggen"
-    content: |
-      #!/bin/bash
-      export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
-      exec /usr/bin/uhd_siggen "$@"
-    mode: '0755'
+    # --- Library cache & PATH ---
+    - name: Update library cache
+      shell: ldconfig
+      args:
+        executable: /bin/bash
 
-# ============================================================
-# Step 9: Final verification
-# ============================================================
-- name: Verify UHD installation
-  shell: |
-    export LD_LIBRARY_PATH={{ install_prefix }}/lib:$LD_LIBRARY_PATH
-    {{ install_prefix }}/bin/uhd_config_info --version
-  args:
-    executable: /bin/bash
-  register: uhd_verify
-  changed_when: false
+    - name: Ensure /usr/local/bin is in PATH
+      copy:
+        dest: /etc/profile.d/usr_local_bin.sh
+        content: 'export PATH={{ install_prefix }}/bin:$PATH'
+        owner: root
+        group: root
+        mode: '0755'
 
-- name: UHD install summary
-  debug:
-    msg: "{{ uhd_verify.stdout_lines }}"
+    - name: Update LD_LIBRARY_PATH
+      copy:
+        dest: /etc/ld.so.conf.d/usr_local.conf
+        content: '{{ install_prefix }}/lib'
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reload library cache
+      shell: ldconfig
+      args:
+        executable: /bin/bash
+
+  when:
+    - uhd_check.stdout | default('none') | trim != uhd_version
+
