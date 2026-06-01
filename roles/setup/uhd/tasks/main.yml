@@ -3,10 +3,17 @@
 # Step 1: Detect Ubuntu version specifics
 # ============================================================
 
+- name: Gather facts on delegated host
+  setup:
+    gather_subset: ['distribution']
+  delegate_to: "{{ target_server_host }}"
+  delegate_facts: true
+  run_once: true
+
 - name: Set version-specific packages
   set_fact:
     uhd_extra_pkgs: "{{ ['libvolk-dev', 'thrift']
-                        if ansible_distribution_version is version('24.04', '>=')
+                        if hostvars[target_server_host]['ansible_distribution_version'] is version('24.04', '>=')
                         else ['libvolk2-dev', 'libthrift-dev', 'thrift-compiler'] }}"
 
 - name: Debug volk package selection
