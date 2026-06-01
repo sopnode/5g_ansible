@@ -58,5 +58,5 @@
       debug:
         msg:
           - "Target server = {{ target_server | default('core_node') }}"
-          - "{{ final_check.stdout_lines }}"      debug:
+          - "{{ final_check.stdout_lines }}"
 
