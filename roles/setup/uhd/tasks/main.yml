@@ -33,7 +33,8 @@
           - python3-numpy
           - python3-mako
           - python3-ruamel.yaml
-          - libboost-all-dev
+          - libboost-all-dev 
+          - libboost-program-options-dev
           - libgmp-dev
           - libfftw3-dev
           - libusb-1.0-0-dev
@@ -66,7 +67,9 @@
         cmake ../ \
           -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
           -DENABLE_PYTHON_API=ON \
-          -DENABLE_TESTS=OFF
+          -DENABLE_TESTS=OFF \
+          -DENABLE_UTILS=ON \
+          -DENABLE_EXAMPLES=OFF
         make -j{{ make_jobs }}
         make install
         ldconfig
