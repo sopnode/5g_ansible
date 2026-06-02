@@ -155,10 +155,15 @@
         set -e
         mkdir -p {{ gnuradio_src_dir }}/build
         cd {{ gnuradio_src_dir }}/build
+        ldconfig
         cmake ../ \
           -DCMAKE_INSTALL_PREFIX={{ install_prefix }} \
           -DCMAKE_PREFIX_PATH={{ install_prefix }} \
+          -DCMAKE_LIBRARY_PATH={{ install_prefix }}/lib \
+          -DCMAKE_INCLUDE_PATH={{ install_prefix }}/include \
           -DUHD_DIR={{ install_prefix }}/lib/cmake/uhd \
+          -DUHD_LIBRARIES={{ install_prefix }}/lib/libuhd.so \
+          -DUHD_INCLUDE_DIRS={{ install_prefix }}/include \
           -DENABLE_DEFAULT=OFF \
           -DENABLE_GNURADIO_RUNTIME=ON \
           -DENABLE_PYTHON=ON \
