@@ -3,9 +3,9 @@
   set_fact:
     usrp_args: >-
       {% if node == "n320" %}
-      --args="product=n320,serial=31B3A77,addr=192.168.235.105,master_clock_rate=245.76e6"
+      --args="product=n320,serial=31B3A77,addr=192.168.235.105,mgmt_addr=192.168.235.105,master_clock_rate=245.76e6"
       {% elif node == "n300" %}
-      --args="product=n300,serial=31D98C7"
+      --args="product=n300,serial=31D98C7,addr=192.168.235.103,mgmt_addr=192.168.235.103"
       {% else %}{% endif %}
 
 - name: Build final command
