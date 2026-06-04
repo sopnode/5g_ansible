@@ -21,7 +21,7 @@
     - name: Reload systemd after property changes
       ansible.builtin.systemd:
         daemon_reload: yes
-  when: rru == "aw2s"
+  when: rru == "jaguar" or rru == "panther"
 
 # -----------------------------------------------------------------
 # gNB launch
@@ -132,7 +132,7 @@
       ansible.builtin.command: /usr/local/bin/oai-irq-setup.sh
       changed_when: true
 
-  when: rru == "aw2s"
+  when: rru == "jaguar" or rru == "panther"
 
 # -----------------------------------------------------------------
 # NR-UE launch (rfsim only)
