@@ -1,0 +1,74 @@
+#!/bin/bash
+# OAI AW2S fronthaul IRQ and CPU pinning script
+# Auto-detects physical interface and NIC driver from the fronthaul VLAN name
+set -euo pipefail
+
+OAI_CPUS=({{ oai_cpus | join(' ') }})
+FH_IFACE="{{ fronthaul_iface }}"
+RT_RANGE="{{ rt_cpu_range }}"
+N=${#OAI_CPUS[@]}
+
+# Resolve the physical interface underlying a VLAN or macvlan interface.
+# Tries /proc/net/vlan first (kernel 802.1Q), then ip-link (other VLAN types),
+# then falls back to the interface name itself if it is already physical.
+detect_phys_iface() {
+  local iface=$1
+  local phys
+  phys=$(cat /proc/net/vlan/"$iface" 2>/dev/null | awk '/Device:/{print $2}')
+  [ -z "$phys" ] && phys=$(ip -d link show "$iface" 2>/dev/null \
+    | grep -oP '(?<=link )\S+' | head -1)
+  [ -z "$phys" ] && phys=$iface
+  echo "$phys"
+}
+
+PHYS=$(detect_phys_iface "$FH_IFACE")
+DRIVER=$(ethtool -i "$PHYS" 2>/dev/null | awk '/^driver:/{print $2}')
+echo "Fronthaul interface: $FH_IFACE -> physical=$PHYS driver=$DRIVER"
+
+# Select IRQ pattern based on NIC driver
+case "$DRIVER" in
+  ice)    IRQ_PATTERN="ice-${PHYS}-TxRx" ;;
+  mlx5*)  IRQ_PATTERN="mlx5_comp" ;;
+  *)
+    echo "Unsupported driver: $DRIVER - aborting."
+    exit 1
+    ;;
+esac
+
+# Step 1 - Disable irqbalance to prevent it from overwriting our IRQ affinity
+echo "[1/4] Disabling irqbalance"
+systemctl stop irqbalance 2>/dev/null || true
+systemctl disable irqbalance 2>/dev/null || true
+
+# Step 2 - Reduce active NIC queues to match the number of OAI CPUs.
+#          Fewer queues mean fewer IRQs to manage and better locality.
+echo "[2/4] Reducing NIC queues to $N"
+ethtool -L "$PHYS" combined "$N" 2>/dev/null \
+  && echo "  $PHYS combined=$N OK" \
+  || echo "  $PHYS SKIP (not supported by driver)"
+
+# Step 3 - Pin each NIC IRQ to one of the OAI CPUs in round-robin.
+#          This co-locates softirq NET_RX with the udp read/write threads,
+#          eliminating cross-core packet handoff on the fronthaul data path.
+echo "[3/4] Pinning IRQs matching '$IRQ_PATTERN' to OAI CPUs"
+IDX=0
+while IFS= read -r irq; do
+  CPU=${OAI_CPUS[$((IDX % N))]}
+  echo "$CPU" > /proc/irq/"$irq"/smp_affinity_list
+  echo "  IRQ $irq -> CPU $CPU"
+  IDX=$((IDX + 1))
+done < <(grep "$IRQ_PATTERN" /proc/interrupts | awk -F: '{print $1}' | tr -d ' ')
+
+if [ "$IDX" -eq 0 ]; then
+  echo "  WARNING: no IRQs found matching pattern '$IRQ_PATTERN'"
+fi
+
+# Step 4 - Constrain ru_thread to the RT CPU range.
+#          OAI launches ru_thread with affinity 0-N which may land it on
+#          housekeeping CPUs; force it into the isolated RT range.
+echo "[4/4] Constraining ru_thread to RT CPUs ($RT_RANGE)"
+while IFS= read -r tid; do
+  taskset -pc "$RT_RANGE" "$tid" 2>/dev/null || true
+done < <(ps -eLo tid,comm | awk '/ru_thread/{print $1}')
+
+echo "Done."
