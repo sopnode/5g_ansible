@@ -141,7 +141,8 @@ init_defaults_and_banner() {
     DEFAULT_RAN="oai"
     DEFAULT_PLATFORM="r2lab"
     DEFAULT_RU="n300"
-    DEFAULT_LIST_UE="qhat01"
+    DEFAULT_LIST_QHAT_UE="qhat01"
+    DEFAULT_LIST_QFIT_UE=""
 
     PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
   
@@ -324,7 +325,8 @@ collect_user_inputs() {
     fi
 
     R2LAB_RU="$platform" # if rfsim, RU is "rfsim"
-    R2LAB_UES=()
+    R2LAB_QHAT_UES=()
+    R2LAB_QFIT_UES=()
 
     # If R2Lab platform is selected, ask for RU and UEs
     if [[ "$platform" == "r2lab" ]]; then
@@ -365,21 +367,42 @@ collect_user_inputs() {
       esac
 
       QHATS=("qhat01" "qhat02" "qhat03" "qhat10" "qhat11")
-      # Select UEs
+      # Select qhat UEs
       # Allow multiple selections
       # Make qhat01 the default if the user just presses enter
       echo ""
-      echo "Select the UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_UE}):"
+      echo "Select the qhat UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QHAT_UE}):"
       for i in "${!QHATS[@]}"; do
         echo "$((i + 1))) ${QHATS[i]}"
       done
       read -rp "Enter your choices: " -a ue_choices
       if [[ "${#ue_choices[@]}" -eq 0 ]]; then
-        R2LAB_UES=("${DEFAULT_LIST_UE}")
+        R2LAB_QHAT_UES=("${DEFAULT_LIST_QHAT_UE}")
       else
         for choice in "${ue_choices[@]}"; do
           if [[ "$choice" -ge 1 && "$choice" -le "${#QHATS[@]}" ]]; then
-            R2LAB_UES+=("${QHATS[$((choice - 1))]}")
+            R2LAB_QHAT_UES+=("${QHATS[$((choice - 1))]}")
+          else
+            echo "❌ Invalid UE choice: $choice"
+            exit 1
+          fi
+        done
+      fi
+      QFITS=("qhat01" "qhat02" "qhat03" "qhat10" "qhat11")
+      # Select qfit UEs (Quectel RM500Q-GL attached to some FIT nodes)
+      # Allow multiple selections
+      echo ""
+      echo "Select the qfit UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QFIT_UE}):"
+      for i in "${!QFITS[@]}"; do
+        echo "$((i + 1))) ${QFITS[i]}"
+      done
+      read -rp "Enter your choices: " -a ue_choices
+      if [[ "${#ue_choices[@]}" -eq 0 ]]; then
+        R2LAB_QFIT_UES=("${DEFAULT_LIST_QFIT_UE}")
+      else
+        for choice in "${ue_choices[@]}"; do
+          if [[ "$choice" -ge 1 && "$choice" -le "${#QFITS[@]}" ]]; then
+            R2LAB_QFIT_UES+=("${QFITS[$((choice - 1))]}")
           else
             echo "❌ Invalid UE choice: $choice"
             exit 1
@@ -440,7 +463,7 @@ optional_scenarios() {
       echo ""
       echo "Select the scenario to run:"
       options=()
-      if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
+      if [[ "$platform" == "r2lab" && ( "${#R2LAB_QHAT_UES[@]}" -ge 1 || "${#R2LAB_QFIT_UES[@]}" -ge 1 ) ]]; then
         options+=("$SCENARIO_R2LAB")
         options+=("$SCENARIO_R2LAB_INTERFERENCE")
         options+=("$SCENARIO_R2LAB_MULTI")
@@ -633,7 +656,7 @@ print_summary() {
     echo "RAN:         $ran on ${ran_node}"
     [[ "$monitoring_enabled" == true ]] && echo "Monitoring:  enabled on $monitor_node" || echo "Monitoring:  disabled"
     echo "Platform:    $platform"
-    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_UES[*]}"
+    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_QHAT_UES[*] ${R2LAB_QFIT_UES[*]}"
     if [[ "$run_interference_test" == true ]]; then
       echo "Interference Test: enabled"
       echo "  Interference USRP: $noise_usrp"
@@ -653,7 +676,7 @@ print_summary() {
       echo "  Scenario: $scenario"
       case "$scenario" in
         "$SCENARIO_R2LAB")
-          echo "Will run iperf in a sequential way on ${R2LAB_UES[0]} for 30 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
+          echo "Will run iperf in a sequential way on ${R2LAB_QHAT_UES[0]} for 30 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
         ;;
         "$SCENARIO_RFSIM")
           echo "Will run iperf sequentially OAI-NR-UE1, OAI-NR-UE2 and OAI-NR-UE3 for 30 seconds each with an in-between wait time of 5 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
@@ -662,10 +685,10 @@ print_summary() {
           echo "Will run iperf with interference (to explain further)"
         ;;
         "$SCENARIO_R2LAB_MULTI")
-          echo "Will run iperf on each UE individually (${R2LAB_UES[0]}), and then all UEs simultaneously.  Will test uplink and downlink for both TCP and UDP.  Each test lasts 30s (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
+          echo "Will run iperf on each UE individually (${R2LAB_QHAT_UES[0]}), and then all UEs simultaneously.  Will test uplink and downlink for both TCP and UDP.  Each test lasts 30s (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
         ;;
         "$SCENARIO_R2LAB_PING")
-          echo "Will run ping from each UE individually (${R2LAB_UES[0]}), and then all UEs simultaneously.  Each test lasts 30s (use the ping_duration and ping_sleep ansible parameters to change the default values (in s))"
+          echo "Will run ping from each UE individually (${R2LAB_QHAT_UES[0]}), and then all UEs simultaneously.  Each test lasts 30s (use the ping_duration and ping_sleep ansible parameters to change the default values (in s))"
         ;;
       esac
       echo "iperf server will run on the bare-metal ${iperf_server_node} server."
@@ -791,9 +814,20 @@ $faraday_opts
 [qhats]
 EOF
     fi
+    if [[ "$platform" == "r2lab" ]]; then
+      for ue in "${R2LAB_QHAT_UES[@]}" ; do
+        echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
+      done
+    fi
 
     if [[ "$platform" == "r2lab" ]]; then
-      for ue in "${R2LAB_UES[@]}"; do
+	cat >> "$INVENTORY" <<EOF
+
+[qfits]
+EOF
+    fi
+    if [[ "$platform" == "r2lab" ]]; then
+      for ue in "${R2LAB_QFIT_UES[@]}" ; do
         echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
       done
     fi
