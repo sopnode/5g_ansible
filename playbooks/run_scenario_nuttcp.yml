@@ -47,7 +47,35 @@
             IP: {{ target_server_ip }}
       run_once: true
 
-- name: Run iperf servers on target server
+    # - name: Define nuttcp version number
+    #   set_fact:
+    #     nuttcp_version: "8.1.4"
+    #   run_once: true
+
+    - name: Check if local archive of nuttcp code exists
+      ansible.builtin.stat:
+        path: ../include/nuttcp.tar.gz
+      register: nuttcp_exists
+      
+    - name: Download nuttcp unless local archive already exists
+      ansible.builtin.shell: |
+        wget -r -np -nH --cut-dirs=2 -R '*C=*O=*' -P ../include/nuttcp https://nuttcp.net/nuttcp/nuttcp-8.1.4/
+      when: not nuttcp_exists.stat.exists
+
+    - name: Compress nuttcp code unless archive already exists
+      community.general.archive:
+        path: ../include/nuttcp/
+        dest: ../include/nuttcp.tar.gz
+        format: gz
+      when: not nuttcp_exists.stat.exists
+
+- name: Install nuttcp on target server
+  hosts: "{{ hostvars['localhost'].get('target_server_host', groups['iperf_server_node'][0]) }}"
+  tasks:
+    - name: Install nuttcp on target server
+      include_tasks: ../roles/scenarios/nuttcp/clients/tasks/install.yml
+
+- name: Run nuttcp servers on target server
   hosts: "{{ hostvars['localhost'].get('target_server_host', groups['iperf_server_node'][0]) }}"
   become: true
   vars:
@@ -56,7 +84,7 @@
     ignore_task_errors: yes
     nb_ues: "{{ 3 if rru == 'rfsim' else groups['qhats'] | length }}"
   roles:
-    - role: scenarios/iperf/multi-ue/server
+    - role: scenarios/nuttcp/server
 
 # - name: Run RFSIM UE iperf tests (only if rru=rfsim)
 #   hosts: core_node
@@ -81,5 +109,5 @@
     nb_ues: "{{ groups['qhats'] | length }}"
     target_server_ip: "{{ hostvars[target_server_host]['ip'] }}"
   roles:
-    - role: scenarios/iperf/multi-ue/clients
+    - role: scenarios/nuttcp/clients
       when: rru != "rfsim"

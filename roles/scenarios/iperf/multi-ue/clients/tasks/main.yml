@@ -20,6 +20,7 @@
     loop_var: current_ue
     index_var: ue_index
   vars:
+    iperf_port: "{{ 5201 + ue_index }}"
     ignore_task_errors: true
 
 - name: Filter out UEs without IP
@@ -34,7 +35,7 @@
 
 - name: Warn about UEs without IP
   debug:
-    msg: "Warning: UE {{ item }} has no IP and will be skipped in ping tests"
+    msg: "Warning: UE {{ item }} has no IP and will be skipped in iperf tests"
   loop: "{{ groups['qhats'] | difference(valid_ue_list) }}"
   when: (groups['qhats'] | difference(valid_ue_list)) | length > 0
 
@@ -49,9 +50,20 @@
 
 - name: Wipe remote log directories
   ansible.builtin.file:
-    path: "/tmp/ping_logs"
+    path: "/tmp/iperf_logs"
     state: absent
   loop: "{{ valid_ue_list }}"
+
+- name: Copy snmp_stats script
+  ansible.builtin.copy:
+    src: ../debug-scripts/snmp_stats.sh
+    dest: /usr/local/bin/snmp_stats.sh
+    mode: '0755'
+  become: true
+  loop: "{{ valid_ue_list }}"
+  loop_control:
+    loop_var: current_ue
+  delegate_to: "{{ current_ue }}"
 
 - name: Copy inventory file
   ansible.builtin.copy:
@@ -59,8 +71,8 @@
     dest: "{{ results_dir }}/hosts.ini"
   delegate_to: localhost
 
-- name: Execute ping tests for all connected UEs individually
-  include_tasks: ping_execution.yml
+- name: Execute iperf tests for all connected UEs individually
+  include_tasks: iperf_execution.yml
   loop: "{{ valid_ue_list }}"
   loop_control:
     loop_var: current_ue
@@ -68,23 +80,27 @@
   vars:
     ue_count: 1
     ue_ip: "{{ ue_ips[current_ue] }}"
+    iperf_port: "{{ 5201 + ue_index }}"
     ignore_task_errors: true
+  when: "{{ do_individual_tests }}"
 
-- name: Execute ping tests for all connected UEs simultaneously
-  include_tasks: ping_execution_async.yml
-  loop: "{{ ping_scenarios }}"
+- name: Execute iperf tests for all connected UEs simultaneously
+  include_tasks: iperf_execution_async.yml
+  loop: "{{ iperf_scenarios }}"
   loop_control:
     loop_var: scenario
   vars:
     ue_count: "{{ valid_ue_list|length }}"
-    packet_size: "{{ scenario.packet_size }}"
+    direction: "{{ scenario.direction }}"
+    protocol: "{{ scenario.protocol }}"
     extra_args: "{{ scenario.extra_args }}"
     ignore_task_errors: true
+  when: "{{ do_simultaneous_tests }}"
 
 - name: Archive logs
   community.general.archive:
-    path: /tmp/ping_logs/
-    dest: /tmp/ping_logs.tar.gz
+    path: /tmp/iperf_logs/
+    dest: /tmp/iperf_logs.tar.gz
     format: gz
   loop: "{{ valid_ue_list }}"
   loop_control:
@@ -93,7 +109,7 @@
 
 - name: Fetch archived logs
   ansible.builtin.fetch:
-    src: /tmp/ping_logs.tar.gz
+    src: /tmp/iperf_logs.tar.gz
     dest: "{{ results_dir }}/{{ current_ue }}_logs.tar.gz"
     flat: yes
   loop: "{{ valid_ue_list }}"

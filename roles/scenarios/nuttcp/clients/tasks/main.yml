@@ -20,7 +20,8 @@
     loop_var: current_ue
     index_var: ue_index
   vars:
-    iperf_port: "{{ 5201 + ue_index }}"
+    nuttcp_data_port: "{{ 5000 + ue_index }}"
+    nuttcp_control_port: "{{ 5500 + ue_index }}"
     ignore_task_errors: true
 
 - name: Filter out UEs without IP
@@ -35,9 +36,18 @@
 
 - name: Warn about UEs without IP
   debug:
-    msg: "Warning: UE {{ item }} has no IP and will be skipped in iperf tests"
+    msg: "Warning: UE {{ item }} has no IP and will be skipped in nuttcp tests"
   loop: "{{ groups['qhats'] | difference(valid_ue_list) }}"
   when: (groups['qhats'] | difference(valid_ue_list)) | length > 0
+
+- name: Install nuttcp on UEs
+  include_tasks:
+    file: install.yml
+    apply:
+      delegate_to: "{{ current_ue }}"
+  loop: "{{ valid_ue_list }}"
+  loop_control:
+    loop_var: current_ue
 
 - name: Create local log directories
   ansible.builtin.file:
@@ -50,9 +60,20 @@
 
 - name: Wipe remote log directories
   ansible.builtin.file:
-    path: "/tmp/iperf_logs"
+    path: "/tmp/nuttcp_logs"
     state: absent
   loop: "{{ valid_ue_list }}"
+
+- name: Copy snmp_stats script
+  ansible.builtin.copy:
+    src: ../debug-scripts/snmp_stats.sh
+    dest: /usr/local/bin/snmp_stats.sh
+    mode: '0755'
+  become: true
+  loop: "{{ valid_ue_list }}"
+  loop_control:
+    loop_var: current_ue
+  delegate_to: "{{ current_ue }}"
 
 - name: Copy inventory file
   ansible.builtin.copy:
@@ -60,8 +81,8 @@
     dest: "{{ results_dir }}/hosts.ini"
   delegate_to: localhost
 
-- name: Execute iperf tests for all connected UEs individually
-  include_tasks: iperf_execution.yml
+- name: Execute nuttcp tests for all connected UEs individually
+  include_tasks: nuttcp_execution.yml
   loop: "{{ valid_ue_list }}"
   loop_control:
     loop_var: current_ue
@@ -69,12 +90,14 @@
   vars:
     ue_count: 1
     ue_ip: "{{ ue_ips[current_ue] }}"
-    iperf_port: "{{ 5201 + ue_index }}"
+    nuttcp_data_port: "{{ 5000 + ue_index }}"
+    nuttcp_control_port: "{{ 5500 + ue_index }}"
     ignore_task_errors: true
+  when: do_individual_tests
 
-- name: Execute iperf tests for all connected UEs simultaneously
-  include_tasks: iperf_execution_async.yml
-  loop: "{{ iperf_scenarios }}"
+- name: Execute nuttcp tests for all connected UEs simultaneously
+  include_tasks: nuttcp_execution_async.yml
+  loop: "{{ nuttcp_scenarios }}"
   loop_control:
     loop_var: scenario
   vars:
@@ -83,11 +106,12 @@
     protocol: "{{ scenario.protocol }}"
     extra_args: "{{ scenario.extra_args }}"
     ignore_task_errors: true
+  when: do_simultaneous_tests
 
 - name: Archive logs
   community.general.archive:
-    path: /tmp/iperf_logs/
-    dest: /tmp/iperf_logs.tar.gz
+    path: /tmp/nuttcp_logs/
+    dest: /tmp/nuttcp_logs.tar.gz
     format: gz
   loop: "{{ valid_ue_list }}"
   loop_control:
@@ -96,7 +120,7 @@
 
 - name: Fetch archived logs
   ansible.builtin.fetch:
-    src: /tmp/iperf_logs.tar.gz
+    src: /tmp/nuttcp_logs.tar.gz
     dest: "{{ results_dir }}/{{ current_ue }}_logs.tar.gz"
     flat: yes
   loop: "{{ valid_ue_list }}"
