@@ -82,6 +82,24 @@ ues:
   qhat23:
     imsi_suffix: "0000000012"
     slice: slice1
+  qfit07:
+    imsi_suffix: "0000000003"
+    slice: slice1
+  qfit09:
+    imsi_suffix: "0000000004"
+    slice: slice1
+  qfit18:
+    imsi_suffix: "0000000005"
+    slice: slice1
+  qfit29:
+    imsi_suffix: "0000000019"
+    slice: slice1
+  qfit32:
+    imsi_suffix: "0000000020"
+    slice: slice1
+  qfit34:
+    imsi_suffix: "0000000021"
+    slice: slice1
   uesim01: # used for RFSIM
     imsi_suffix: "0000001121"  
     slice: slice1

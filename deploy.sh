@@ -11,6 +11,12 @@ NO_RESERVATION=false
 EXTRA_VARS_ARRAY=()
 SKIP_INPUTS=false
 
+SCENARIO_RFSIM="Iperf RFSIM scenario without interference"
+SCENARIO_R2LAB="Iperf R2lab scenario without interference"
+SCENARIO_R2LAB_INTERFERENCE="Iperf R2lab scenario with interference"
+SCENARIO_R2LAB_MULTI="Iperf R2lab scenario without interference, with multiple simultaneous UEs"
+SCENARIO_R2LAB_PING="Ping R2lab scenario without interference, with multiple simultaneous UEs"
+
 usage() {
     echo "Usage: $0 [options]"
     echo ""
@@ -134,8 +140,9 @@ init_defaults_and_banner() {
     DEFAULT_CORE="open5gs"
     DEFAULT_RAN="oai"
     DEFAULT_PLATFORM="r2lab"
-    DEFAULT_RU="n320"
-    DEFAULT_LIST_UE="qhat01"
+    DEFAULT_RU="n300"
+    DEFAULT_LIST_QHAT_UE="qhat01"
+    DEFAULT_LIST_QFIT_UE=""
 
     PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
   
@@ -222,29 +229,22 @@ collect_user_inputs() {
     fi
 
     # Select RAN
-    if [[ "$core" == "oai" ]]; then
-      # If OAI core is selected, only OAI RAN is supported
-      echo ""
-      echo "ℹ️ Only OAI RAN is supported with OAI Core"
-      ran="oai"
+    # Make OAI RAN the default if the user just presses enter
+    echo ""
+    echo "Which RAN do you want to deploy? (default: ${DEFAULT_RAN})"
+    echo "1) OAI"
+    echo "2) srsRAN"
+    echo "3) UERANSIM"
+    read -rp "Enter choice [1-3]: " ran_choice
+    if [[ -z "${ran_choice}" ]]; then
+      ran=${DEFAULT_RAN}
     else
-      # Make OAI RAN the default if the user just presses enter
-      echo ""
-      echo "Which RAN do you want to deploy? (default: ${DEFAULT_RAN})"
-      echo "1) OAI"
-      echo "2) srsRAN"
-      echo "3) UERANSIM"
-      read -rp "Enter choice [1-3]: " ran_choice
-      if [[ -z "${ran_choice}" ]]; then
-        ran=${DEFAULT_RAN}
-      else
-        case "${ran_choice}" in
-          1) ran="oai" ;;
-          2) ran="srsRAN" ;;
-          3) ran="ueransim" ;;
-          *) echo "❌ Invalid choice"; exit 1 ;;
-        esac
-      fi
+      case "${ran_choice}" in
+        1) ran="oai" ;;
+        2) ran="srsRAN" ;;
+        3) ran="ueransim" ;;
+        *) echo "❌ Invalid choice"; exit 1 ;;
+      esac
     fi
 
     # Select RAN Node
@@ -325,17 +325,17 @@ collect_user_inputs() {
     fi
 
     R2LAB_RU="$platform" # if rfsim, RU is "rfsim"
-    R2LAB_UES=()
+    R2LAB_QHAT_UES=()
+    R2LAB_QFIT_UES=()
 
     # If R2Lab platform is selected, ask for RU and UEs
     if [[ "$platform" == "r2lab" ]]; then
       if [[ "$ran" == "oai" ]]; then
         R2LAB_RUs=("benetel1" "benetel2" "jaguar" "panther" "n300" "n320")
-      else # $ran == "srsRAN" for now, only n3xx RUs supported
-        R2LAB_RUs=("n300" "n320")
+      else # $ran == "srsRAN" for now, only n3xx and benetel RUs supported
+        R2LAB_RUs=("n300" "n320" "benetel1" "benetel2")
       fi
       # Select RU
-      # Make jaguar the default if the user just presses enter
       echo ""
       echo "Select the RU to use (default: ${DEFAULT_RU}):"
       for i in "${!R2LAB_RUs[@]}"; do
@@ -355,10 +355,10 @@ collect_user_inputs() {
       echo "RU is $R2LAB_RU"
       case "${R2LAB_RU}" in
         "benetel1"|"benetel2")
-          echo "Currently Benetel scenarios mandates OAI core and OAI ran on sopnode-f3, enforcing parameters..."
-          core="oai"
-          ran="oai"
-          ran_node="sopnode-f3"
+          if [[ "${ran_node}" != "sopnode-f3" ]]; then
+            echo "❌ Invalid server used for RAN pods with benetel RU, only sopnode-f3 currently supported"
+            exit 1
+	  fi
           fhi72=true
           ;;
         *)
@@ -367,21 +367,42 @@ collect_user_inputs() {
       esac
 
       QHATS=("qhat01" "qhat02" "qhat03" "qhat10" "qhat11")
-      # Select UEs
+      # Select qhat UEs
       # Allow multiple selections
       # Make qhat01 the default if the user just presses enter
       echo ""
-      echo "Select the UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_UE}):"
+      echo "Select the qhat UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QHAT_UE}):"
       for i in "${!QHATS[@]}"; do
         echo "$((i + 1))) ${QHATS[i]}"
       done
       read -rp "Enter your choices: " -a ue_choices
       if [[ "${#ue_choices[@]}" -eq 0 ]]; then
-        R2LAB_UES=("${DEFAULT_LIST_UE}")
+        R2LAB_QHAT_UES=("${DEFAULT_LIST_QHAT_UE}")
       else
         for choice in "${ue_choices[@]}"; do
           if [[ "$choice" -ge 1 && "$choice" -le "${#QHATS[@]}" ]]; then
-            R2LAB_UES+=("${QHATS[$((choice - 1))]}")
+            R2LAB_QHAT_UES+=("${QHATS[$((choice - 1))]}")
+          else
+            echo "❌ Invalid UE choice: $choice"
+            exit 1
+          fi
+        done
+      fi
+      QFITS=("qfit07" "qfit09" "qfit18" "qfit29" "qhat32" "qfit34")
+      # Select qfit UEs (Quectel RM500Q-GL attached to some FIT nodes)
+      # Allow multiple selections
+      echo ""
+      echo "Select the qfit UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QFIT_UE}):"
+      for i in "${!QFITS[@]}"; do
+        echo "$((i + 1))) ${QFITS[i]}"
+      done
+      read -rp "Enter your choices: " -a ue_choices
+      if [[ "${#ue_choices[@]}" -eq 0 ]]; then
+        R2LAB_QFIT_UES=("${DEFAULT_LIST_QFIT_UE}")
+      else
+        for choice in "${ue_choices[@]}"; do
+          if [[ "$choice" -ge 1 && "$choice" -le "${#QFITS[@]}" ]]; then
+            R2LAB_QFIT_UES+=("${QFITS[$((choice - 1))]}")
           else
             echo "❌ Invalid UE choice: $choice"
             exit 1
@@ -427,6 +448,8 @@ optional_scenarios() {
     # - Iperf R2lab scenario without interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
     # - Iperf RFSIM scenario without interference. Will run on 2 OAI-NR UEs simulated on RFSIM (only if RFSIM platform is used and RAN is OAI).
     # - Iperf R2lab scenario with interference. Will run only on one UE, assumed to be already connected to the network (only if R2Lab platform is used, and at least one UE is selected).
+    # - Iperf R2lab scenario with multiple UEs.  Will first test each UE individually, then all UEs simultaneously.  Tests both uplink and downlink, with TCP and UDP.
+    # - Ping R2lab scenario with multiple UEs.  Will first test from each UE individually, then all UEs simultaneously.
 
     # Based on the selected variables, ask the user if they want to run one of the optional scenarios after deployment. (Only one scenario can be selected).
 
@@ -440,14 +463,14 @@ optional_scenarios() {
       echo ""
       echo "Select the scenario to run:"
       options=()
-      if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
-        options+=("Iperf R2lab scenario without interference")
+      if [[ "$platform" == "r2lab" && ( "${#R2LAB_QHAT_UES[@]}" -ge 1 || "${#R2LAB_QFIT_UES[@]}" -ge 1 ) ]]; then
+        options+=("$SCENARIO_R2LAB")
+        options+=("$SCENARIO_R2LAB_INTERFERENCE")
+        options+=("$SCENARIO_R2LAB_MULTI")
+        options+=("$SCENARIO_R2LAB_PING")
       fi
       if [[ "$platform" == "rfsim" ]]; then
-        options+=("Iperf RFSIM scenario without interference")
-      fi
-      if [[ "$platform" == "r2lab" && "${#R2LAB_UES[@]}" -ge 1 ]]; then
-        options+=("Iperf R2lab scenario with interference")
+        options+=("$SCENARIO_RFSIM")
       fi
       
       for i in "${!options[@]}"; do
@@ -520,7 +543,7 @@ interference_setup() {
 
     # ========== Interference Test Setup ==========
     run_interference_test=false
-    if [[ "$run_scenario" == true && "$scenario" == "Iperf R2lab scenario with interference" ]]; then
+    if [[ "$run_scenario" == true && "$scenario" == "$SCENARIO_R2LAB_INTERFERENCE" ]]; then
       run_interference_test=true
       USRPs=("n300" "n320" "b210" "b205mini")
 
@@ -633,7 +656,7 @@ print_summary() {
     echo "RAN:         $ran on ${ran_node}"
     [[ "$monitoring_enabled" == true ]] && echo "Monitoring:  enabled on $monitor_node" || echo "Monitoring:  disabled"
     echo "Platform:    $platform"
-    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_UES[*]}"
+    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_QHAT_UES[*]} ${R2LAB_QFIT_UES[*]}"
     if [[ "$run_interference_test" == true ]]; then
       echo "Interference Test: enabled"
       echo "  Interference USRP: $noise_usrp"
@@ -652,14 +675,20 @@ print_summary() {
       echo "Iperf Test: enabled"
       echo "  Scenario: $scenario"
       case "$scenario" in
-        "Iperf R2lab scenario without interference")
-          echo "Will run iperf in a sequential way on ${R2LAB_UES[0]} for 30 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
+        "$SCENARIO_R2LAB")
+          echo "Will run iperf in a sequential way on ${R2LAB_QHAT_UES[0]} for 30 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
         ;;
-        "Iperf RFSIM scenario without interference")
+        "$SCENARIO_RFSIM")
           echo "Will run iperf sequentially OAI-NR-UE1, OAI-NR-UE2 and OAI-NR-UE3 for 30 seconds each with an in-between wait time of 5 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
         ;;
-        "Iperf R2lab scenario with interference")
+        "$SCENARIO_R2LAB_INTERFERENCE")
           echo "Will run iperf with interference (to explain further)"
+        ;;
+        "$SCENARIO_R2LAB_MULTI")
+          echo "Will run iperf on each UE individually (${R2LAB_QHAT_UES[0]}), and then all UEs simultaneously.  Will test uplink and downlink for both TCP and UDP.  Each test lasts 30s (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
+        ;;
+        "$SCENARIO_R2LAB_PING")
+          echo "Will run ping from each UE individually (${R2LAB_QHAT_UES[0]}), and then all UEs simultaneously.  Each test lasts 30s (use the ping_duration and ping_sleep ansible parameters to change the default values (in s))"
         ;;
       esac
       echo "iperf server will run on the bare-metal ${iperf_server_node} server."
@@ -785,9 +814,20 @@ $faraday_opts
 [qhats]
 EOF
     fi
+    if [[ "$platform" == "r2lab" ]]; then
+      for ue in "${R2LAB_QHAT_UES[@]}" ; do
+        echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
+      done
+    fi
 
     if [[ "$platform" == "r2lab" ]]; then
-      for ue in "${R2LAB_UES[@]}"; do
+	cat >> "$INVENTORY" <<EOF
+
+[qfits]
+EOF
+    fi
+    if [[ "$platform" == "r2lab" ]]; then
+      for ue in "${R2LAB_QFIT_UES[@]}" ; do
         echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
       done
     fi
@@ -948,7 +988,7 @@ f3_ran=$( [[ "${ran_node}" == "sopnode-f3" ]] && echo true || echo false )
 
 # ---- Other boolean parameters
 # bridge_enabled is true if OVS bridge required between core_node and ran_node
-bridge_enabled=$( [[ "${fhi72}" == "false" && "${ran_node}" != "${core_node}" ]] && echo true || echo false )
+bridge_enabled=$( [[ "${ran_node}" != "${core_node}" ]] && echo true || echo false )
 monitoring_enabled=${monitoring_enabled}
 EOF
 
@@ -1141,13 +1181,21 @@ run_scenario() {
       if [[ "$START_SCENARIO" == true ]]; then
         echo "Running $scenario"
         case "$scenario" in
-          "Iperf R2lab scenario without interference"|"Iperf RFSIM scenario without interference")
+          "$SCENARIO_R2LAB"|"$SCENARIO_RFSIM")
             run_cmd ./run_scenario.sh -d --inventory="${NAME_INVENTORY}" \
               "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_iperf.txt
             ;;
-          "Iperf R2lab scenario with interference")
+          "$SCENARIO_R2LAB_INTERFERENCE")
             run_cmd ./run_scenario.sh -i --inventory="${NAME_INVENTORY}" \
               "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_interference.txt
+            ;;
+          "$SCENARIO_R2LAB_MULTI")
+            run_cmd ./run_scenario.sh -m --inventory="${NAME_INVENTORY}" \
+              "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_iperf_multi.txt
+            ;;
+          "$SCENARIO_R2LAB_PING")
+            run_cmd ./run_scenario.sh --ping --inventory="${NAME_INVENTORY}" \
+              "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_ping.txt
             ;;
           *)
             echo "❌ Unknown iperf test scenario: $scenario"
@@ -1222,7 +1270,6 @@ show_access_info() {
       echo "./run_scenario.sh -i --no-setup"
       echo ""
     fi
-
 }
 
 ############################
