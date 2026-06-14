@@ -15,7 +15,43 @@
       5G profile not loaded.
       Expected group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yml
 
-- name: Power ON QHAT UEs PDU through outlet
+###############################################################################
+# Force power-cycle all UEs
+###############################################################################
+
+- name: Power OFF QHAT UEs
+  shell: rhubarbe pdu off "{{ item }}"
+  delegate_to: faraday.inria.fr
+  async: 1800
+  poll: 0
+  failed_when: false
+  changed_when: false
+  loop: "{{ groups['qhats'] | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  register: qhat_off_jobs
+
+- name: Power OFF QFIT UEs
+  shell: qfit off {{ item }}
+  delegate_to: faraday.inria.fr
+  async: 1800
+  poll: 0
+  failed_when: false
+  changed_when: false
+  loop: "{{ groups['qfits'] | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  register: qfit_off_jobs
+  when: groups['qfits'] is defined and groups['qfits'] | length > 0
+
+- pause:
+    seconds: 10
+
+###############################################################################
+# Power ON all UEs
+###############################################################################
+
+- name: Power ON QHAT UEs
   shell: rhubarbe pdu on "{{ item }}"
   delegate_to: faraday.inria.fr
   async: 1800
@@ -23,35 +59,73 @@
   loop: "{{ groups['qhats'] | default([]) }}"
   loop_control:
     label: "{{ item }}"
-  register: power_qhat_jobs
+  register: qhat_on_jobs
 
-- name: Wait for all QHAT UEs to be turned ON
-  async_status:
-    jid: "{{ item.ansible_job_id }}"
-  register: job_result
-  until: job_result.finished
-  retries: 100
-  delay: 10
-  loop: "{{ power_qhat_jobs.results }}"
+- name: Power ON QFIT UEs
+  shell: qfit on {{ item }}
+  delegate_to: faraday.inria.fr
+  async: 1800
+  poll: 0
+  loop: "{{ groups['qfits'] | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  register: qfit_on_jobs
+  when: groups['qfits'] is defined and groups['qfits'] | length > 0
+
+###############################################################################
+# Wait for ping
+###############################################################################
+
+- name: Wait for UEs to answer ping
+  shell: ping -c1 -W1 "{{ item }}"
+  delegate_to: faraday.inria.fr
+  register: ping_results
+  until: ping_results.rc == 0
+  retries: 36
+  delay: 5
+  ignore_errors: true
+  loop: "{{ all_ues }}"
+  loop_control:
+    label: "{{ item }}"
+
+###############################################################################
+# Wait for SSH
+###############################################################################
+
+- name: Wait for UEs to be SSH accessible
+  wait_for:
+    host: "{{ item.item }}"
+    port: 22
+    timeout: 30
+    sleep: 5
+  delegate_to: faraday.inria.fr
+  register: ssh_results
+  ignore_errors: true
+  loop: "{{ ping_results.results | selectattr('rc', 'equalto', 0) | list }}"
   loop_control:
     label: "{{ item.item }}"
 
-- name: Wait for QHAT UEs to be SSH accessible
-  wait_for:
-    host: "{{ item }}"
-    port: 22
-    timeout: 180
-    sleep: 5
-  delegate_to: faraday.inria.fr
-  loop: "{{ groups['qhats'] | default([]) }}"
-  loop_control:
-    label: "{{ item }}"
-  register: power_qhat_jobs
+###############################################################################
+# Compute failed UEs
+###############################################################################
 
-- name: Power ON QFIT UEs
-  shell: qfit on {{ groups['qfits'] | default([]) | join(' ') }}
-  delegate_to: faraday.inria.fr
-  when: groups['qfits'] is defined and groups['qfits'] | length > 0
+- name: Compute failed UEs
+  set_fact:
+    failed_ues: >-
+      {{
+        all_ues
+        | difference(
+            ssh_results.results
+            | rejectattr('failed', 'defined')
+            | map(attribute='item.item')
+            | list
+          )
+      }}
+
+- name: Report failed UEs
+  debug:
+    msg: "UEs not reachable after power cycle: {{ failed_ues | join(', ') }}"
+  when: failed_ues | length > 0
 
 - name: Prepare and Display qhat-init command for each UE
   vars:
@@ -62,7 +136,7 @@
       --nssai="{{ ue_slice_info.sst }}.{{ ue_slice_info.sd }}"
   debug:
     msg: "UE {{ item }} command: {{ qhat_command }}"
-  loop: "{{ (groups['qhats'] | default([])) + (groups['qfits'] | default([])) }}"
+  loop: "{{ all_ues | difference(failed_ues) }}"
   loop_control:
     label: "{{ item }}"
 
@@ -81,7 +155,7 @@
       sysctl net.core.rmem_default;
     '
   delegate_to: faraday.inria.fr
-  loop: "{{ (groups['qhats'] | default([])) + (groups['qfits'] | default([])) }}"
+  loop: "{{ all_ues | difference(failed_ues) }}"
   loop_control:
     label: "{{ item }}"
   when: rru in ['benetel1', 'benetel2']
@@ -99,10 +173,11 @@
   delegate_to: faraday.inria.fr
   async: 1800
   poll: 0
-  loop: "{{ (groups['qhats'] | default([])) + (groups['qfits'] | default([])) }}"
+  loop: "{{ all_ues | difference(failed_ues) }}"
   loop_control:
     label: "{{ item }}"
   register: set_ue_jobs
+  ignore_errors: true
 
 - name: Wait for setup to finish on all UEs
   async_status:
@@ -119,11 +194,12 @@
   shell: |
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -n root@{{ item }} 'qhat-check'
   delegate_to: faraday.inria.fr
-  loop: "{{ (groups['qhats'] | default([])) + (groups['qfits'] | default([])) }}"
+  loop: "{{ all_ues | difference(failed_ues) }}"
   loop_control:
     label: "{{ item }}"
   register: check_results
   changed_when: false
+  ignore_errors: true
 
 - name: Display qhat-check output for each UE
   debug:
