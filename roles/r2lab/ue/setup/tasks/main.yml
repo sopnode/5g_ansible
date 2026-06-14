@@ -79,7 +79,7 @@
   delegate_to: faraday.inria.fr
   register: ping_results
   until: ping_results.rc == 0
-  retries: 36
+  retries: 4
   delay: 5
   ignore_errors: true
   loop: "{{ all_ues }}"
