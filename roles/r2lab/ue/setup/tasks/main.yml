@@ -50,7 +50,7 @@
   when: groups['qfits'] is defined and groups['qfits'] | length > 0
 
 - pause:
-    seconds: 10
+    seconds: 30
 
 ###############################################################################
 # Power ON all UEs
