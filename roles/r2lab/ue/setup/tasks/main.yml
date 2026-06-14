@@ -15,6 +15,11 @@
       5G profile not loaded.
       Expected group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yml
 
+- name: Build UE lists
+  set_fact:
+    all_ues: "{{ (groups['qhats'] | default([])) + (groups['qfits'] | default([])) }}"
+    failed_ues: []
+    
 ###############################################################################
 # Force power-cycle all UEs
 ###############################################################################
