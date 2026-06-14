@@ -37,7 +37,7 @@
   register: qhat_off_jobs
 
 - name: Power OFF QFIT UEs
-  shell: qfit off {{ item }}
+  shell: qfit off "{{ item }}"
   delegate_to: faraday.inria.fr
   async: 1800
   poll: 0
@@ -67,7 +67,7 @@
   register: qhat_on_jobs
 
 - name: Power ON QFIT UEs
-  shell: qfit on {{ item }}
+  shell: qfit on "{{ item }}"
   delegate_to: faraday.inria.fr
   async: 1800
   poll: 0
