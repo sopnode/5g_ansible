@@ -11,18 +11,10 @@
     that:
       - slices is defined
       - ues is defined
-    fail_msg: >
-      5G profile not loaded.
-      Expected group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yml
 
 - name: Build UE lists
   set_fact:
     all_ues: "{{ (groups['qhats'] | default([])) + (groups['qfits'] | default([])) }}"
-    failed_ues: []
-    
-###############################################################################
-# Force power-cycle all UEs
-###############################################################################
 
 - name: Power OFF QHAT UEs
   shell: rhubarbe pdu off "{{ item }}"
@@ -32,25 +24,26 @@
   failed_when: false
   changed_when: false
   loop: "{{ groups['qhats'] | default([]) }}"
-  loop_control:
-    label: "{{ item }}"
   register: qhat_off_jobs
+
+- name: Wait QHAT OFF completion
+  async_status:
+    jid: "{{ item.ansible_job_id }}"
+  register: qhat_off_status
+  until: qhat_off_status.finished
+  retries: 100
+  delay: 5
+  loop: "{{ qhat_off_jobs.results }}"
 
 - name: Power OFF QFIT UEs
   shell: qfit off {{ groups['qfits'] | join(' ') }}
   delegate_to: faraday.inria.fr
+  when: groups['qfits'] is defined and groups['qfits'] | length > 0
   failed_when: false
   changed_when: false
-  when:
-    - groups['qfits'] is defined
-    - groups['qfits'] | length > 0
 
 - pause:
-    seconds: 30
-
-###############################################################################
-# Power ON all UEs
-###############################################################################
+    seconds: 20
 
 - name: Power ON QHAT UEs
   shell: rhubarbe pdu on "{{ item }}"
@@ -58,74 +51,63 @@
   async: 1800
   poll: 0
   loop: "{{ groups['qhats'] | default([]) }}"
-  loop_control:
-    label: "{{ item }}"
   register: qhat_on_jobs
 
+- name: Wait QHAT ON completion
+  async_status:
+    jid: "{{ item.ansible_job_id }}"
+  register: qhat_on_status
+  until: qhat_on_status.finished
+  retries: 12
+  delay: 5
+  loop: "{{ qhat_on_jobs.results }}"
 
 - name: Power ON QFIT UEs
   shell: qfit on {{ groups['qfits'] | join(' ') }}
   delegate_to: faraday.inria.fr
-  when:
-    - groups['qfits'] is defined
-    - groups['qfits'] | length > 0
+  when: groups['qfits'] is defined and groups['qfits'] | length > 0
 
-###############################################################################
-# Wait for ping
-###############################################################################
-
-- name: Wait for UEs to answer ping
-  shell: ping -c1 -W1 "{{ item }}"
+- name: Ping UEs
+  shell: "ping -c1 -W1 {{ item }}"
   delegate_to: faraday.inria.fr
   register: ping_results
-  until: ping_results.rc == 0
-  retries: 4
-  delay: 5
   ignore_errors: true
+  changed_when: false
   loop: "{{ all_ues }}"
-  loop_control:
-    label: "{{ item }}"
 
-###############################################################################
-# Wait for SSH
-###############################################################################
+- name: Build reachable UEs
+  set_fact:
+    reachable_ues: >-
+      {{
+        ping_results.results
+        | selectattr('rc', 'defined')
+        | selectattr('rc', 'equalto', 0)
+        | map(attribute='item')
+        | list
+      }}
 
-- name: Wait for UEs to be SSH accessible
+- name: SSH check
   wait_for:
-    host: "{{ item.item }}"
+    host: "{{ item }}"
     port: 22
-    timeout: 30
-    sleep: 5
+    timeout: 20
   delegate_to: faraday.inria.fr
   register: ssh_results
   ignore_errors: true
-  loop: "{{ ping_results.results | selectattr('rc', 'equalto', 0) | list }}"
-  loop_control:
-    label: "{{ item.item }}"
+  loop: "{{ reachable_ues }}"
 
-###############################################################################
-# Compute failed UEs
-###############################################################################
 
 - name: Compute failed UEs
   set_fact:
-    failed_ues: >-
-      {{
-        all_ues
-        | difference(
-            ssh_results.results
-            | rejectattr('failed', 'defined')
-            | map(attribute='item.item')
-            | list
-          )
-      }}
+    failed_ues: "{{ all_ues | difference(reachable_ues) }}"
 
 - name: Report failed UEs
   debug:
-    msg: "UEs not reachable after power cycle: {{ failed_ues | join(', ') }}"
+    msg: "UEs not reachable after boot: {{ failed_ues }}"
   when: failed_ues | length > 0
 
-- name: Prepare and Display qhat-init command for each UE
+
+- name: Prepare qhat-init command
   vars:
     ue_slice_info: "{{ slices | selectattr('name', 'equalto', ues[item].slice) | first }}"
     qhat_command: >-
@@ -134,78 +116,46 @@
       --nssai="{{ ue_slice_info.sst }}.{{ ue_slice_info.sd }}"
   debug:
     msg: "UE {{ item }} command: {{ qhat_command }}"
-  loop: "{{ all_ues | difference(failed_ues) }}"
-  loop_control:
-    label: "{{ item }}"
+  loop: "{{ reachable_ues }}"
 
-- name: Configure rmem buffers on UEs
+- name: Configure rmem buffers
   shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 root@{{ item }} '
-      echo "Current values:";
-      sysctl net.core.rmem_max;
-      sysctl net.core.rmem_default;
-
+    ssh root@{{ item }} '
       sysctl -w net.core.rmem_max=62500000;
       sysctl -w net.core.rmem_default=62500000;
-
-      echo "New values:";
-      sysctl net.core.rmem_max;
-      sysctl net.core.rmem_default;
     '
   delegate_to: faraday.inria.fr
-  loop: "{{ all_ues | difference(failed_ues) }}"
-  loop_control:
-    label: "{{ item }}"
+  loop: "{{ reachable_ues }}"
   when: rru in ['benetel1', 'benetel2']
-    
-- name: Init UEs via jump host using 5G profile from YAML
-  vars:
-    ue_slice_info: "{{ slices | selectattr('name', 'equalto', ues[item].slice) | first }}"
-    qhat_command: >-
-      qhat-init --mode={{ hostvars[item].mode | default('default') }}
-      --dnn="{{ ue_slice_info.dnn }}"
-      --nssai="{{ ue_slice_info.sst }}.{{ ue_slice_info.sd }}"
-  shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -n root@{{ item }} '{{ qhat_command }}'
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -n root@{{ item }} 'stop.sh'
+
+- name: Init UEs
+  shell: ssh root@{{ item }} 'qhat-init; stop.sh'
   delegate_to: faraday.inria.fr
   async: 1800
   poll: 0
-  loop: "{{ all_ues | difference(failed_ues) }}"
-  loop_control:
-    label: "{{ item }}"
+  loop: "{{ reachable_ues }}"
   register: set_ue_jobs
-  ignore_errors: true
 
-- name: Wait for setup to finish on all UEs
+- name: Wait init completion
   async_status:
     jid: "{{ item.ansible_job_id }}"
+  loop: "{{ set_ue_jobs.results }}"
   register: job_result
   until: job_result.finished
   retries: 100
   delay: 10
-  loop: "{{ set_ue_jobs.results }}"
-  loop_control:
-    label: "{{ item.item }}"
 
-- name: Run qhat-check on each UE to verify configuration
-  shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -n root@{{ item }} 'qhat-check'
+- name: Run qhat-check
+  shell: ssh root@{{ item }} 'qhat-check'
   delegate_to: faraday.inria.fr
-  loop: "{{ all_ues | difference(failed_ues) }}"
-  loop_control:
-    label: "{{ item }}"
+  loop: "{{ reachable_ues }}"
   register: check_results
   changed_when: false
   ignore_errors: true
 
-- name: Display qhat-check output for each UE
+- name: Display qhat-check
   debug:
-    msg: 
-      - "------------------------------------------------"
+    msg:
       - "UE: {{ item.item }}"
       - "{{ item.stdout_lines }}"
-      - "------------------------------------------------"
   loop: "{{ check_results.results }}"
-  loop_control:
-    label: "{{ item.item }}"
