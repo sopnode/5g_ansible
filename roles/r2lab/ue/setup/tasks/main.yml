@@ -111,7 +111,7 @@
 
 - name: Configure rmem buffers
   shell: |
-    ssh root@{{ item }} '
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{{ item }} '
       sysctl -w net.core.rmem_max=62500000;
       sysctl -w net.core.rmem_default=62500000;
     '
@@ -120,7 +120,7 @@
   when: rru in ['benetel1', 'benetel2']
 
 - name: Init UEs
-  shell: ssh root@{{ item }} 'qhat-init; stop.sh'
+  shell: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{{ item }} 'qhat-init; stop.sh'
   delegate_to: faraday.inria.fr
   async: 1800
   poll: 0
@@ -137,7 +137,7 @@
   delay: 10
 
 - name: Run qhat-check
-  shell: ssh root@{{ item }} 'qhat-check'
+  shell: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{{ item }} 'qhat-check'
   delegate_to: faraday.inria.fr
   loop: "{{ reachable_ues }}"
   register: check_results
