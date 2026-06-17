@@ -40,7 +40,7 @@
   changed_when: "'When you finish' in gnb_script.stdout"
 
 # -----------------------------------------------------------------
-# gNB sync check (USRP only)
+# gNB sync check (USRP N3XX only)
 # -----------------------------------------------------------------
 - name: Monitor gNB logs for sync
   block:

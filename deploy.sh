@@ -388,7 +388,7 @@ collect_user_inputs() {
           fi
         done
       fi
-      QFITS=("qfit07" "qfit09" "qfit18" "qfit29" "qhat32" "qfit34")
+      QFITS=("qfit07" "qfit09" "qfit18" "qfit29" "qfit32" "qfit34")
       # Select qfit UEs (Quectel RM500Q-GL attached to some FIT nodes)
       # Allow multiple selections
       echo ""
