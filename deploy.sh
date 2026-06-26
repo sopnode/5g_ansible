@@ -27,6 +27,7 @@ usage() {
     echo "-p, --profile5g <name>   Use group_vars/all/5g_profile_<name>.yaml specific 5G profile"
     echo "-e <vars>                Extra ansible vars, e.g.:"
     echo "     -e \"oai_gnb_mode=cudu\" -e \"no_boot=true\""
+    echo "     -e \"redcap=true\" -e \"csi_logger_enabled=true\""
     echo "--dry-run                Only print ansible commands"
     echo "-r, --no-reservation     Skip node/R2lab reservations"
     echo "--no-auto-start          Only configure iperf scenario, don't start it after 5G deployment"
@@ -163,6 +164,7 @@ init_defaults_and_banner() {
     R2LAB_CONFIG="./.r2lab_config"
 
     DISTINCT_IPERF_SERVER=false
+    REDCAP=false
     DIR_LOGS="LOGS"
     mkdir -p ${DIR_LOGS}
 
@@ -366,7 +368,7 @@ collect_user_inputs() {
           ;;
       esac
 
-      QHATS=("qhat01" "qhat02" "qhat03" "qhat10" "qhat11")
+      QHATS=("qhat01" "qhat02" "qhat03" "qhat10" "qhat11" "qhat20" "qhat21" "qhat22")
       # Select qhat UEs
       # Allow multiple selections
       # Make qhat01 the default if the user just presses enter
@@ -816,7 +818,13 @@ EOF
     fi
     if [[ "$platform" == "r2lab" ]]; then
       for ue in "${R2LAB_QHAT_UES[@]}" ; do
-        echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
+          if [[ "$ue" == "qhat20" || "$ue" == "qhat21" || "$ue" == "qhat22" ]]; then
+	      mode="qmi"
+	      REDCAP=true
+	  else
+	      mode="mbim"
+	  fi
+          echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=${mode}" >> "$INVENTORY"
       done
     fi
 
@@ -1121,6 +1129,9 @@ deploy() {
 
     ANSIBLE_EXTRA_ARGS=()
     local vars="fiveg_profile=${PROFILE_5G}"
+
+    if [[ "$REDCAP" ]]; then
+	EXTRA_VARS_ARRAY+=("-e redcap=true")
 
     for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
       # Clean argument if it starts by -- so that ansible handles it as a variable
