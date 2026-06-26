@@ -1131,7 +1131,7 @@ deploy() {
     local vars="fiveg_profile=${PROFILE_5G}"
 
     if [[ "$REDCAP" ]]; then
-	EXTRA_VARS_ARRAY+=("-e redcap=true")
+	EXTRA_VARS_ARRAY+=("redcap=true")
     fi
 
     for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
