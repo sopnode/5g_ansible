@@ -1132,6 +1132,7 @@ deploy() {
 
     if [[ "$REDCAP" ]]; then
 	EXTRA_VARS_ARRAY+=("-e redcap=true")
+    fi
 
     for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
       # Clean argument if it starts by -- so that ansible handles it as a variable
