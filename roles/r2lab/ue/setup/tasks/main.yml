@@ -1,5 +1,5 @@
 ---
-- name: RESTART_UE_SETUP
+- name: START_UE_SETUP
   ansible.builtin.meta: noop
 
 - name: Load active 5G profile variables
@@ -87,7 +87,6 @@
   ignore_errors: true
   loop: "{{ reachable_ues }}"
 
-
 - name: Compute failed UEs
   set_fact:
     failed_ues: "{{ all_ues | difference(reachable_ues) }}"
@@ -96,7 +95,6 @@
   debug:
     msg: "UEs not reachable after boot: {{ failed_ues }}"
   when: failed_ues | length > 0
-
 
 - name: Prepare qhat-init command
   vars:
@@ -120,7 +118,16 @@
   when: rru in ['benetel1', 'benetel2']
 
 - name: Init UEs
-  shell: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{{ item }} 'qhat-init; stop.sh'
+  # qhat-init + mode-aware stop in one async job:
+  #   mbim -> stop.sh   |   qmi -> ci_ctl_qtel.py /dev/ttyUSB2 detach
+  shell: >
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{{ item }}
+    'qhat-init; {{ ue_stop_cmd }}'
+  vars:
+    ue_stop_cmd: >-
+      {{ 'stop.sh'
+         if (hostvars[item].mode | default('mbim', true)) == 'mbim'
+         else 'python3 /usr/local/bin/ci_ctl_qtel.py /dev/ttyUSB2 detach' }}
   delegate_to: faraday.inria.fr
   async: 1800
   poll: 0

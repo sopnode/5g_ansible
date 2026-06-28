@@ -1,9 +1,15 @@
 ---
 # ue_item stands for the UE name, defined in the inventory
+# mode (mbim|qmi) comes from the inventory host vars; defaults to mbim.
+
 - name: Load active 5G profile variables
   ansible.builtin.include_vars:
     file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
     name: fiveg
+
+- name: Resolve UE connection mode
+  set_fact:
+    ue_mode: "{{ hostvars[ue_item].mode | default('mbim') }}"
 
 - name: Extract UE configuration
   set_fact:
@@ -24,9 +30,9 @@
          | first).ip_prefix
       }}.1
 
-- name: "Debug: Show UPF IP for current UE"
+- name: "Debug: Show mode and UPF IP for current UE"
   debug:
-    msg: "UE {{ ue_item }} -> UPF IP = {{ upf_ip }}"
+    msg: "UE {{ ue_item }} -> mode={{ ue_mode }} UPF IP={{ upf_ip }}"
 
 - name: Check wwan0 connectivity on {{ ue_item }} by pinging UPF
   shell: >
@@ -37,27 +43,70 @@
   changed_when: false
   ignore_errors: true
 
+- name: Set wwan0 reachability flag
+  set_fact:
+    wwan0_up: "{{ (check_wwan0.stdout | default('down')) == 'up' }}"
+
 - name: "Debug: wwan0 connectivity for {{ ue_item }}"
   debug:
     msg: "UE {{ ue_item }} -> wwan0={{ check_wwan0.stdout | default('unknown') }} UPF={{ upf_ip }}"
 
-- name: Run stop.sh + start.sh on {{ ue_item }} if wwan0 not reachable
+# ---------------------------------------------------------------------------
+# MBIM bring-up
+# ---------------------------------------------------------------------------
+- name: "MBIM: stop.sh + start.sh on {{ ue_item }} if wwan0 not reachable"
   shell: >
     ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
     root@{{ ue_item }}
     'stop.sh; start.sh -F {{ current_dnn }}'
   when:
+    - ue_mode == 'mbim'
     - current_dnn is defined
-    - check_wwan0.stdout != "up" or check_wwan0.rc != 0
+    - not wwan0_up
   ignore_errors: "{{ ignore_task_errors | default(true) }}"
 
+# ---------------------------------------------------------------------------
+# QMI bring-up (Quectel-CM + ci_ctl_qtel.py). IP can take up to ~2 min.
+# ---------------------------------------------------------------------------
+- name: "QMI bring-up for {{ ue_item }}"
+  when:
+    - ue_mode == 'qmi'
+    - not wwan0_up
+  ignore_errors: "{{ ignore_task_errors | default(true) }}"
+  block:
+    - name: "QMI: ensure quectel-CM is running on {{ ue_item }}"
+      shell: >
+        ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+        root@{{ ue_item }}
+        'pgrep -f "quectel-CM" >/dev/null 2>&1 ||
+         setsid quectel-CM -s {{ current_dnn }} -4 </dev/null >/var/log/quectel-CM.log 2>&1 &'
+      changed_when: false
+
+    - name: "QMI: detach UE {{ ue_item }}"
+      shell: >
+        ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+        root@{{ ue_item }}
+        'python3 /usr/local/bin/ci_ctl_qtel.py /dev/ttyUSB2 detach'
+      changed_when: false
+
+    - name: "QMI: wake up (wup) UE {{ ue_item }}"
+      shell: >
+        ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+        root@{{ ue_item }}
+        'python3 /usr/local/bin/ci_ctl_qtel.py /dev/ttyUSB2 wup'
+      changed_when: false
+
+# ---------------------------------------------------------------------------
+# Common: wait for IP / link, install route.
+# QMI needs a much longer window (up to ~2 min) to acquire an IP.
+# ---------------------------------------------------------------------------
 - name: Retrieve wwan0 IP for {{ ue_item }}
   shell: |
     ssh -o ConnectTimeout=5 -o BatchMode=yes root@{{ ue_item }} \
     "ip -4 addr show wwan0 | grep -oP '(?<=inet\s)\d+(\.(\d+)){3}'"
   register: ue_ip_cmd
   until: ue_ip_cmd.stdout != ""
-  retries: 5
+  retries: "{{ 60 if ue_mode == 'qmi' else 10 }}"
   delay: 2
   changed_when: false
   ignore_errors: true #"{{ ignore_task_errors | default(false) }}"
