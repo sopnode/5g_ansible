@@ -9,6 +9,12 @@
 - name: START_UE_STOP
   ansible.builtin.meta: noop
   
+# The caller may pass the UE name as 'ue_item' (like the connect role) or 'ue'.
+# Normalize to 'ue' so the rest of this role is unchanged.
+- name: Normalize UE name (accept ue or ue_item)
+  set_fact:
+    ue: "{{ ue | default(ue_item) }}"
+    
 - name: Resolve UE connection mode
   set_fact:
     ue_mode: "{{ hostvars[ue].mode | default('mbim') }}"
