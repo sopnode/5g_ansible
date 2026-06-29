@@ -484,6 +484,13 @@ optional_scenarios() {
     iperf_server_node=""
     # Ask the user if they want to run an optional scenario after deployment
     echo ""
+    # No scenario is available on r2lab when no UE is selected, so don't even ask.
+    if [[ "$platform" == "r2lab" \
+          && "${#R2LAB_QHAT_UES[@]}" -eq 0 \
+          && "${#R2LAB_QFIT_UES[@]}" -eq 0 \
+          && "${#R2LAB_PHONE_UES[@]}" -eq 0 ]]; then
+      return
+    fi
     read -rp "Do you want to run an optional scenario after deployment? [y/N]: " scenario_choice
     if [[ "$scenario_choice" =~ ^[Yy]$ ]]; then
       echo ""
