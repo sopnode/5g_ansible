@@ -72,7 +72,7 @@ ues:
     slice: slice1
   qhat20:
     imsi_suffix: "0000000009"
-    slice: slice2
+    slice: slice1
   qhat21:
     imsi_suffix: "0000000010"
     slice: slice1
