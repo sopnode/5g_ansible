@@ -142,7 +142,7 @@ init_defaults_and_banner() {
     DEFAULT_RAN="oai"
     DEFAULT_PLATFORM="r2lab"
     DEFAULT_RU="n300"
-    DEFAULT_LIST_QHAT_UE=("qhat01") # ("qhat01" "qhat02")
+    DEFAULT_LIST_QHAT_UE=() # ("qhat01") # ("qhat01" "qhat02")
     DEFAULT_LIST_QFIT_UE=()
     DEFAULT_LIST_PHONE_UE=()
 
