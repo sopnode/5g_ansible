@@ -73,7 +73,7 @@
 
         - name: "Phone: check adb sees the handset on {{ ue_item }} ({{ phone_ssh }})"
           shell: >
-            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no -i /home/faraday/r2lab-embedded/mac-ssh-keys/macphone
             {{ phone_ssh }}
             '{{ adb_bin }} {{ adb_opts }} devices'
           register: adb_devices
@@ -94,7 +94,7 @@
         # an APN/RAT change. Default = simple OFF.
         - name: "Phone: airplane mode ON (force re-attach) on {{ ue_item }}"
           shell: >
-            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no -i /home/faraday/r2lab-embedded/mac-ssh-keys/macphone
             {{ phone_ssh }}
             '{{ adb_bin }} {{ adb_opts }} shell cmd connectivity airplane-mode enable'
           changed_when: true
@@ -108,7 +108,7 @@
 
         - name: "Phone: airplane mode OFF (connect) on {{ ue_item }}"
           shell: >
-            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no -i /home/faraday/r2lab-embedded/mac-ssh-keys/macphone
             {{ phone_ssh }}
             '{{ adb_bin }} {{ adb_opts }} shell cmd connectivity airplane-mode disable'
           changed_when: true
@@ -116,7 +116,7 @@
 
         - name: "Phone: verify airplane mode is OFF on {{ ue_item }}"
           shell: >
-            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no -i /home/faraday/r2lab-embedded/mac-ssh-keys/macphone
             {{ phone_ssh }}
             '{{ adb_bin }} {{ adb_opts }} shell settings get global airplane_mode_on'
           register: phone_apm
@@ -129,7 +129,7 @@
         # Connectivity check now unconditional: upf_ip is always known.
         - name: "Phone: ping UPF {{ upf_ip }} from {{ ue_item }}"
           shell: >
-            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+            ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no -i /home/faraday/r2lab-embedded/mac-ssh-keys/macphone
             {{ phone_ssh }}
             '{{ adb_bin }} {{ adb_opts }} shell ping -c 1 -W 3 {{ upf_ip }}'
           register: phone_ping

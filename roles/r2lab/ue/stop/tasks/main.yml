@@ -33,7 +33,7 @@
 
 - name: "Phone: airplane mode ON (disconnect) UE {{ ue }} via jump host"
   shell: >
-    ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+    ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no -i /home/faraday/r2lab-embedded/mac-ssh-keys/macphone
     {{ phone_ssh }}
     '{{ adb_bin }} {{ adb_opts }} shell cmd connectivity airplane-mode enable'
   delegate_to: faraday.inria.fr
@@ -42,7 +42,7 @@
 
 - name: "Phone: verify airplane mode is ON for {{ ue }}"
   shell: >
-    ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no
+    ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no -i /home/faraday/r2lab-embedded/mac-ssh-keys/macphone
     {{ phone_ssh }}
     '{{ adb_bin }} {{ adb_opts }} shell settings get global airplane_mode_on'
   register: phone_apm
