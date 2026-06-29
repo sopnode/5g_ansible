@@ -682,7 +682,7 @@ print_summary() {
     echo "RAN:         $ran on ${ran_node}"
     [[ "$monitoring_enabled" == true ]] && echo "Monitoring:  enabled on $monitor_node" || echo "Monitoring:  disabled"
     echo "Platform:    $platform"
-    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_QHAT_UES[*]} ${R2LAB_QFIT_UES[*] ${R2LAB_PHONE_UES[*]}"
+    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_QHAT_UES[*]} ${R2LAB_QFIT_UES[*]} ${R2LAB_PHONE_UES[*]}"
     if [[ "$run_interference_test" == true ]]; then
       echo "Interference Test: enabled"
       echo "  Interference USRP: $noise_usrp"
