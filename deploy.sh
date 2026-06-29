@@ -871,13 +871,14 @@ EOF
 
 [phones]
 EOF
+    fi
     if [[ "$platform" == "r2lab" ]]; then
       for ue in "${R2LAB_PHONE_UES[@]}" ; do
 	[[ -n "$ue" ]] || continue
         echo "$ue ansible_host=mac$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr'" >> "$INVENTORY"
       done
     fi
-
+  
     # Build fit_nodes section.
     # Rules:
     # - If no interference test: keep the original default fit02 (b210).
