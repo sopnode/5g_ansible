@@ -880,9 +880,19 @@ EOF
 EOF
     fi
     if [[ "$platform" == "r2lab" ]]; then
+      # Serial adb of handset tethering chaquefor every macphone
+      declare -A PHONE_SERIAL=(
+      [phone1]="MDX0220623006208"   # Huawei P40 Pro  -> macphone1
+      [phone2]="34061FDH20068M"     # Pixel 7         -> macphone2
+      )
       for ue in "${R2LAB_PHONE_UES[@]}" ; do
 	[[ -n "$ue" ]] || continue
-        echo "$ue ansible_host=mac$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr'" >> "$INVENTORY"
+	line="$ue ansible_host=mac$ue ansible_user=tester"
+        line+=" ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr'"
+        line+=" adb_bin=/usr/local/bin/adb"
+        serial="${PHONE_SERIAL[$ue]:-}"
+        [[ -n "$serial" ]] && line+=" serial=$serial"
+        echo "$line" >> "$INVENTORY"  
       done
     fi
   
