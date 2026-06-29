@@ -144,6 +144,7 @@ init_defaults_and_banner() {
     DEFAULT_RU="n300"
     DEFAULT_LIST_QHAT_UE=("qhat01") # ("qhat01" "qhat02")
     DEFAULT_LIST_QFIT_UE=()
+    DEFAULT_LIST_PHONE_UE=()
 
     PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
   
@@ -390,6 +391,7 @@ collect_user_inputs() {
           fi
         done
       fi
+      
       QFITS=("qfit07" "qfit09" "qfit18" "qfit29" "qfit32" "qfit34")
       # Select qfit UEs (Quectel RM500Q-GL attached to some FIT nodes)
       # Allow multiple selections
@@ -405,6 +407,28 @@ collect_user_inputs() {
         for choice in "${ue_choices[@]}"; do
           if [[ "$choice" -ge 1 && "$choice" -le "${#QFITS[@]}" ]]; then
             R2LAB_QFIT_UES+=("${QFITS[$((choice - 1))]}")
+          else
+            echo "❌ Invalid UE choice: $choice"
+            exit 1
+          fi
+        done
+      fi
+
+      PHONES=("phone1" "phone2")
+      # Select Smartphone UEs (P40/Pixel7 attached to macphone1/2)
+      # Allow multiple selections
+      echo ""
+      echo "Select the smartphone UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_PHONE_UE[*]:-none}):"
+      for i in "${!PHONES[@]}"; do
+        echo "$((i + 1))) ${PHONES[i]}"
+      done
+      read -rp "Enter your choices: " -a ue_choices
+      if [[ "${#ue_choices[@]}" -eq 0 ]]; then
+        R2LAB_PHONE_UES=("${DEFAULT_LIST_PHONE_UE[@]}")
+      else
+        for choice in "${ue_choices[@]}"; do
+          if [[ "$choice" -ge 1 && "$choice" -le "${#PHONES[@]}" ]]; then
+            R2LAB_PHONE_UES+=("${PHONES[$((choice - 1))]}")
           else
             echo "❌ Invalid UE choice: $choice"
             exit 1
@@ -465,7 +489,7 @@ optional_scenarios() {
       echo ""
       echo "Select the scenario to run:"
       options=()
-      if [[ "$platform" == "r2lab" && ( "${#R2LAB_QHAT_UES[@]}" -ge 1 || "${#R2LAB_QFIT_UES[@]}" -ge 1 ) ]]; then
+      if [[ "$platform" == "r2lab" && ( "${#R2LAB_QHAT_UES[@]}" -ge 1 || "${#R2LAB_QFIT_UES[@]}" -ge 1 || "${#R2LAB_PHONE_UES[@]}" -ge 1 ) ]]; then
         options+=("$SCENARIO_R2LAB")
         options+=("$SCENARIO_R2LAB_INTERFERENCE")
         options+=("$SCENARIO_R2LAB_MULTI")
@@ -658,7 +682,7 @@ print_summary() {
     echo "RAN:         $ran on ${ran_node}"
     [[ "$monitoring_enabled" == true ]] && echo "Monitoring:  enabled on $monitor_node" || echo "Monitoring:  disabled"
     echo "Platform:    $platform"
-    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_QHAT_UES[*]} ${R2LAB_QFIT_UES[*]}"
+    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_QHAT_UES[*]} ${R2LAB_QFIT_UES[*] ${R2LAB_PHONE_UES[*]}"
     if [[ "$run_interference_test" == true ]]; then
       echo "Interference Test: enabled"
       echo "  Interference USRP: $noise_usrp"
@@ -839,6 +863,18 @@ EOF
       for ue in "${R2LAB_QFIT_UES[@]}" ; do
 	[[ -n "$ue" ]] || continue
         echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
+      done
+    fi
+
+    if [[ "$platform" == "r2lab" ]]; then
+      cat >> "$INVENTORY" <<EOF
+
+[phones]
+EOF
+    if [[ "$platform" == "r2lab" ]]; then
+      for ue in "${R2LAB_PHONE_UES[@]}" ; do
+	[[ -n "$ue" ]] || continue
+        echo "$ue ansible_host=mac$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr'" >> "$INVENTORY"
       done
     fi
 
