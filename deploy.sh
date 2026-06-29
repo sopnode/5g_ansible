@@ -142,8 +142,8 @@ init_defaults_and_banner() {
     DEFAULT_RAN="oai"
     DEFAULT_PLATFORM="r2lab"
     DEFAULT_RU="n300"
-    DEFAULT_LIST_QHAT_UE="qhat01"
-    DEFAULT_LIST_QFIT_UE=""
+    DEFAULT_LIST_QHAT_UE=("qhat01") # ("qhat01" "qhat02")
+    DEFAULT_LIST_QFIT_UE=()
 
     PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
   
@@ -373,13 +373,13 @@ collect_user_inputs() {
       # Allow multiple selections
       # Make qhat01 the default if the user just presses enter
       echo ""
-      echo "Select the qhat UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QHAT_UE}):"
+      echo "Select the qhat UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QHAT_UE}[*]):"
       for i in "${!QHATS[@]}"; do
         echo "$((i + 1))) ${QHATS[i]}"
       done
       read -rp "Enter your choices: " -a ue_choices
       if [[ "${#ue_choices[@]}" -eq 0 ]]; then
-        R2LAB_QHAT_UES=("${DEFAULT_LIST_QHAT_UE}")
+        R2LAB_QHAT_UES=("${DEFAULT_LIST_QHAT_UE[@]}")
       else
         for choice in "${ue_choices[@]}"; do
           if [[ "$choice" -ge 1 && "$choice" -le "${#QHATS[@]}" ]]; then
@@ -394,13 +394,13 @@ collect_user_inputs() {
       # Select qfit UEs (Quectel RM500Q-GL attached to some FIT nodes)
       # Allow multiple selections
       echo ""
-      echo "Select the qfit UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QFIT_UE}):"
+      echo "Select the qfit UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QFIT_UE}[*]):"
       for i in "${!QFITS[@]}"; do
         echo "$((i + 1))) ${QFITS[i]}"
       done
       read -rp "Enter your choices: " -a ue_choices
       if [[ "${#ue_choices[@]}" -eq 0 ]]; then
-        R2LAB_QFIT_UES=("${DEFAULT_LIST_QFIT_UE}")
+        R2LAB_QFIT_UES=("${DEFAULT_LIST_QFIT_UE[@]}")
       else
         for choice in "${ue_choices[@]}"; do
           if [[ "$choice" -ge 1 && "$choice" -le "${#QFITS[@]}" ]]; then
@@ -818,13 +818,14 @@ EOF
     fi
     if [[ "$platform" == "r2lab" ]]; then
       for ue in "${R2LAB_QHAT_UES[@]}" ; do
-          if [[ "$ue" == "qhat20" || "$ue" == "qhat21" || "$ue" == "qhat22" ]]; then
-	      mode="qmi"
-	      REDCAP=true
-	  else
-	      mode="mbim"
-	  fi
-          echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=${mode}" >> "$INVENTORY"
+	[[ -n "$ue" ]] || continue
+        if [[ "$ue" == "qhat20" || "$ue" == "qhat21" || "$ue" == "qhat22" ]]; then
+	  mode="qmi"
+	    REDCAP=true
+	else
+	  mode="mbim"
+	fi
+        echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=${mode}" >> "$INVENTORY"
       done
     fi
 
@@ -835,8 +836,9 @@ EOF
 EOF
     fi
     if [[ "$platform" == "r2lab" ]]; then
-      echo "***************** R2LAB_QFIT_UES is ${R2LAB_QFIT_UES[@]}"
+      echo "***************** R2LAB_QFIT_UES is (${#R2LAB_QFIT_UES[@]}): ${R2LAB_QFIT_UES[*]}"
       for ue in "${R2LAB_QFIT_UES[@]}" ; do
+	[[ -n "$ue" ]] || continue
         echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
       done
     fi
