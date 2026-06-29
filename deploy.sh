@@ -852,7 +852,7 @@ EOF
 	[[ -n "$ue" ]] || continue
         if [[ "$ue" == "qhat20" || "$ue" == "qhat21" || "$ue" == "qhat22" ]]; then
 	  mode="qmi"
-	    REDCAP=true
+	  REDCAP=true
 	else
 	  mode="mbim"
 	fi
@@ -1186,7 +1186,7 @@ deploy() {
     ANSIBLE_EXTRA_ARGS=()
     local vars="fiveg_profile=${PROFILE_5G}"
 
-    if [[ "$REDCAP" ]]; then
+    if [[ "$REDCAP" == "true" ]]; then
 	EXTRA_VARS_ARRAY+=("redcap=true")
     fi
 
