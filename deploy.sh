@@ -835,6 +835,7 @@ EOF
 EOF
     fi
     if [[ "$platform" == "r2lab" ]]; then
+      echo "***************** R2LAB_QFIT_UES is ${R2LAB_QFIT_UES[@]}"
       for ue in "${R2LAB_QFIT_UES[@]}" ; do
         echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
       done
