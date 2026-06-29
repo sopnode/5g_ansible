@@ -8,6 +8,9 @@
 # handset is tethered to (ansible_host=macphoneN), and "connecting" the UE just
 # means turning airplane mode OFF over adb. APN/RAT are not set here.
 
+- name: START_UE_CONNECT
+  ansible.builtin.meta: noop
+  
 - name: Load active 5G profile variables
   ansible.builtin.include_vars:
     file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"

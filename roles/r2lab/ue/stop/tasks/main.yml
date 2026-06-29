@@ -6,6 +6,9 @@
 # back ON over adb, run on the tethering Mac (ansible_host=mac<ue>) from the
 # faraday jump host - same delegation pattern as the Quectel stop below.
 
+- name: START_UE_STOP
+  ansible.builtin.meta: noop
+  
 - name: Resolve UE connection mode
   set_fact:
     ue_mode: "{{ hostvars[ue].mode | default('mbim') }}"
