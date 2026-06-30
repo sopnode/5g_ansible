@@ -141,8 +141,9 @@ init_defaults_and_banner() {
     DEFAULT_RAN="oai"
     DEFAULT_PLATFORM="r2lab"
     DEFAULT_RU="n300"
-    DEFAULT_LIST_QHAT_UE="qhat01"
-    DEFAULT_LIST_QFIT_UE=""
+    
+    DEFAULT_LIST_QHAT_UE=("qhat01")
+    DEFAULT_LIST_QFIT_UE=()
 
     PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
   
@@ -371,13 +372,13 @@ collect_user_inputs() {
       # Allow multiple selections
       # Make qhat01 the default if the user just presses enter
       echo ""
-      echo "Select the qhat UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QHAT_UE}):"
+      echo "Select the qhat UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QHAT_UE[*]:-none}}):"
       for i in "${!QHATS[@]}"; do
         echo "$((i + 1))) ${QHATS[i]}"
       done
       read -rp "Enter your choices: " -a ue_choices
       if [[ "${#ue_choices[@]}" -eq 0 ]]; then
-        R2LAB_QHAT_UES=("${DEFAULT_LIST_QHAT_UE}")
+        R2LAB_QHAT_UES=("${DEFAULT_LIST_QHAT_UE[@]}")
       else
         for choice in "${ue_choices[@]}"; do
           if [[ "$choice" -ge 1 && "$choice" -le "${#QHATS[@]}" ]]; then
@@ -392,13 +393,13 @@ collect_user_inputs() {
       # Select qfit UEs (Quectel RM500Q-GL attached to some FIT nodes)
       # Allow multiple selections
       echo ""
-      echo "Select the qfit UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QFIT_UE}):"
+      echo "Select the qfit UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QFIT_UE[*]:-none}}):"
       for i in "${!QFITS[@]}"; do
         echo "$((i + 1))) ${QFITS[i]}"
       done
       read -rp "Enter your choices: " -a ue_choices
       if [[ "${#ue_choices[@]}" -eq 0 ]]; then
-        R2LAB_QFIT_UES=("${DEFAULT_LIST_QFIT_UE}")
+        R2LAB_QFIT_UES=("${DEFAULT_LIST_QFIT_UE[@]}")
       else
         for choice in "${ue_choices[@]}"; do
           if [[ "$choice" -ge 1 && "$choice" -le "${#QFITS[@]}" ]]; then
