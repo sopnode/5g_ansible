@@ -853,6 +853,7 @@ EOF
         if [[ "$ue" == "qhat20" || "$ue" == "qhat21" || "$ue" == "qhat22" ]]; then
 	  mode="qmi"
 	  REDCAP=true
+	  echo "WARNING: as REDCAP UE(s) is/are selected, modified OAI configuration enforded to allow qhat20/21/22 connection on 20MHz bandwidth"
 	else
 	  mode="mbim"
 	fi
