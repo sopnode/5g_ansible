@@ -896,6 +896,16 @@ EOF
         echo "$line" >> "$INVENTORY"  
       done
     fi
+    if [[ "$platform" == "r2lab" ]]; then
+      cat >> "$INVENTORY" <<EOF
+
+[phones:vars]
+ansible_connection=local
+ansible_python_interpreter=/usr/bin/python3
+gather_facts=false
+EOF
+    fi
+    
   
     # Build fit_nodes section.
     # Rules:
