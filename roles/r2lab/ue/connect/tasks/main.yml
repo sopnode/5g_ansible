@@ -66,7 +66,7 @@
           set_fact:
             # ansible_user must be the macOS account that owns adb (e.g. 'tester').
             phone_ssh: "{{ hostvars[ue_item].ansible_user | default('tester') }}@{{ hostvars[ue_item].ansible_host | default(ue_item) }}"
-            # Absolute adb path (ssh non-interactif -> PATH minimal sur macOS).
+            # Absolute adb path (ssh non-interactif -> minimal PATH on macOS).
             adb_bin: "{{ hostvars[ue_item].adb_bin | default('adb') }}"
             # serial= disambiguates several handsets sharing one Mac.
             adb_opts: "{{ ('-s ' ~ hostvars[ue_item].serial) if (hostvars[ue_item].serial is defined and (hostvars[ue_item].serial | string | length) > 0) else '' }}"
