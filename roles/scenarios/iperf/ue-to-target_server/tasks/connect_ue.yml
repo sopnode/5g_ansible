@@ -67,7 +67,7 @@
       debug:
         msg: >-
           Phone {{ current_ue }} -> UE IP={{ resolved_ue_ip | default('NONE', true) }}
-          (non-rooted phone, cannot add static route but ok since Android has already a route to {{ target_server }...})
+          (non-rooted phone, cannot add static route but ok since Android has already a route to {{ target_server }... })
 
 - name: "Quectel post-connect for {{ current_ue }}"
   when: not is_phone
