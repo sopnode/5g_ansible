@@ -27,6 +27,7 @@ usage() {
     echo "-p, --profile5g <name>   Use group_vars/all/5g_profile_<name>.yaml specific 5G profile"
     echo "-e <vars>                Extra ansible vars, e.g.:"
     echo "     -e \"oai_gnb_mode=cudu\" -e \"no_boot=true\""
+    echo "     -e \"redcap=true\" -e \"csi_logger_enabled=true\""
     echo "--dry-run                Only print ansible commands"
     echo "-r, --no-reservation     Skip node/R2lab reservations"
     echo "--no-auto-start          Only configure iperf scenario, don't start it after 5G deployment"
@@ -141,9 +142,9 @@ init_defaults_and_banner() {
     DEFAULT_RAN="oai"
     DEFAULT_PLATFORM="r2lab"
     DEFAULT_RU="n300"
-    
-    DEFAULT_LIST_QHAT_UE=("qhat01")
+    DEFAULT_LIST_QHAT_UE=() # ("qhat01") # ("qhat01" "qhat02")
     DEFAULT_LIST_QFIT_UE=()
+    DEFAULT_LIST_PHONE_UE=()
 
     PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
   
@@ -164,6 +165,7 @@ init_defaults_and_banner() {
     R2LAB_CONFIG="./.r2lab_config"
 
     DISTINCT_IPERF_SERVER=false
+    REDCAP=false
     DIR_LOGS="LOGS"
     mkdir -p ${DIR_LOGS}
 
@@ -367,12 +369,12 @@ collect_user_inputs() {
           ;;
       esac
 
-      QHATS=("qhat01" "qhat02" "qhat03" "qhat10" "qhat11")
+      QHATS=("qhat01" "qhat02" "qhat03" "qhat10" "qhat11" "qhat20" "qhat21" "qhat22")
       # Select qhat UEs
       # Allow multiple selections
       # Make qhat01 the default if the user just presses enter
       echo ""
-      echo "Select the qhat UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QHAT_UE[*]:-none}}):"
+      echo "Select the qhat UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QHAT_UE[*]:-none}):"
       for i in "${!QHATS[@]}"; do
         echo "$((i + 1))) ${QHATS[i]}"
       done
@@ -389,11 +391,12 @@ collect_user_inputs() {
           fi
         done
       fi
+      
       QFITS=("qfit07" "qfit09" "qfit18" "qfit29" "qfit32" "qfit34")
       # Select qfit UEs (Quectel RM500Q-GL attached to some FIT nodes)
       # Allow multiple selections
       echo ""
-      echo "Select the qfit UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QFIT_UE[*]:-none}}):"
+      echo "Select the qfit UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_QFIT_UE[*]:-none}):"
       for i in "${!QFITS[@]}"; do
         echo "$((i + 1))) ${QFITS[i]}"
       done
@@ -404,6 +407,28 @@ collect_user_inputs() {
         for choice in "${ue_choices[@]}"; do
           if [[ "$choice" -ge 1 && "$choice" -le "${#QFITS[@]}" ]]; then
             R2LAB_QFIT_UES+=("${QFITS[$((choice - 1))]}")
+          else
+            echo "❌ Invalid UE choice: $choice"
+            exit 1
+          fi
+        done
+      fi
+
+      PHONES=("phone1" "phone2")
+      # Select Smartphone UEs (P40/Pixel7 attached to macphone1/2)
+      # Allow multiple selections
+      echo ""
+      echo "Select the smartphone UEs to use (you can select multiple separated by spaces, default: ${DEFAULT_LIST_PHONE_UE[*]:-none}):"
+      for i in "${!PHONES[@]}"; do
+        echo "$((i + 1))) ${PHONES[i]}"
+      done
+      read -rp "Enter your choices: " -a ue_choices
+      if [[ "${#ue_choices[@]}" -eq 0 ]]; then
+        R2LAB_PHONE_UES=("${DEFAULT_LIST_PHONE_UE[@]}")
+      else
+        for choice in "${ue_choices[@]}"; do
+          if [[ "$choice" -ge 1 && "$choice" -le "${#PHONES[@]}" ]]; then
+            R2LAB_PHONE_UES+=("${PHONES[$((choice - 1))]}")
           else
             echo "❌ Invalid UE choice: $choice"
             exit 1
@@ -459,12 +484,19 @@ optional_scenarios() {
     iperf_server_node=""
     # Ask the user if they want to run an optional scenario after deployment
     echo ""
+    # No scenario is available on r2lab when no UE is selected, so don't even ask.
+    if [[ "$platform" == "r2lab" \
+          && "${#R2LAB_QHAT_UES[@]}" -eq 0 \
+          && "${#R2LAB_QFIT_UES[@]}" -eq 0 \
+          && "${#R2LAB_PHONE_UES[@]}" -eq 0 ]]; then
+      return
+    fi
     read -rp "Do you want to run an optional scenario after deployment? [y/N]: " scenario_choice
     if [[ "$scenario_choice" =~ ^[Yy]$ ]]; then
       echo ""
       echo "Select the scenario to run:"
       options=()
-      if [[ "$platform" == "r2lab" && ( "${#R2LAB_QHAT_UES[@]}" -ge 1 || "${#R2LAB_QFIT_UES[@]}" -ge 1 ) ]]; then
+      if [[ "$platform" == "r2lab" && ( "${#R2LAB_QHAT_UES[@]}" -ge 1 || "${#R2LAB_QFIT_UES[@]}" -ge 1 || "${#R2LAB_PHONE_UES[@]}" -ge 1 ) ]]; then
         options+=("$SCENARIO_R2LAB")
         options+=("$SCENARIO_R2LAB_INTERFERENCE")
         options+=("$SCENARIO_R2LAB_MULTI")
@@ -657,7 +689,7 @@ print_summary() {
     echo "RAN:         $ran on ${ran_node}"
     [[ "$monitoring_enabled" == true ]] && echo "Monitoring:  enabled on $monitor_node" || echo "Monitoring:  disabled"
     echo "Platform:    $platform"
-    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_QHAT_UES[*]} ${R2LAB_QFIT_UES[*]}"
+    [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_QHAT_UES[*]} ${R2LAB_QFIT_UES[*]} ${R2LAB_PHONE_UES[*]}"
     if [[ "$run_interference_test" == true ]]; then
       echo "Interference Test: enabled"
       echo "  Interference USRP: $noise_usrp"
@@ -817,7 +849,15 @@ EOF
     fi
     if [[ "$platform" == "r2lab" ]]; then
       for ue in "${R2LAB_QHAT_UES[@]}" ; do
-        echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
+	[[ -n "$ue" ]] || continue
+        if [[ "$ue" == "qhat20" || "$ue" == "qhat21" || "$ue" == "qhat22" ]]; then
+	  mode="qmi"
+	  REDCAP=true
+	  echo "WARNING: as REDCAP UE(s) is/are selected, modified OAI configuration enforded to allow qhat20/21/22 connection on 20MHz bandwidth"
+	else
+	  mode="mbim"
+	fi
+        echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=${mode}" >> "$INVENTORY"
       done
     fi
 
@@ -829,10 +869,44 @@ EOF
     fi
     if [[ "$platform" == "r2lab" ]]; then
       for ue in "${R2LAB_QFIT_UES[@]}" ; do
+	[[ -n "$ue" ]] || continue
         echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
       done
     fi
 
+    if [[ "$platform" == "r2lab" ]]; then
+      cat >> "$INVENTORY" <<EOF
+
+[phones]
+EOF
+    fi
+    if [[ "$platform" == "r2lab" ]]; then
+      # Serial adb of handset tethering chaquefor every macphone
+      declare -A PHONE_SERIAL=(
+      [phone1]="MDX0220623006208"   # Huawei P40 Pro  -> macphone1
+      [phone2]="34061FDH20068M"     # Pixel 7         -> macphone2
+      )
+      for ue in "${R2LAB_PHONE_UES[@]}" ; do
+	[[ -n "$ue" ]] || continue
+	line="$ue ansible_host=mac$ue ansible_user=tester"
+        line+=" ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr'"
+        line+=" adb_bin=/usr/local/bin/adb"
+        serial="${PHONE_SERIAL[$ue]:-}"
+        [[ -n "$serial" ]] && line+=" serial=$serial"
+        echo "$line" >> "$INVENTORY"  
+      done
+    fi
+    if [[ "$platform" == "r2lab" ]]; then
+      cat >> "$INVENTORY" <<EOF
+
+[phones:vars]
+ansible_connection=local
+ansible_python_interpreter=/usr/bin/python3
+gather_facts=false
+EOF
+    fi
+    
+  
     # Build fit_nodes section.
     # Rules:
     # - If no interference test: keep the original default fit02 (b210).
@@ -1122,6 +1196,10 @@ deploy() {
 
     ANSIBLE_EXTRA_ARGS=()
     local vars="fiveg_profile=${PROFILE_5G}"
+
+    if [[ "$REDCAP" == "true" ]]; then
+	EXTRA_VARS_ARRAY+=("redcap=true")
+    fi
 
     for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
       # Clean argument if it starts by -- so that ansible handles it as a variable

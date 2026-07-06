@@ -1,5 +1,5 @@
 ---
-- name: RESTART_UE_SETUP
+- name: START_UE_SETUP
   ansible.builtin.meta: noop
 
 - name: Load active 5G profile variables
@@ -87,7 +87,6 @@
   ignore_errors: true
   loop: "{{ reachable_ues }}"
 
-
 - name: Compute failed UEs
   set_fact:
     failed_ues: "{{ all_ues | difference(reachable_ues) }}"
@@ -96,7 +95,6 @@
   debug:
     msg: "UEs not reachable after boot: {{ failed_ues }}"
   when: failed_ues | length > 0
-
 
 - name: Prepare qhat-init command
   vars:
@@ -119,8 +117,10 @@
   loop: "{{ reachable_ues }}"
   when: rru in ['benetel1', 'benetel2']
 
-- name: Init UEs
-  shell: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{{ item }} 'qhat-init; stop.sh'
+- name: Init UEs (qhat-init only, parallel)
+  shell: >
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{{ item }}
+    'qhat-init'
   delegate_to: faraday.inria.fr
   async: 1800
   poll: 0
@@ -136,6 +136,38 @@
   retries: 100
   delay: 10
 
+# Mode-aware stop, run as its own parallel async batch.
+# Best-effort: a stop failure must NOT abort the setup (unlike qhat-init).
+#   mbim -> stop.sh   |   qmi -> ci_ctl_qtel.py <at_port> detach
+# at_port defaults to /dev/ttyUSB3 (AT port after qhat-init's QMI switch);
+# override per node in the inventory with at_port=/dev/ttyUSBx if needed.
+- name: Stop UEs after init (parallel, best-effort)
+  shell: >
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{{ item }}
+    '{{ ue_stop_cmd }}'
+  vars:
+    ue_stop_cmd: >-
+      {{ 'stop.sh'
+         if (hostvars[item].mode | default('mbim', true)) == 'mbim'
+         else 'python3 /usr/local/bin/ci_ctl_qtel.py '
+              ~ (hostvars[item].at_port | default('/dev/ttyUSB3')) ~ ' detach' }}
+  delegate_to: faraday.inria.fr
+  async: 300
+  poll: 0
+  loop: "{{ reachable_ues }}"
+  register: stop_ue_jobs
+
+- name: Wait stop completion (best-effort)
+  async_status:
+    jid: "{{ item.ansible_job_id }}"
+  loop: "{{ stop_ue_jobs.results }}"
+  register: stop_result
+  until: stop_result.finished
+  retries: 30
+  delay: 5
+  failed_when: false
+  ignore_errors: true
+
 - name: Run qhat-check
   shell: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@{{ item }} 'qhat-check'
   delegate_to: faraday.inria.fr
@@ -150,3 +182,4 @@
       - "UE: {{ item.item }}"
       - "{{ item.stdout_lines }}"
   loop: "{{ check_results.results }}"
+  
