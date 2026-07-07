@@ -830,7 +830,7 @@ ${monitor_node} ansible_user=root nic_interface=$(get_nic "${monitor_node}") ip=
 EOF
     fi
 
-    if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
+    if [[ -n "${iperf_server_node}" ]]; then
       cat >> "$INVENTORY" <<EOF
 
 [iperf_server_node]
