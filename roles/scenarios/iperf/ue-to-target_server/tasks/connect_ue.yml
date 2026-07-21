@@ -90,6 +90,7 @@
       delay: 2
       until: "'UP' in wwan0_status.stdout"
       changed_when: false
+      ignore_errors: "{{ ignore_task_errors | default(false) }}"
 
     - name: Add route to {{ target_server }} via UPF IP when wwan0 is ready
       shell: |

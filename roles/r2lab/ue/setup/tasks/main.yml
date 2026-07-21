@@ -136,7 +136,7 @@
   loop: "{{ set_ue_jobs.results }}"
   register: job_result
   until: job_result.finished
-  retries: 100
+  retries: 20
   delay: 10
 
 # Mode-aware stop, run as its own parallel async batch.
@@ -166,7 +166,7 @@
   loop: "{{ stop_ue_jobs.results }}"
   register: stop_result
   until: stop_result.finished
-  retries: 30
+  retries: 20
   delay: 5
   failed_when: false
   ignore_errors: true
