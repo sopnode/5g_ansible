@@ -10,12 +10,25 @@ DRY_RUN=false
 NO_RESERVATION=false
 EXTRA_VARS_ARRAY=()
 SKIP_INPUTS=false
+SCENARIO_ONLY=false
+REQUESTED_EXPERIMENT_MODE=""
+REQUESTED_TCP_PAPER_SCENARIOS=""
+REQUESTED_TARGET_SERVER=""
+REQUESTED_PROMETHEUS_URL=""
+REQUESTED_EXPERIMENT_DURATION=""
+REQUESTED_MONITORING_LOKI=""
 
 SCENARIO_RFSIM="Iperf RFSIM scenario without interference"
 SCENARIO_R2LAB="Iperf R2lab scenario without interference"
 SCENARIO_R2LAB_INTERFERENCE="Iperf R2lab scenario with interference"
 SCENARIO_R2LAB_MULTI="Iperf R2lab scenario without interference, with multiple simultaneous UEs"
 SCENARIO_R2LAB_PING="Ping R2lab scenario without interference, with multiple simultaneous UEs"
+REQUESTED_GENERIC_EXPERIMENT_SCENARIO=""
+REQUESTED_GENERIC_EXPERIMENT_ARTIFACTS=""
+REQUESTED_GENERIC_EXPERIMENT_ARTIFACTS_ENABLED=""
+REQUESTED_GENERIC_EXPERIMENT_DRY_RUN=false
+GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS=""
+MONITORING_AUTO_ENABLED_REASON=""
 
 usage() {
     echo "Usage: $0 [options]"
@@ -31,6 +44,29 @@ usage() {
     echo "--dry-run                Only print ansible commands"
     echo "-r, --no-reservation     Skip node/R2lab reservations"
     echo "--no-auto-start          Only configure iperf scenario, don't start it after 5G deployment"
+    echo "--scenario-only          Skip reservation/deployment and only run the selected scenario workflow"
+    echo "--tcp-paper <names>      Run TCP scenario experiments"
+    echo "                         <names> can be all or a comma-separated scenario list"
+    echo "                         Current TCP scenario experiments:"
+    echo "                         01_decomp_baseline_all_ues"
+    echo "                         02_decomp_far_ue_radio"
+    echo "                         03_decomp_upf_cpu_stress"
+    echo "                         04_decomp_target_server_netem_delay"
+    echo "                         05_fit02_interference_near_ul_dl"
+    echo "                         06_fit28_spatial_control_near_ul_dl"
+    echo "--target-server <node>   Bare-metal target server for iperf, e.g. sopnode-w3"
+    echo "--prometheus-url <url>   Override Prometheus URL only if needed, e.g. http://172.28.2.76:30095"
+    echo "--duration <seconds>     Override TCP scenario or generic experiment traffic duration"
+    echo "--with-loki              Keep Grafana Loki enabled with monitoring (default)"
+    echo "--no-loki                Disable Grafana Loki log collection"
+    echo "--experiment <file|name> Run a generic experiment scenario through playbooks/run_experiment.yml"
+    echo "                         Names resolve from scenarios/experiment_examples/<name>.yml"
+    echo "--experiment-artifacts <file|name>"
+    echo "                         Artifact profile for --experiment; names resolve from configs/artifacts/profiles/<name>.yml"
+    echo "--no-experiment-artifacts"
+    echo "                         Run --experiment with only timeline/section logs, no Prometheus/pod-log/pcap collection"
+    echo "--dry-run-experiment"
+    echo "                         Preview the merged generic experiment/artifact config and stop before running anything"
     echo "-h, --help               Show help"
 }
 
@@ -52,6 +88,19 @@ run_cmd() {
 
       return $status
     fi
+}
+
+run_logged_cmd() {
+    local log_file="$1"
+    shift
+
+    if [[ "$DRY_RUN" == true ]]; then
+      run_cmd "$@"
+      return $?
+    fi
+
+    run_cmd "$@" 2>&1 | tee "$log_file"
+    return "${PIPESTATUS[0]}"
 }
 
 parse_args() {
@@ -97,6 +146,10 @@ parse_args() {
         --dry-run)
           DRY_RUN=true
           ;;
+
+        --dry-run-experiment)
+          REQUESTED_GENERIC_EXPERIMENT_DRY_RUN=true
+          ;;
         
         -r|--no-reservation)
           NO_RESERVATION=true
@@ -104,6 +157,55 @@ parse_args() {
         
         --no-auto-start)
           START_SCENARIO=false
+          ;;
+
+        --scenario-only)
+          SCENARIO_ONLY=true
+          NO_RESERVATION=true
+          ;;
+
+        --tcp-paper)
+          shift
+          REQUESTED_EXPERIMENT_MODE="tcp-paper"
+          REQUESTED_TCP_PAPER_SCENARIOS="${1:-all}"
+          ;;
+
+        --experiment|--generic-experiment)
+          shift
+          REQUESTED_EXPERIMENT_MODE="generic-experiment"
+          REQUESTED_GENERIC_EXPERIMENT_SCENARIO="${1:-}"
+          ;;
+
+        --experiment-artifacts|--artifact-profile)
+          shift
+          REQUESTED_GENERIC_EXPERIMENT_ARTIFACTS="${1:-}"
+          ;;
+
+        --no-experiment-artifacts)
+          REQUESTED_GENERIC_EXPERIMENT_ARTIFACTS_ENABLED=false
+          ;;
+
+        --target-server)
+          shift
+          REQUESTED_TARGET_SERVER="${1:-}"
+          ;;
+
+        --prometheus-url)
+          shift
+          REQUESTED_PROMETHEUS_URL="${1:-}"
+          ;;
+
+        --duration)
+          shift
+          REQUESTED_EXPERIMENT_DURATION="${1:-}"
+          ;;
+
+        --with-loki)
+          REQUESTED_MONITORING_LOKI="true"
+          ;;
+
+        --no-loki)
+          REQUESTED_MONITORING_LOKI="false"
           ;;
         
         -h|--help)
@@ -116,6 +218,329 @@ parse_args() {
       esac
       shift
     done
+}
+
+extra_var_value() {
+    local key="$1"
+    local ev clean_ev
+    for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
+      clean_ev="${ev#--}"
+      if [[ "$clean_ev" == "$key="* ]]; then
+        printf '%s' "${clean_ev#*=}"
+        return 0
+      fi
+    done
+    return 1
+}
+
+extra_var_defined() {
+    extra_var_value "$1" >/dev/null
+}
+
+append_cli_extra_vars() {
+    local ev clean_ev
+    for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
+      [[ -z "$ev" ]] && continue
+      clean_ev="${ev#--}"
+      ANSIBLE_EXTRA_ARGS+=(-e "$clean_ev")
+    done
+}
+
+list_generic_experiment_names() {
+    local file base
+    for file in scenarios/experiment_examples/*.yml; do
+      [[ -f "$file" ]] || continue
+      base="${file##*/}"
+      printf '%s\n' "${base%.yml}"
+    done | sort
+}
+
+list_generic_artifact_profile_names() {
+    local file base
+    for file in configs/artifacts/profiles/*.yml; do
+      [[ -f "$file" ]] || continue
+      base="${file##*/}"
+      printf '%s\n' "${base%.yml}"
+    done | sort
+}
+
+default_generic_experiment_name() {
+    if [[ -f scenarios/experiment_examples/uesim_artifact_validation.yml ]]; then
+      printf '%s' "uesim_artifact_validation"
+      return 0
+    fi
+    list_generic_experiment_names | head -n 1
+}
+
+default_generic_artifact_profile_name() {
+    if [[ -f configs/artifacts/profiles/default_5g_observability.yml ]]; then
+      printf '%s' "default_5g_observability"
+      return 0
+    fi
+    list_generic_artifact_profile_names | head -n 1
+}
+
+print_generic_experiment_examples() {
+    local example
+    while IFS= read -r example; do
+      [[ -n "$example" ]] && echo "  ${example}"
+    done < <(list_generic_experiment_names)
+}
+
+print_generic_artifact_profiles() {
+    local profile
+    while IFS= read -r profile; do
+      [[ -n "$profile" ]] && echo "  ${profile}"
+    done < <(list_generic_artifact_profile_names)
+}
+
+choose_generic_experiment_scenario() {
+    local examples=()
+    local default_name input selected i
+
+    while IFS= read -r input; do
+      [[ -n "$input" ]] && examples+=("$input")
+    done < <(list_generic_experiment_names)
+
+    default_name="$(default_generic_experiment_name)"
+    if [[ -z "$default_name" ]]; then
+      echo "No example YAML files were found in scenarios/experiment_examples." >&2
+      read -rp "Experiment scenario file or example name: " selected
+      resolve_generic_experiment_scenario_file "$selected"
+      return $?
+    fi
+
+    echo "Experiment examples:" >&2
+    for i in "${!examples[@]}"; do
+      if [[ "${examples[$i]}" == "$default_name" ]]; then
+        echo "  $((i + 1))) ${examples[$i]} (default)" >&2
+      else
+        echo "  $((i + 1))) ${examples[$i]}" >&2
+      fi
+    done
+
+    read -rp "Experiment scenario [default: ${default_name}; enter number, name, or path]: " input
+    if [[ -z "$input" ]]; then
+      selected="$default_name"
+    elif [[ "$input" =~ ^[0-9]+$ && "$input" -ge 1 && "$input" -le "${#examples[@]}" ]]; then
+      selected="${examples[$((input - 1))]}"
+    else
+      selected="$input"
+    fi
+
+    resolve_generic_experiment_scenario_file "$selected"
+}
+
+choose_generic_artifact_profile() {
+    local profiles=()
+    local default_name input selected i
+
+    while IFS= read -r input; do
+      [[ -n "$input" ]] && profiles+=("$input")
+    done < <(list_generic_artifact_profile_names)
+
+    default_name="$(default_generic_artifact_profile_name)"
+    if [[ -z "$default_name" ]]; then
+      echo "No artifact profile YAML files were found in configs/artifacts/profiles." >&2
+      read -rp "Artifact profile [default: none; enter path/name or none]: " input
+      resolve_generic_experiment_artifacts_file "${input:-none}"
+      return $?
+    fi
+
+    echo "Artifact profiles:" >&2
+    echo "  0) none (use scenario/default collection settings only)" >&2
+    for i in "${!profiles[@]}"; do
+      if [[ "${profiles[$i]}" == "$default_name" ]]; then
+        echo "  $((i + 1))) ${profiles[$i]} (default)" >&2
+      else
+        echo "  $((i + 1))) ${profiles[$i]}" >&2
+      fi
+    done
+
+    read -rp "Artifact profile [default: ${default_name}; enter number, name, path, or none]: " input
+    if [[ -z "$input" ]]; then
+      selected="$default_name"
+    elif [[ "$input" == "0" || "$input" == "none" || "$input" == "false" ]]; then
+      selected="none"
+    elif [[ "$input" =~ ^[0-9]+$ && "$input" -ge 1 && "$input" -le "${#profiles[@]}" ]]; then
+      selected="${profiles[$((input - 1))]}"
+    else
+      selected="$input"
+    fi
+
+    resolve_generic_experiment_artifacts_file "$selected"
+}
+
+resolve_generic_experiment_scenario_file() {
+    local input="${1:-}"
+    local candidate=""
+
+    if [[ -z "$input" ]]; then
+      echo "❌ Missing generic experiment scenario. Use --experiment <file|name>." >&2
+      echo "Examples:" >&2
+      print_generic_experiment_examples >&2
+      return 1
+    fi
+
+    if [[ -f "$input" ]]; then
+      printf '%s' "$input"
+      return 0
+    fi
+
+    candidate="scenarios/experiment_examples/${input}.yml"
+    if [[ -f "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+
+    candidate="scenarios/experiment_templates/${input}.yml"
+    if [[ -f "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+
+    echo "❌ Generic experiment scenario not found: $input" >&2
+    echo "Tried: $input, scenarios/experiment_examples/${input}.yml, scenarios/experiment_templates/${input}.yml" >&2
+    return 1
+}
+
+resolve_generic_experiment_artifacts_file() {
+    local input="${1:-}"
+    local candidate=""
+
+    if [[ -z "$input" ]]; then
+      input="$(default_generic_artifact_profile_name)"
+    fi
+
+    if [[ -z "$input" || "$input" == "none" || "$input" == "false" ]]; then
+      printf ''
+      return 0
+    fi
+
+    if [[ -f "$input" ]]; then
+      printf '%s' "$input"
+      return 0
+    fi
+
+    candidate="configs/artifacts/profiles/${input}.yml"
+    if [[ -f "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+
+    echo "❌ Generic experiment artifact profile not found: $input" >&2
+    echo "Tried: $input and configs/artifacts/profiles/${input}.yml" >&2
+    echo "Profiles:" >&2
+    print_generic_artifact_profiles >&2
+    return 1
+}
+
+generic_experiment_has_sections() {
+    local file="$1"
+    local detector_status=0
+
+    if command -v python3 >/dev/null 2>&1; then
+      python3 - "$file" <<'PY' >/dev/null 2>&1
+import sys
+
+try:
+    import yaml
+except Exception:
+    sys.exit(3)
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    data = yaml.safe_load(handle) or {}
+
+sections = data.get("sections") or []
+sys.exit(0 if isinstance(sections, list) and len(sections) > 0 else 2)
+PY
+      detector_status=$?
+      if [[ "$detector_status" -eq 0 ]]; then
+        return 0
+      fi
+      if [[ "$detector_status" -eq 2 ]]; then
+        return 1
+      fi
+    fi
+
+    # A deploy.sh-side check. The Ansible runner still owns the
+    # authoritative YAML parsing; this is only to decide whether to ask for the
+    # default full_run observation duration.
+    grep -Eq '^[[:space:]]*sections:[[:space:]]*($|#)' "$file"
+}
+
+prompt_generic_default_section_seconds_if_needed() {
+    local duration_input=""
+
+    if [[ "${experiment_artifacts_enabled:-true}" != true ]]; then
+      return
+    fi
+
+    if generic_experiment_has_sections "$experiment_scenario_file"; then
+      return
+    fi
+
+    echo ""
+    echo "No sections were found in ${experiment_scenario_file}."
+    echo "The runner will create one default full_run artifact window."
+    read -rp "How long should that full_run window last in seconds? [default: 60]: " duration_input
+
+    if [[ -z "$duration_input" ]]; then
+      GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS="60"
+    elif [[ "$duration_input" =~ ^[0-9]+$ && "$duration_input" -gt 0 ]]; then
+      GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS="$duration_input"
+    else
+      echo "❌ Invalid full_run duration: $duration_input"
+      exit 1
+    fi
+}
+
+enable_monitoring_for_workflow() {
+    local reason="$1"
+
+    if [[ "${monitoring_enabled:-false}" != true || -z "${monitor_node:-}" ]]; then
+      echo "${reason} needs the monitoring stack; enabling monitoring on ${monitor_node:-$DEFAULT_MONITOR_NODE}."
+      MONITORING_AUTO_ENABLED_REASON="$reason"
+    fi
+
+    monitoring_enabled=true
+    monitor_node="${monitor_node:-$DEFAULT_MONITOR_NODE}"
+    if [[ "${REQUESTED_MONITORING_LOKI:-}" == "false" ]]; then
+      monitoring_loki_enabled=false
+    else
+      monitoring_loki_enabled=true
+    fi
+}
+
+inventory_first_group_host() {
+    local group="$1"
+    awk -v group="$group" '
+      $0 ~ "^[[:space:]]*\\[" group "\\][[:space:]]*$" { in_group=1; next }
+      $0 ~ "^[[:space:]]*\\[" { in_group=0 }
+      in_group && $0 !~ "^[[:space:]]*(#|$)" { print $1; exit }
+    ' "$INVENTORY"
+}
+
+assert_monitoring_inventory_ready() {
+    local inventory_monitor_node=""
+
+    if [[ "${monitoring_enabled:-false}" != true || "$SCENARIO_ONLY" == true ]]; then
+      return
+    fi
+
+    inventory_monitor_node="$(inventory_first_group_host monitor_node)"
+    if [[ -n "$inventory_monitor_node" && ( -z "${monitor_node:-}" || "$SKIP_INPUTS" == true ) ]]; then
+      monitor_node="$inventory_monitor_node"
+    fi
+
+    if [[ -z "$inventory_monitor_node" ]]; then
+      echo "❌ Monitoring is enabled but ${INVENTORY} has no active host in [monitor_node]."
+      if [[ "$SKIP_INPUTS" == true ]]; then
+        echo "Because --no-input reuses the saved inventory, deploy.sh cannot add the monitoring node automatically."
+        echo "Rerun once without --no-input so the inventory is regenerated, or add monitor_node to ${DEPLOYMENT_ENV} and an active [monitor_node] entry to ${INVENTORY}."
+      fi
+      exit 1
+    fi
 }
 
 ############################
@@ -156,6 +581,14 @@ init_defaults_and_banner() {
     if [[ "$SKIP_INPUTS" == true ]]; then
       if [[ -f "$DEPLOYMENT_ENV" ]]; then
         source "$DEPLOYMENT_ENV"
+        if [[ "${monitoring_enabled:-false}" == true ]]; then
+          monitoring_loki_enabled=true
+          if [[ "${REQUESTED_MONITORING_LOKI:-}" == "false" ]]; then
+            monitoring_loki_enabled=false
+          fi
+        else
+          monitoring_loki_enabled=false
+        fi
       else
         echo "❌ The deployment variables were not set. Run the script with prompting enabled or manualy ensure that the $DEPLOYMENT_ENV file is configured correctly."
         exit 1
@@ -275,18 +708,18 @@ collect_user_inputs() {
       exit 1
     fi
 
-    # Select Monitoring Node (only if not OAI core with UERANSIM RAN and if user wants it)
+    # Select Monitoring
+    # Monitoring deploys a Prometheus/Grafana stack.
     monitoring_enabled=false
+    monitoring_loki_enabled=false
     monitor_node=""
-    if [[ "$core" != "oai" && "$ran" != "ueransim" ]]; then
+    if [[ "$core" == "open5gs" || "$ran" != "ueransim" ]]; then
       echo ""
-      read -rp "Do you want to deploy a monitoring node? [y/N]: " mon_choice
+      read -rp "Do you want to deploy monitoring? [y/N]: " mon_choice
       if [[ "$mon_choice" =~ ^[Yy]$ ]]; then
-        # Select Monitoring Node
-        # Make sopnode-f1 the default if the user just presses enter
         monitoring_enabled=true
         echo ""
-        echo "Select the node to deploy Monitoring on (default: ${DEFAULT_MONITOR_NODE}):"
+        echo "Select the node to deploy monitoring components on (default: ${DEFAULT_MONITOR_NODE}):"
         echo "1) sopnode-f1"
         echo "2) sopnode-f2"
         echo "3) sopnode-f3"
@@ -302,6 +735,10 @@ collect_user_inputs() {
             4) monitor_node="sopnode-w3" ;;
             *) echo "❌ Invalid Monitoring node"; exit 1 ;;
           esac
+        fi
+        monitoring_loki_enabled=true
+        if [[ "${REQUESTED_MONITORING_LOKI:-}" == "false" ]]; then
+          monitoring_loki_enabled=false
         fi
       fi
     fi
@@ -455,10 +892,13 @@ EOF
       chmod 600 "$R2LAB_CONFIG"
     fi
     cat > "$DEPLOYMENT_ENV" <<EOF
+core="$core"
+ran="$ran"
 core_node="$core_node"
 ran_node="$ran_node"
 platform="$platform"
 monitoring_enabled="$monitoring_enabled"
+monitoring_loki_enabled="$monitoring_loki_enabled"
 monitor_node="$monitor_node"
 EOF
 }
@@ -482,6 +922,141 @@ optional_scenarios() {
     run_scenario=false
     DISTINCT_IPERF_SERVER=false
     iperf_server_node=""
+    paper_scenario_names="all"
+    paper_prometheus_url=""
+    paper_duration_override=""
+    experiment_scenario_file=""
+    experiment_artifacts_file=""
+    experiment_artifacts_enabled=true
+    experiment_display_name=""
+    requires_iperf_server=true
+
+    TCP_PAPER_UES=("qhat01" "qhat02" "qhat03")
+    TCP_PAPER_SCENARIOS=(
+      "01_decomp_baseline_all_ues"
+      "02_decomp_far_ue_radio"
+      "03_decomp_upf_cpu_stress"
+      "04_decomp_target_server_netem_delay"
+      "05_fit02_interference_near_ul_dl"
+      "06_fit28_spatial_control_near_ul_dl"
+    )
+    if [[ -n "${REQUESTED_EXPERIMENT_MODE:-}" ]]; then
+      if [[ "$REQUESTED_EXPERIMENT_MODE" != "generic-experiment" && "$platform" != "r2lab" ]]; then
+        echo "❌ Automated TCP scenario workflows currently require platform=r2lab."
+        exit 1
+      fi
+
+      run_scenario=true
+      case "$REQUESTED_EXPERIMENT_MODE" in
+        "generic-experiment")
+          scenario="Generic experiment"
+          requires_iperf_server=false
+          experiment_scenario_file="$(resolve_generic_experiment_scenario_file "$REQUESTED_GENERIC_EXPERIMENT_SCENARIO")" || exit 1
+          if [[ "${REQUESTED_GENERIC_EXPERIMENT_ARTIFACTS_ENABLED:-true}" == false ]]; then
+            experiment_artifacts_enabled=false
+            experiment_artifacts_file=""
+          else
+            experiment_artifacts_enabled=true
+            experiment_artifacts_file="$(resolve_generic_experiment_artifacts_file "${REQUESTED_GENERIC_EXPERIMENT_ARTIFACTS:-}")" || exit 1
+          fi
+          if [[ "$SKIP_INPUTS" != true ]]; then
+            prompt_generic_default_section_seconds_if_needed
+          fi
+          if [[ "${experiment_artifacts_enabled}" == true ]]; then
+            enable_monitoring_for_workflow "Generic experiment artifact collection"
+          fi
+          echo "Generic experiment scenario file: ${experiment_scenario_file}"
+          if [[ "${experiment_artifacts_enabled}" == true && -n "${experiment_artifacts_file:-}" ]]; then
+            echo "Generic experiment artifact profile: ${experiment_artifacts_file}"
+          elif [[ "${experiment_artifacts_enabled}" == true ]]; then
+            echo "Generic experiment artifact profile: none (scenario/default collection settings only)"
+          else
+            echo "Generic experiment artifact collection: disabled"
+          fi
+          ;;
+
+        "tcp-paper")
+          scenario="TCP paper scenarios"
+          paper_scenario_names="${REQUESTED_TCP_PAPER_SCENARIOS:-all}"
+          echo "TCP paper scenario names: ${paper_scenario_names}"
+
+          tcp_paper_required_ues=()
+          add_tcp_paper_required_ue() {
+            local ue="$1"
+            if ! printf '%s\n' "${tcp_paper_required_ues[@]}" | grep -qx "$ue"; then
+              tcp_paper_required_ues+=("$ue")
+            fi
+          }
+
+          if [[ "$paper_scenario_names" == "all" ]]; then
+            for required_ue in "${TCP_PAPER_UES[@]}"; do
+              add_tcp_paper_required_ue "$required_ue"
+            done
+          else
+            IFS=',' read -ra selected_tcp_paper_scenarios_for_ues <<< "$paper_scenario_names"
+            for selected_tcp_paper_scenario in "${selected_tcp_paper_scenarios_for_ues[@]}"; do
+              case "$selected_tcp_paper_scenario" in
+                "01_decomp_baseline_all_ues"|"02_decomp_far_ue_radio"|"03_decomp_upf_cpu_stress"|"04_decomp_target_server_netem_delay"|"05_fit02_interference_near_ul_dl"|"06_fit28_spatial_control_near_ul_dl")
+                  add_tcp_paper_required_ue "qhat01"
+                  add_tcp_paper_required_ue "qhat02"
+                  add_tcp_paper_required_ue "qhat03"
+                  ;;
+                *)
+                  echo "❌ Unknown TCP paper scenario: $selected_tcp_paper_scenario"
+                  exit 1
+                  ;;
+              esac
+            done
+          fi
+
+          for required_ue in "${tcp_paper_required_ues[@]}"; do
+            if ! printf '%s\n' "${R2LAB_UES[@]}" | grep -qx "$required_ue"; then
+              R2LAB_UES+=("$required_ue")
+            fi
+          done
+          enable_monitoring_for_workflow "TCP paper scenario artifacts and latency probes"
+          echo "TCP paper scenario selected; ensuring required UEs are in inventory: ${tcp_paper_required_ues[*]}"
+          ;;
+
+        *)
+          echo "❌ Unknown requested experiment mode: ${REQUESTED_EXPERIMENT_MODE}"
+          exit 1
+          ;;
+      esac
+
+      if [[ "$requires_iperf_server" == true ]]; then
+        iperf_server_node="${REQUESTED_TARGET_SERVER:-sopnode-w3}"
+        echo "iperf server node: ${iperf_server_node}"
+        if [[ "${iperf_server_node}" == "${core_node}" || \
+              "${iperf_server_node}" == "${ran_node}" || \
+              ( -n "${monitor_node}" && "${iperf_server_node}" == "${monitor_node}" ) ]]; then
+          echo "iperf server already part of inventory, no need to add it."
+        else
+          DISTINCT_IPERF_SERVER=true
+          echo "iperf server ${iperf_server_node} will be added in the inventory."
+        fi
+      fi
+
+      cat >> "$DEPLOYMENT_ENV" <<EOF
+run_scenario="$run_scenario"
+scenario="$scenario"
+monitoring_enabled="$monitoring_enabled"
+monitoring_loki_enabled="$monitoring_loki_enabled"
+monitor_node="$monitor_node"
+iperf_server_node="$iperf_server_node"
+paper_scenario_names="$paper_scenario_names"
+paper_prometheus_url="${REQUESTED_PROMETHEUS_URL:-}"
+paper_duration_override="${REQUESTED_EXPERIMENT_DURATION:-}"
+experiment_scenario_file="$experiment_scenario_file"
+experiment_artifacts_file="$experiment_artifacts_file"
+experiment_artifacts_enabled="$experiment_artifacts_enabled"
+experiment_display_name="$experiment_display_name"
+generic_experiment_default_section_seconds="$GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS"
+requires_iperf_server="$requires_iperf_server"
+EOF
+      return
+    fi
+
     # Ask the user if they want to run an optional scenario after deployment
     echo ""
     # No scenario is available on r2lab when no UE is selected, so don't even ask.
@@ -505,7 +1080,11 @@ optional_scenarios() {
       if [[ "$platform" == "rfsim" ]]; then
         options+=("$SCENARIO_RFSIM")
       fi
-      
+      if [[ "$platform" == "r2lab" ]]; then
+        options+=("TCP paper scenarios")
+      fi
+      options+=("Generic experiment")
+
       for i in "${!options[@]}"; do
         echo "$((i+1))) ${options[$i]}"
       done
@@ -524,47 +1103,152 @@ optional_scenarios() {
       # Simply use the run_iperf_test.sh script to run the selected iperf test scenario after deployment.
 
       if [[ "$run_scenario" == true ]]; then
-        DEFAULT_IPERF_SERVER_NODE=${core_node}
-        echo "By default, iperf will run between UEs and the bare-metal server hosting 5G core network pods, i.e., ${DEFAULT_IPERF_SERVER_NODE}"
-        echo ""
-        echo "Select the target node to deploy iperf servers : by default, ${DEFAULT_IPERF_SERVER_NODE}:"
-        echo "1) sopnode-f1"
-        echo "2) sopnode-f2"
-        echo "3) sopnode-f3"
-        echo "4) sopnode-w3"
-        read -rp "Enter choice [1-4]: " iperf_server_choice
-        if [[ -z "${iperf_server_choice}" ]]; then
-          iperf_server_node=${DEFAULT_IPERF_SERVER_NODE}
-        else
-          case "${iperf_server_choice}" in
-            1) iperf_server_node="sopnode-f1" ;;
-            2) iperf_server_node="sopnode-f2" ;;
-            3) iperf_server_node="sopnode-f3" ;;
-            4) iperf_server_node="sopnode-w3" ;;
-            *) echo "❌ Invalid iperf target server choice"; exit 1 ;;
-          esac
-        fi
+        if [[ "$scenario" == "Generic experiment" ]]; then
+          requires_iperf_server=false
+          echo ""
+          echo "Generic experiment selected."
+          echo "This runs your experiment YAML through deploy.sh, then optionally collects artifacts."
+          experiment_scenario_file="$(choose_generic_experiment_scenario)" || exit 1
+          read -rp "Collect artifacts after the experiment? [Y/n]: " experiment_artifacts_choice
+          if [[ "$experiment_artifacts_choice" =~ ^[Nn]$ ]]; then
+            experiment_artifacts_enabled=false
+            experiment_artifacts_file=""
+          else
+            experiment_artifacts_enabled=true
+            experiment_artifacts_file="$(choose_generic_artifact_profile)" || exit 1
+          fi
+          prompt_generic_default_section_seconds_if_needed
+          if [[ "${experiment_artifacts_enabled}" == true ]]; then
+            enable_monitoring_for_workflow "Generic experiment artifact collection"
+          fi
+          echo "Generic experiment scenario file: ${experiment_scenario_file}"
+          if [[ "${experiment_artifacts_enabled}" == true && -n "${experiment_artifacts_file:-}" ]]; then
+            echo "Generic experiment artifact profile: ${experiment_artifacts_file}"
+          elif [[ "${experiment_artifacts_enabled}" == true ]]; then
+            echo "Generic experiment artifact profile: none (scenario/default collection settings only)"
+          else
+            echo "Generic experiment artifact collection: disabled"
+          fi
+        elif [[ "$scenario" == "TCP paper scenarios" ]]; then
+          echo ""
+          echo "Select TCP paper scenario(s) to run (default: all):"
+          echo "0) all TCP paper scenarios"
+          for i in "${!TCP_PAPER_SCENARIOS[@]}"; do
+            echo "$((i + 1))) ${TCP_PAPER_SCENARIOS[i]}"
+          done
+          read -rp "Enter choices separated by spaces [0-${#TCP_PAPER_SCENARIOS[@]}]: " -a tcp_paper_choices
+          if [[ "${#tcp_paper_choices[@]}" -eq 0 || "${tcp_paper_choices[0]}" == "0" ]]; then
+            paper_scenario_names="all"
+          else
+            selected_tcp_paper_scenarios=()
+            for choice in "${tcp_paper_choices[@]}"; do
+              if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#TCP_PAPER_SCENARIOS[@]} )); then
+                selected_tcp_paper_scenarios+=("${TCP_PAPER_SCENARIOS[$((choice - 1))]}")
+              else
+                echo "❌ Invalid TCP paper scenario choice: $choice"
+                exit 1
+              fi
+            done
+            paper_scenario_names=$(IFS=,; echo "${selected_tcp_paper_scenarios[*]}")
+          fi
+          echo "TCP paper scenario names: ${paper_scenario_names}"
 
-        echo "iperf server node: ${iperf_server_node}"
-        case "${iperf_server_node}" in
-          "${core_node}"|"${ran_node}"|"${monitor_node}")
-            if [[ -z "${iperf_server_node}" ]]; then
-              echo "No iperf server node selected; skipping extra inventory host."
-            else
-              echo "iperf server already part of inventory, no need to add it."
+          tcp_paper_required_ues=()
+          add_tcp_paper_required_ue() {
+            local ue="$1"
+            if ! printf '%s\n' "${tcp_paper_required_ues[@]}" | grep -qx "$ue"; then
+              tcp_paper_required_ues+=("$ue")
             fi
-            ;;
-          *)
-            DISTINCT_IPERF_SERVER=true
-            echo "iperf server ${iperf_server_node} will be added in the inventory."
-            ;;
-        esac
-      fi
-    fi
+          }
+
+          if [[ "$paper_scenario_names" == "all" ]]; then
+            for required_ue in "${TCP_PAPER_UES[@]}"; do
+              add_tcp_paper_required_ue "$required_ue"
+            done
+          else
+            IFS=',' read -ra selected_tcp_paper_scenarios_for_ues <<< "$paper_scenario_names"
+            for selected_tcp_paper_scenario in "${selected_tcp_paper_scenarios_for_ues[@]}"; do
+              case "$selected_tcp_paper_scenario" in
+                "01_decomp_baseline_all_ues"|"02_decomp_far_ue_radio"|"03_decomp_upf_cpu_stress"|"04_decomp_target_server_netem_delay"|"05_fit02_interference_near_ul_dl"|"06_fit28_spatial_control_near_ul_dl")
+                  add_tcp_paper_required_ue "qhat01"
+                  add_tcp_paper_required_ue "qhat02"
+                  add_tcp_paper_required_ue "qhat03"
+                  ;;
+              esac
+            done
+          fi
+
+          for required_ue in "${tcp_paper_required_ues[@]}"; do
+            if ! printf '%s\n' "${R2LAB_UES[@]}" | grep -qx "$required_ue"; then
+              R2LAB_UES+=("$required_ue")
+            fi
+          done
+          enable_monitoring_for_workflow "TCP paper scenario artifacts and latency probes"
+          echo "TCP paper scenario selected; ensuring required UEs are in inventory: ${tcp_paper_required_ues[*]}"
+          echo "This workflow will export Prometheus at 1s and collect experiment artifacts."
+          echo ""
+          read -rp "TCP paper iperf duration in seconds [default: 300]: " paper_duration_input
+          if [[ -n "${paper_duration_input}" ]]; then
+            if [[ "$paper_duration_input" =~ ^[0-9]+$ ]]; then
+              paper_duration_override="$paper_duration_input"
+            else
+              echo "❌ Invalid duration: $paper_duration_input"
+              exit 1
+            fi
+          fi
+          DEFAULT_IPERF_SERVER_NODE="sopnode-w3"
+        else
+	          DEFAULT_IPERF_SERVER_NODE=${core_node}
+	        fi
+	        if [[ "$requires_iperf_server" == true ]]; then
+	          echo "By default, iperf will run between UEs and the selected bare-metal target server, i.e., ${DEFAULT_IPERF_SERVER_NODE}"
+	          echo ""
+	          echo "Select the target node to deploy iperf servers : by default, ${DEFAULT_IPERF_SERVER_NODE}:"
+	          echo "1) sopnode-f1"
+	          echo "2) sopnode-f2"
+	          echo "3) sopnode-f3"
+	          echo "4) sopnode-w3"
+	          read -rp "Enter choice [1-4]: " iperf_server_choice
+	          if [[ -z "${iperf_server_choice}" ]]; then
+	            iperf_server_node=${DEFAULT_IPERF_SERVER_NODE}
+	          else
+	            case "${iperf_server_choice}" in
+	              1) iperf_server_node="sopnode-f1" ;;
+	              2) iperf_server_node="sopnode-f2" ;;
+	              3) iperf_server_node="sopnode-f3" ;;
+	              4) iperf_server_node="sopnode-w3" ;;
+	              *) echo "❌ Invalid iperf target server choice"; exit 1 ;;
+	            esac
+	          fi
+
+	          echo "iperf server node: ${iperf_server_node}"
+	          if [[ "${iperf_server_node}" == "${core_node}" || \
+	                "${iperf_server_node}" == "${ran_node}" || \
+	                ( -n "${monitor_node}" && "${iperf_server_node}" == "${monitor_node}" ) ]]; then
+	            echo "iperf server already part of inventory, no need to add it."
+	          else
+	            DISTINCT_IPERF_SERVER=true
+	            echo "iperf server ${iperf_server_node} will be added in the inventory."
+	          fi
+	        fi
+	      fi
+	    fi
     cat >> "$DEPLOYMENT_ENV" <<EOF
 run_scenario="$run_scenario"
 scenario="$scenario"
+monitoring_enabled="$monitoring_enabled"
+monitoring_loki_enabled="$monitoring_loki_enabled"
+monitor_node="$monitor_node"
 iperf_server_node="$iperf_server_node"
+paper_scenario_names="$paper_scenario_names"
+paper_prometheus_url="$paper_prometheus_url"
+paper_duration_override="$paper_duration_override"
+experiment_scenario_file="$experiment_scenario_file"
+experiment_artifacts_file="$experiment_artifacts_file"
+experiment_artifacts_enabled="$experiment_artifacts_enabled"
+experiment_display_name="$experiment_display_name"
+generic_experiment_default_section_seconds="$GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS"
+requires_iperf_server="$requires_iperf_server"
 EOF
 }
 
@@ -687,7 +1371,16 @@ print_summary() {
     echo "========== SUMMARY =========="
     echo "Core:        $core on ${core_node}"
     echo "RAN:         $ran on ${ran_node}"
-    [[ "$monitoring_enabled" == true ]] && echo "Monitoring:  enabled on $monitor_node" || echo "Monitoring:  disabled"
+    if [[ "$monitoring_enabled" == true ]]; then
+      if [[ -n "$monitor_node" ]]; then
+        echo "Monitoring:  enabled on $monitor_node"
+      else
+        echo "Monitoring:  enabled (automatic mode)"
+      fi
+      echo "Logs:        $([[ "${monitoring_loki_enabled:-false}" == true ]] && echo "Loki enabled" || echo "Loki disabled")"
+    else
+      echo "Monitoring:  disabled"
+    fi
     echo "Platform:    $platform"
     [[ "$platform" == "r2lab" ]] && echo "RU:          $R2LAB_RU" && echo "UEs:         ${R2LAB_QHAT_UES[*]} ${R2LAB_QFIT_UES[*]} ${R2LAB_PHONE_UES[*]}"
     if [[ "$run_interference_test" == true ]]; then
@@ -704,9 +1397,13 @@ print_summary() {
       echo "  GAIN: $GAIN"
       echo "  NOISE_BANDWIDTH: $NOISE_BANDWIDTH"
     fi
-    if [[ "${run_scenario}" == true ]]; then
-      echo "Iperf Test: enabled"
-      echo "  Scenario: $scenario"
+	    if [[ "${run_scenario}" == true ]]; then
+	      if [[ "$scenario" == "Generic experiment" || "$scenario" == "TCP paper scenarios" ]]; then
+	        echo "Scenario:    enabled"
+	      else
+	        echo "Iperf Test: enabled"
+	      fi
+	      echo "  Scenario: ${experiment_display_name:-$scenario}"
       case "$scenario" in
         "$SCENARIO_R2LAB")
           echo "Will run iperf in a sequential way on ${R2LAB_QHAT_UES[0]} for 30 seconds in downlink then uplink (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
@@ -716,6 +1413,34 @@ print_summary() {
         ;;
         "$SCENARIO_R2LAB_INTERFERENCE")
           echo "Will run iperf with interference (to explain further)"
+        ;;
+        "TCP paper scenarios")
+          echo "Will run selected TCP paper scenario(s): ${paper_scenario_names:-all}. UEs are left connected at the end."
+          echo "Artifacts will include iperf JSON logs, 1s Prometheus CSV, and timeline/window splits."
+          [[ -n "${paper_duration_override:-}" ]] && echo "  Duration override: ${paper_duration_override}s"
+          [[ -n "${paper_prometheus_url:-}" ]] && echo "  Prometheus URL override: ${paper_prometheus_url}"
+        ;;
+        "Generic experiment")
+          if [[ -n "${experiment_display_name:-}" ]]; then
+            echo "Will run ${experiment_display_name} through playbooks/run_experiment.yml."
+          else
+            echo "Will run generic experiment through playbooks/run_experiment.yml."
+          fi
+          if [[ "${REQUESTED_GENERIC_EXPERIMENT_DRY_RUN:-false}" == true ]]; then
+            echo "  Dry run: enabled, so deployment, traffic, artifact collection, and remote changes are skipped."
+          fi
+          echo "  Scenario file: ${experiment_scenario_file:-unset}"
+          if [[ "${experiment_artifacts_enabled:-true}" == true && -n "${experiment_artifacts_file:-}" ]]; then
+            echo "  Artifact profile: ${experiment_artifacts_file}"
+          elif [[ "${experiment_artifacts_enabled:-true}" == true ]]; then
+            echo "  Artifact profile: none (scenario/default collection settings only)"
+          else
+            echo "  Artifact collection: disabled"
+          fi
+          [[ -n "${GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS:-${generic_experiment_default_section_seconds:-}}" ]] && echo "  Default full_run window: ${GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS:-${generic_experiment_default_section_seconds:-}}s"
+          [[ -n "${REQUESTED_EXPERIMENT_DURATION:-}" ]] && echo "  Duration override passed as iperf_duration: ${REQUESTED_EXPERIMENT_DURATION}s"
+          [[ -n "${REQUESTED_PROMETHEUS_URL:-}" ]] && echo "  Prometheus URL override: ${REQUESTED_PROMETHEUS_URL}"
+          [[ -n "${REQUESTED_TARGET_SERVER:-}" ]] && echo "  Target server override: ${REQUESTED_TARGET_SERVER}"
         ;;
         "$SCENARIO_R2LAB_MULTI")
           echo "Will run iperf on each UE individually (${R2LAB_QHAT_UES[0]}), and then all UEs simultaneously.  Will test uplink and downlink for both TCP and UDP.  Each test lasts 30s (use the iperf_duration and iperf_sleep ansible parameters to change the default values (in s))"
@@ -824,7 +1549,7 @@ ${ran_node} ansible_user=root nic_interface=$(get_nic "${ran_node}") ip=172.28.2
 [monitor_node]
 EOF
 
-    if [[ "${monitoring_enabled}" == true ]]; then
+    if [[ "${monitoring_enabled}" == true && -n "${monitor_node}" ]]; then
       cat >> "$INVENTORY" <<EOF
 ${monitor_node} ansible_user=root nic_interface=$(get_nic "${monitor_node}") ip=172.28.2.$(get_ip_suffix "${monitor_node}") storage=$(get_storage "${monitor_node}")
 EOF
@@ -1007,7 +1732,7 @@ EOF
 core_node
 ran_node
 EOF
-    if [[ "$monitoring_enabled" == true ]]; then
+    if [[ "$monitoring_enabled" == true && -n "${monitor_node}" ]]; then
       echo "monitor_node" >> "$INVENTORY"
     fi
     if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
@@ -1019,7 +1744,7 @@ EOF
 [k8s_workers:children]
 ran_node
 EOF
-    if [[ "${monitoring_enabled}" == true ]]; then
+    if [[ "${monitoring_enabled}" == true && -n "${monitor_node}" ]]; then
       echo "monitor_node" >> "$INVENTORY"
     fi
 
@@ -1036,7 +1761,7 @@ core_node_name="${core_node}"
 ran_node_name="${ran_node}"
 EOF
 
-    if [[ "$monitoring_enabled" == true ]]; then
+    if [[ "$monitoring_enabled" == true && -n "${monitor_node}" ]]; then
       cat >> "$INVENTORY" <<EOF
 monitor_node_name="${monitor_node}"
 EOF
@@ -1065,6 +1790,7 @@ f3_ran=$( [[ "${ran_node}" == "sopnode-f3" ]] && echo true || echo false )
 # bridge_enabled is true if OVS bridge required between core_node and ran_node
 bridge_enabled=$( [[ "${ran_node}" != "${core_node}" ]] && echo true || echo false )
 monitoring_enabled=${monitoring_enabled}
+monitoring_loki_enabled=${monitoring_loki_enabled:-false}
 EOF
 
 }
@@ -1085,7 +1811,7 @@ reserve_nodes() {
     echo ""
     echo "Reserving nodes on SLICES..."
     nodes_to_reserve=("${core_node}" "${ran_node}")
-    if [[ "$monitoring_enabled" == true ]]; then
+    if [[ "$monitoring_enabled" == true && -n "${monitor_node}" ]]; then
       nodes_to_reserve+=("${monitor_node}")
     fi
     if [[ "${DISTINCT_IPERF_SERVER}" == true ]]; then
@@ -1194,20 +1920,15 @@ reserve_r2lab() {
 
 deploy() {
 
-    ANSIBLE_EXTRA_ARGS=()
-    local vars="fiveg_profile=${PROFILE_5G}"
+    ANSIBLE_EXTRA_ARGS=(-e "fiveg_profile=${PROFILE_5G}")
+    append_cli_extra_vars
 
-    if [[ "$REDCAP" == "true" ]]; then
-	EXTRA_VARS_ARRAY+=("redcap=true")
+    if [[ "${monitoring_enabled:-false}" == true ]] && ! extra_var_defined "monitoring_loki_enabled"; then
+      ANSIBLE_EXTRA_ARGS+=(-e "monitoring_loki_enabled=${monitoring_loki_enabled:-true}")
     fi
-
-    for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
-      # Clean argument if it starts by -- so that ansible handles it as a variable
-      clean_ev=$(echo "$ev" | sed 's/^--//')
-      vars="$vars $clean_ev"
-    done
-
-    ANSIBLE_EXTRA_ARGS+=(-e "$vars")
+    if [[ "$REDCAP" == "true" ]] && ! extra_var_defined "redcap"; then
+      ANSIBLE_EXTRA_ARGS+=(-e "redcap=true")
+    fi
 
     echo "Launching deployment..."
 
@@ -1241,25 +1962,110 @@ deploy() {
 
 run_scenario() {
 
-    ANSIBLE_EXTRA_ARGS=()
+    ANSIBLE_EXTRA_ARGS=(-e "fiveg_profile=${PROFILE_5G}")
+    append_cli_extra_vars
 
-    # Main variable
-    ANSIBLE_EXTRA_ARGS+=(-e "fiveg_profile=${PROFILE_5G}")
+    if [[ -n "${paper_prometheus_url:-}" ]]; then
+      ANSIBLE_EXTRA_ARGS+=(-e "paper_prometheus_url=${paper_prometheus_url}")
+    fi
 
-    # Additional variables
-    for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
-      # Skip empty elements
-      [[ -z "$ev" ]] && continue
+    if [[ -n "${paper_duration_override:-}" ]]; then
+      ANSIBLE_EXTRA_ARGS+=(-e "paper_duration=${paper_duration_override}")
+    fi
 
-      clean_ev=$(echo "$ev" | sed 's/^--//')
-      # Only add -e if clean_ev is non-empty
-      [[ -n "$clean_ev" ]] && ANSIBLE_EXTRA_ARGS+=(-e "$clean_ev")
-    done
+    if [[ -n "${REQUESTED_PROMETHEUS_URL:-}" && -z "${paper_prometheus_url:-}" ]]; then
+      ANSIBLE_EXTRA_ARGS+=(-e "paper_prometheus_url=${REQUESTED_PROMETHEUS_URL}")
+      ANSIBLE_EXTRA_ARGS+=(-e "experiment_prometheus_url=${REQUESTED_PROMETHEUS_URL}")
+    fi
+
+    if [[ -n "${REQUESTED_EXPERIMENT_DURATION:-}" && -z "${paper_duration_override:-}" ]]; then
+      case "${REQUESTED_EXPERIMENT_MODE:-}" in
+        "tcp-paper")
+          ANSIBLE_EXTRA_ARGS+=(-e "paper_duration=${REQUESTED_EXPERIMENT_DURATION}")
+          ;;
+        "generic-experiment")
+          ANSIBLE_EXTRA_ARGS+=(-e "iperf_duration=${REQUESTED_EXPERIMENT_DURATION}")
+          ANSIBLE_EXTRA_ARGS+=(-e "experiment_default_section_seconds=${REQUESTED_EXPERIMENT_DURATION}")
+          ;;
+        *)
+          ANSIBLE_EXTRA_ARGS+=(-e "paper_duration=${REQUESTED_EXPERIMENT_DURATION}")
+          ;;
+      esac
+    fi
+
+    if [[ -n "${REQUESTED_EXPERIMENT_MODE:-}" ]]; then
+      run_scenario=true
+      iperf_server_node="${REQUESTED_TARGET_SERVER:-${iperf_server_node:-sopnode-w3}}"
+      case "$REQUESTED_EXPERIMENT_MODE" in
+        "tcp-paper")
+          scenario="TCP paper scenarios"
+          paper_scenario_names="${REQUESTED_TCP_PAPER_SCENARIOS:-${paper_scenario_names:-all}}"
+          ;;
+        "generic-experiment")
+          scenario="Generic experiment"
+          requires_iperf_server=false
+          experiment_scenario_file="${experiment_scenario_file:-$(resolve_generic_experiment_scenario_file "$REQUESTED_GENERIC_EXPERIMENT_SCENARIO")}" || exit 1
+          if [[ "${REQUESTED_GENERIC_EXPERIMENT_ARTIFACTS_ENABLED:-${experiment_artifacts_enabled:-true}}" == false ]]; then
+            experiment_artifacts_enabled=false
+            experiment_artifacts_file=""
+          else
+            experiment_artifacts_enabled=true
+            experiment_artifacts_file="${experiment_artifacts_file:-$(resolve_generic_experiment_artifacts_file "${REQUESTED_GENERIC_EXPERIMENT_ARTIFACTS:-}")}" || exit 1
+          fi
+          ;;
+      esac
+    fi
 
     if [[ "$run_scenario" == true ]]; then
       if [[ "$START_SCENARIO" == true ]]; then
         echo "Running $scenario"
+        scenario_status=0
         case "$scenario" in
+          "Iperf R2lab scenario without interference"|"Iperf RFSIM scenario without interference")
+            run_logged_cmd "${DIR_LOGS}/logs-scenario_iperf.txt" \
+              ./run_scenario.sh -d --inventory="${NAME_INVENTORY}" \
+              "${ANSIBLE_EXTRA_ARGS[@]}"
+            scenario_status=$?
+            ;;
+          "Iperf R2lab scenario with interference")
+            run_logged_cmd "${DIR_LOGS}/logs-scenario_interference.txt" \
+              ./run_scenario.sh -i --inventory="${NAME_INVENTORY}" \
+              "${ANSIBLE_EXTRA_ARGS[@]}"
+            scenario_status=$?
+            ;;
+          "TCP paper scenarios")
+            run_logged_cmd "${DIR_LOGS}/logs-scenario_tcp-paper.txt" \
+              ansible-playbook -i "$INVENTORY" \
+              "${ANSIBLE_EXTRA_ARGS[@]}" \
+              -e "target_server_host=${iperf_server_node}" \
+              -e "paper_scenario_names=${paper_scenario_names:-all}" \
+              playbooks/run_tcp_paper_scenarios.yml
+            scenario_status=$?
+            ;;
+          "Generic experiment")
+            GENERIC_EXPERIMENT_ARGS=(-e "experiment_scenario_file=${experiment_scenario_file}")
+            if [[ "${experiment_artifacts_enabled:-true}" == true && -n "${experiment_artifacts_file:-}" ]]; then
+              GENERIC_EXPERIMENT_ARGS+=(-e "experiment_artifacts_file=${experiment_artifacts_file}")
+            fi
+            if [[ "${experiment_artifacts_enabled:-true}" != true ]]; then
+              GENERIC_EXPERIMENT_ARGS+=(-e "experiment_collect_artifacts=false")
+            fi
+            if [[ -n "${GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS:-${generic_experiment_default_section_seconds:-}}" ]]; then
+              GENERIC_EXPERIMENT_ARGS+=(-e "experiment_default_section_seconds=${GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS:-${generic_experiment_default_section_seconds:-}}")
+            fi
+            if [[ -n "${REQUESTED_TARGET_SERVER:-${iperf_server_node:-}}" ]]; then
+              GENERIC_EXPERIMENT_ARGS+=(-e "target_server_host=${REQUESTED_TARGET_SERVER:-${iperf_server_node}}")
+            fi
+            if [[ "${REQUESTED_GENERIC_EXPERIMENT_DRY_RUN:-false}" == true ]]; then
+              GENERIC_EXPERIMENT_ARGS+=(-e "experiment_dry_run=true")
+            fi
+            run_logged_cmd "${DIR_LOGS}/logs-scenario_generic-experiment.txt" \
+              ansible-playbook -i "$INVENTORY" \
+              "${ANSIBLE_EXTRA_ARGS[@]}" \
+              "${GENERIC_EXPERIMENT_ARGS[@]}" \
+              playbooks/run_experiment.yml
+            scenario_status=$?
+            ;;
           "$SCENARIO_R2LAB"|"$SCENARIO_RFSIM")
             run_cmd ./run_scenario.sh -d --inventory="${NAME_INVENTORY}" \
               "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_iperf.txt
@@ -1275,12 +2081,20 @@ run_scenario() {
           "$SCENARIO_R2LAB_PING")
             run_cmd ./run_scenario.sh --ping --inventory="${NAME_INVENTORY}" \
               "${ANSIBLE_EXTRA_ARGS[@]}"  2>&1 | tee ${DIR_LOGS}/logs-scenario_ping.txt
-            ;;
-          *)
-            echo "❌ Unknown iperf test scenario: $scenario"
-            exit 1
+	            ;;
+	          *)
+	            echo "❌ Unknown scenario: $scenario"
+	            exit 1
             ;;
         esac
+        if [[ "$scenario_status" -ne 0 ]]; then
+          echo ""
+          echo "=========================================="
+          echo "============ Scenario Failed ============"
+          echo "=========================================="
+          echo ""
+          return "$scenario_status"
+        fi
         echo ""
         echo "=========================================="
         echo "========== Scenario Completed =========="
@@ -1289,7 +2103,25 @@ run_scenario() {
       else
         echo ""
         echo "Scenario $scenario with MANUAL start mode selected"
-        echo "Just launch ./run_scenario.sh to start it !"
+        if [[ "$scenario" == "TCP paper scenarios" ]]; then
+          echo "Just launch:"
+          echo "ansible-playbook -i ${INVENTORY} -e fiveg_profile=${PROFILE_5G} -e target_server_host=${iperf_server_node} -e paper_scenario_names=${paper_scenario_names:-all} playbooks/run_tcp_paper_scenarios.yml"
+          [[ -n "${paper_duration_override:-}" ]] && echo "  add: -e paper_duration=${paper_duration_override}"
+          [[ -n "${paper_prometheus_url:-}" ]] && echo "  add: -e paper_prometheus_url=${paper_prometheus_url}"
+        elif [[ "$scenario" == "Generic experiment" ]]; then
+          echo "Just launch through deploy.sh:"
+          if [[ "${experiment_artifacts_enabled:-true}" == true ]]; then
+            echo "./deploy.sh -n --scenario-only --experiment ${experiment_scenario_file:-$(default_generic_experiment_name)} --experiment-artifacts ${experiment_artifacts_file:-$(default_generic_artifact_profile_name)}"
+          else
+            echo "./deploy.sh -n --scenario-only --experiment ${experiment_scenario_file:-$(default_generic_experiment_name)} --no-experiment-artifacts"
+          fi
+          [[ -n "${GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS:-${generic_experiment_default_section_seconds:-}}" ]] && echo "  add: -e experiment_default_section_seconds=${GENERIC_EXPERIMENT_DEFAULT_SECTION_SECONDS:-${generic_experiment_default_section_seconds:-}}"
+          [[ -n "${REQUESTED_TARGET_SERVER:-}" ]] && echo "  add: --target-server ${REQUESTED_TARGET_SERVER}"
+          [[ -n "${REQUESTED_EXPERIMENT_DURATION:-}" ]] && echo "  add: --duration ${REQUESTED_EXPERIMENT_DURATION}"
+          [[ -n "${REQUESTED_PROMETHEUS_URL:-}" ]] && echo "  add: --prometheus-url ${REQUESTED_PROMETHEUS_URL}"
+	        else
+	          echo "Just launch ./run_scenario.sh to start it !"
+	        fi
         echo ""
       fi
     fi
@@ -1305,7 +2137,7 @@ show_access_info() {
     # ========== End of Script ==========
     # Note: The user is responsible for deleting the reservations after use if needed.
     # Show the commands to run to connect to the Grafana dashboard if monitoring is enabled.
-    if [[ "$monitoring_enabled" == true ]]; then
+    if [[ "$monitoring_enabled" == true && -n "${monitor_node}" ]]; then
       echo ""
       echo "To access the Grafana Dashboard, follow these chained SSH port forwarding steps: "
       echo "Step 1: On your local machine, SSH into Duckburg with port forwarding: "
@@ -1320,7 +2152,12 @@ show_access_info() {
       echo "Step 3: Now open your browser and go to http://localhost:8888 to access Grafana, using these credentials: "
       echo ""
       echo "Username: admin"
-      echo "Password: monarch-operator"
+      echo "Password: admin"
+      if [[ "${monitoring_loki_enabled:-false}" == true ]]; then
+        echo ""
+        echo "Loki is available inside Grafana as the 'Loki' datasource for Kubernetes pod logs."
+        echo "For direct Loki API access, forward port 31000 from ${monitor_node} if needed."
+      fi
       echo ""
     fi
 
@@ -1361,11 +2198,20 @@ init_defaults_and_banner
 if [[ "$SKIP_INPUTS" == true ]]; then
   echo "Skipped User Inputs"
   echo "Using $INVENTORY as inventory"
+  if [[ -z "${core:-}" ]]; then
+    core="$(awk -F= '$1 == "core" {gsub(/"/, "", $2); print $2; exit}' "$INVENTORY")"
+  fi
+  if [[ -z "${ran:-}" ]]; then
+    ran="$(awk -F= '$1 == "ran" {gsub(/"/, "", $2); print $2; exit}' "$INVENTORY")"
+  fi
   if [[ -f "$R2LAB_CONFIG" ]]; then
     source "$R2LAB_CONFIG"
-  else
+  elif [[ "${platform:-}" == "r2lab" ]]; then
     echo "R2lab config doesn't exist. Exiting."
     exit 1
+  fi
+  if [[ -n "${REQUESTED_EXPERIMENT_MODE:-}" ]]; then
+    optional_scenarios
   fi
 else
   collect_user_inputs
@@ -1374,10 +2220,31 @@ else
   print_summary
   generate_inventory
 fi
-reserve_nodes
-reserve_r2lab
-deploy
-run_scenario
-show_access_info
+if [[ "${REQUESTED_GENERIC_EXPERIMENT_DRY_RUN:-false}" == true && "${scenario:-}" != "Generic experiment" && "${REQUESTED_EXPERIMENT_MODE:-}" != "generic-experiment" ]]; then
+  echo "❌ --dry-run-experiment is only valid with the Generic experiment workflow."
+  exit 1
+fi
+if [[ "${REQUESTED_GENERIC_EXPERIMENT_DRY_RUN:-false}" == true ]]; then
+  echo "Generic experiment dry-run selected: skipping reservation and deployment."
+else
+  assert_monitoring_inventory_ready
+  reserve_nodes
+  reserve_r2lab
+  if [[ "$SCENARIO_ONLY" == true ]]; then
+    echo "Scenario-only mode selected: skipping reservation and deployment."
+  else
+    deploy
+  fi
+fi
+SCENARIO_STATUS=0
+run_scenario || SCENARIO_STATUS=$?
+if [[ "${REQUESTED_GENERIC_EXPERIMENT_DRY_RUN:-false}" != true ]]; then
+  show_access_info
+fi
+
+if [[ "$SCENARIO_STATUS" -ne 0 ]]; then
+  echo "❌ Finished with scenario failure."
+  exit "$SCENARIO_STATUS"
+fi
 
 echo "✅ All done!"
