@@ -6,7 +6,6 @@
   ansible.builtin.command: "{{ demo_oai_script }} stop-cn"
   args:
     chdir: "{{ repo_dest }}"
-
 - name: Install OVS CNI via Cluster Network Addons Operator (single-node)
   block:
 
