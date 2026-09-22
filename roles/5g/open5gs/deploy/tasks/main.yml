@@ -342,7 +342,7 @@
     kubectl exec -n {{ open5gs_ns }} $AMF_POD -- ip addr show n3 | grep "inet 10.10.3.200"
   register: amf_n3_check
   until: amf_n3_check.rc == 0
-  retries: 15
+  retries: 30
   delay: 5
   when: core == "open5gs"
   changed_when: false
