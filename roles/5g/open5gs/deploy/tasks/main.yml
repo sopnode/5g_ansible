@@ -314,6 +314,30 @@
     - core_node_name == ran_node_name and core == "open5gs" and fhi72
     - ovs_res_check is failed
 
+# Ensure ovs-cni is fully rolled out on the node before (re)creating the NFs.
+# Root cause of the missing N3 interface: NF pods got their CNI ADD before
+# ovs-cni was serving, so the OVS veth was never wired while the pod still
+# reported Ready. NetworkAddonsConfig=Available (operator level) is not a
+# strong enough signal; wait on the daemonset rollout itself.
+- name: Wait for ovs-cni daemonset to be fully Ready on the node
+  ansible.builtin.shell: |
+    set -e
+    # Discover the ovs-cni daemonset name (ovs-cni-amd64 or arch variant)
+    DS=$(kubectl -n cluster-network-addons get ds -o name | grep ovs-cni | head -n1)
+    if [ -z "$DS" ]; then
+      echo "ovs-cni daemonset not found in cluster-network-addons" >&2
+      exit 1
+    fi
+    kubectl -n cluster-network-addons rollout status "$DS" --timeout=180s
+  args:
+    executable: /bin/bash
+  register: ovs_cni_ready
+  retries: 3
+  delay: 10
+  until: ovs_cni_ready.rc == 0
+  changed_when: false
+  when: core_node_name == ran_node_name and core == "open5gs"
+
 - name: Force cleanup existing Open5GS pods
   ansible.builtin.shell: kubectl delete pods -n {{ open5gs_ns }} -l app=open5gs --force --grace-period=0 || true
   when: core_node_name == ran_node_name and core == "open5gs"
