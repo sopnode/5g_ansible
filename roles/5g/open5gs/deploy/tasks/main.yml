@@ -333,7 +333,7 @@
     (nf_pod.resources[0].status.containerStatuses is defined) and
     (nf_pod.resources[0].status.containerStatuses[0].ready | default(false))
   loop: "{{ nfs }}"
-  retries: 40
+  retries: 100
   delay: 5
 
 - name: Verify Multus N3 interface inside AMF pod
