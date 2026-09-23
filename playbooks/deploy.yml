@@ -287,7 +287,7 @@
       when: core == 'oai' or ran == 'oai'
 
 - name: Deploy OAI CN
-  hosts: core_node
+  hosts: ran_node
   pre_tasks:
     - name: Load 5G profile
       include_vars:
