@@ -210,8 +210,9 @@
 
 - name: Display qhat-check
   debug:
-    msg:
-      - "UE: {{ item.item }}"
-      - "{{ item.stdout_lines }}"
+    msg: "{{ item.stdout }}"
   loop: "{{ check_results.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
   
