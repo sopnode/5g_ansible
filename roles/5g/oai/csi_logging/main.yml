@@ -1,6 +1,0 @@
----
-# This role no longer installs anything at deploy time. Collection is done after the run:
-#   standalone : ansible-playbook -i <inventory> playbooks/collect_csi_oai.yml
-#   experiment : "collect: csi: enabled: true" in the artifact profile (playbooks/run_experiment.yml)
-- name: CSI - collect csi_per_rb.csv from the OAI gNB
-  ansible.builtin.include_tasks: collect.yml

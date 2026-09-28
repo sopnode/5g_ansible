@@ -22,7 +22,7 @@
 - name: Append experiment timeline event
   ansible.builtin.lineinfile:
     path: "{{ experiment_results_dir | default(paper_results_dir) }}/timeline_events.jsonl"
-     line: "{{ experiment_timeline_event | combine(experiment_timeline_timestamp) | combine(experiment_ran_timestamp) | to_json }}"
+    line: "{{ experiment_timeline_event | combine(experiment_timeline_timestamp) | combine(experiment_ran_timestamp) | to_json }}"
     create: true
     insertafter: EOF
     mode: "0644"
