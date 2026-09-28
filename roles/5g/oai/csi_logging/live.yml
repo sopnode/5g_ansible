@@ -1,0 +1,259 @@
+---
+# Live CSI view: a streamer on the live host (monitor node by default) follows the CSI log of
+# the RAN node over ssh, and Streamlit (visualizer v8.8, live mode) shows a sliding window of it
+# on 127.0.0.1:csi_live_port of the live host, reached from a laptop with an ssh tunnel.
+# RAN node load: one sshd session plus "tail -F" at the lowest CPU/IO priority.
+# Runs from a controller play (hosts: localhost); csi_live_action = start | stop | status.
+
+- name: CSI live - check parameters
+  ansible.builtin.assert:
+    that:
+      - csi_live_action in ['start', 'stop', 'status']
+      - csi_live_host | length > 0
+      - csi_live_host != csi_ran_host
+    fail_msg: >-
+      csi_live_action must be start|stop|status and csi_live_host must be set (no [monitor_node]
+      in the inventory: use -e csi_live_host=<node>) and differ from the RAN node {{ csi_ran_host }}.
+
+- name: CSI live - paths
+  ansible.builtin.set_fact:
+    csi_live_file: "{{ csi_live_dir }}/{{ csi_file_name }}"
+    csi_live_viz: "{{ csi_live_dir }}/streamlit_csi_visualizer_v8.8.py"
+
+# ------------------------------------------------------------------------------ stop
+- name: CSI live - stop streamer and viewer
+  ansible.builtin.shell: |
+    for p in stream streamlit; do
+      f={{ csi_live_dir | quote }}/$p.pid
+      if [ -f "$f" ]; then
+        kill -TERM -- "-$(cat "$f")" 2>/dev/null && echo "stopped $p"
+        rm -f "$f"
+      fi
+    done
+    true
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ csi_live_host }}"
+  vars:
+    ansible_connection: "{{ csi_live_connection }}"
+  register: csi_live_stopped
+  changed_when: "'stopped' in csi_live_stopped.stdout"
+  when: csi_live_action in ['start', 'stop']
+
+- name: CSI live - revoke the live key on the RAN node
+  ansible.builtin.lineinfile:
+    path: "~{{ csi_live_ran_user }}/.ssh/authorized_keys"
+    regexp: " {{ csi_live_key_comment | regex_escape }}$"
+    state: absent
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+  when: csi_live_action == 'stop'
+
+- name: CSI live - remove the forced command on the RAN node
+  ansible.builtin.file:
+    path: "{{ csi_live_source_script }}"
+    state: absent
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+  when: csi_live_action == 'stop'
+
+- name: CSI live - remove the local copy
+  ansible.builtin.file:
+    path: "{{ csi_live_file }}"
+    state: absent
+  delegate_to: "{{ csi_live_host }}"
+  vars:
+    ansible_connection: "{{ csi_live_connection }}"
+  when: csi_live_action == 'stop' and csi_live_cleanup | bool
+
+# ------------------------------------------------------------------------------ status
+- name: CSI live - status
+  ansible.builtin.shell: |
+    cd {{ csi_live_dir | quote }} 2>/dev/null || { echo "no {{ csi_live_dir }}"; exit 0; }
+    for p in stream streamlit; do
+      if [ -f $p.pid ] && kill -0 "$(cat $p.pid)" 2>/dev/null; then echo "$p: running (pid $(cat $p.pid))"; else echo "$p: not running"; fi
+    done
+    [ -f {{ csi_file_name | quote }} ] && echo "local copy: $(stat -c %s {{ csi_file_name | quote }}) bytes, modified $(( $(date +%s) - $(stat -c %Y {{ csi_file_name | quote }}) )) s ago"
+    echo "--- stream.log"; tail -n 5 stream.log 2>/dev/null
+    echo "--- streamlit.log"; tail -n 5 streamlit.log 2>/dev/null
+    true
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ csi_live_host }}"
+  vars:
+    ansible_connection: "{{ csi_live_connection }}"
+  register: csi_live_status
+  changed_when: false
+  when: csi_live_action == 'status'
+
+- name: CSI live - status report
+  ansible.builtin.debug:
+    msg: "{{ csi_live_status.stdout_lines }}"
+  when: csi_live_action == 'status'
+
+# ------------------------------------------------------------------------------ start
+- name: CSI live - start
+  when: csi_live_action == 'start'
+  block:
+    - name: CSI live - work directory on the live host
+      ansible.builtin.file:
+        path: "{{ csi_live_dir }}"
+        state: directory
+        mode: "0700"
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+
+    - name: CSI live - check that python3 can create a venv
+      ansible.builtin.command: python3 -c "import ensurepip, venv"
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+      register: csi_live_venv_ok
+      changed_when: false
+      failed_when: false
+
+    - name: CSI live - install python3-venv (Ubuntu)
+      ansible.builtin.apt:
+        name: python3-venv
+        state: present
+        update_cache: true
+      become: true
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+      when: csi_live_venv_ok.rc != 0
+
+    - name: CSI live - Python packages of the viewer (venv)
+      ansible.builtin.pip:
+        name: "{{ csi_live_pip_packages }}"
+        virtualenv: "{{ csi_live_dir }}/venv"
+        virtualenv_command: python3 -m venv
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+
+    - name: CSI live - visualizer from the controller
+      ansible.builtin.copy:
+        src: "{{ csi_live_visualizer_src }}"
+        dest: "{{ csi_live_viz }}"
+        mode: "0644"
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+      when: csi_live_visualizer_src | length > 0
+
+    - name: CSI live - visualizer from the oai-csi-logging repository
+      ansible.builtin.get_url:
+        url: "{{ csi_live_visualizer_url }}"
+        dest: "{{ csi_live_viz }}"
+        mode: "0644"
+        force: true
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+      when: csi_live_visualizer_src | length == 0
+
+    - name: CSI live - ssh key of the streamer
+      ansible.builtin.command: >-
+        ssh-keygen -q -t ed25519 -N '' -C {{ csi_live_key_comment | quote }} -f {{ (csi_live_dir + '/id_csi_live') | quote }}
+      args:
+        creates: "{{ csi_live_dir }}/id_csi_live"
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+
+    - name: CSI live - read the public key
+      ansible.builtin.slurp:
+        src: "{{ csi_live_dir }}/id_csi_live.pub"
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+      register: csi_live_pubkey
+
+    - name: CSI live - forced command on the RAN node
+      ansible.builtin.template:
+        src: csi_live_source.sh.j2
+        dest: "{{ csi_live_source_script }}"
+        mode: "0755"
+      become: true
+      delegate_to: "{{ csi_ran_host }}"
+      vars:
+        ansible_connection: "{{ csi_ran_connection }}"
+
+    # "restrict": no shell, pty or forwarding; the key can only run the forced command
+    - name: CSI live - authorize the key on the RAN node (forced command only)
+      ansible.builtin.lineinfile:
+        path: "~{{ csi_live_ran_user }}/.ssh/authorized_keys"
+        regexp: " {{ csi_live_key_comment | regex_escape }}$"
+        line: >-
+          restrict,command="{{ csi_live_source_script }}" {{ (csi_live_pubkey.content | b64decode | trim).split(' ')[:2] | join(' ') }} {{ csi_live_key_comment }}
+        create: true
+        mode: "0600"
+      become: true
+      delegate_to: "{{ csi_ran_host }}"
+      vars:
+        ansible_connection: "{{ csi_ran_connection }}"
+
+    - name: CSI live - streamer script
+      ansible.builtin.template:
+        src: csi_live_stream.sh.j2
+        dest: "{{ csi_live_dir }}/csi_live_stream.sh"
+        mode: "0755"
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+
+    # The forced command never returns: a timeout (rc 124) means the connection works
+    - name: CSI live - check ssh from the live host to the RAN node
+      ansible.builtin.shell: >-
+        timeout 8 ssh -i {{ (csi_live_dir + '/id_csi_live') | quote }} -o BatchMode=yes -o IdentitiesOnly=yes
+        -o UserKnownHostsFile={{ (csi_live_dir + '/known_hosts') | quote }} -o StrictHostKeyChecking=accept-new
+        -o ConnectTimeout=5 {{ (csi_live_ran_user + '@' + csi_live_ran_address) | quote }} > /dev/null
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+      register: csi_live_ssh_check
+      changed_when: false
+      failed_when: csi_live_ssh_check.rc not in [0, 124]
+
+    - name: CSI live - start streamer and viewer
+      ansible.builtin.shell: |
+        cd {{ csi_live_dir | quote }}
+        setsid nohup ./csi_live_stream.sh > stream.log 2>&1 < /dev/null &
+        echo $! > stream.pid
+        setsid nohup ./venv/bin/streamlit run {{ csi_live_viz | quote }} \
+          --server.address 127.0.0.1 --server.port {{ csi_live_port | int }} --server.headless true \
+          --server.fileWatcherType none --browser.gatherUsageStats false \
+          -- --live {{ csi_live_file | quote }} --window {{ csi_live_window_s | int }} --refresh {{ csi_live_refresh_s | int }} \
+          > streamlit.log 2>&1 < /dev/null &
+        echo $! > streamlit.pid
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+
+    - name: CSI live - wait for Streamlit
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ csi_live_port | int }}"
+        timeout: 60
+      delegate_to: "{{ csi_live_host }}"
+      vars:
+        ansible_connection: "{{ csi_live_connection }}"
+
+    - name: CSI live - how to open it from your laptop
+      ansible.builtin.debug:
+        msg:
+          - "Live CSI view running on {{ csi_live_host }} (127.0.0.1:{{ csi_live_port }}), source {{ csi_ran_host }}:{{ csi_output_dir }}/{{ csi_file_name }}"
+          - "On your laptop, if your key is accepted by {{ csi_live_host }}:"
+          - "  ssh -N -L {{ csi_live_port }}:127.0.0.1:{{ csi_live_port }} -J {{ lookup('pipe', 'id -un') }}@{{ lookup('pipe', 'hostname -f') }} {{ hostvars[csi_live_host].ansible_user | default('root') }}@{{ hostvars[csi_live_host].ansible_host | default(csi_live_host) }}"
+          - "otherwise, through the controller's key:"
+          - "  ssh -t -L {{ csi_live_port }}:127.0.0.1:{{ csi_live_port }} {{ lookup('pipe', 'id -un') }}@{{ lookup('pipe', 'hostname -f') }} ssh -N -L {{ csi_live_port }}:127.0.0.1:{{ csi_live_port }} {{ hostvars[csi_live_host].ansible_user | default('root') }}@{{ hostvars[csi_live_host].ansible_host | default(csi_live_host) }}"
+          - "then open http://localhost:{{ csi_live_port }}"
+          - "Stop: ansible-playbook -i <inventory> playbooks/csi_live.yml -e csi_live_action=stop"

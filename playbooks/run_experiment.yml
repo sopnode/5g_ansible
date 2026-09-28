@@ -103,6 +103,9 @@
         experiment_collect_prometheus: "{{ experiment_collect_config.prometheus.enabled | default(experiment_collect_config.prometheus | default(true)) | bool }}"
         experiment_collect_pod_logs: "{{ experiment_collect_config.pod_logs.enabled | default(experiment_collect_config.pod_logs | default(false)) | bool }}"
         experiment_collect_pcaps: "{{ experiment_collect_config.pcaps.enabled | default(experiment_collect_config.pcaps | default(false)) | bool }}"
+        experiment_collect_csi: "{{ experiment_collect_config.csi.enabled | default(experiment_collect_config.csi | default(false)) | bool }}"
+        experiment_csi_fetch_full: "{{ experiment_collect_config.csi.fetch_full | default(true) | bool }}"
+        experiment_csi_window_types: "{{ experiment_collect_config.csi.window_types | default('section') }}"
         experiment_split_prometheus_by_timeline: "{{ experiment_collect_config.split_by_windows | default(true) | bool }}"
         experiment_prometheus_url: >-
           {{
@@ -292,6 +295,11 @@
               snaplen: "{{ experiment_pcap_snaplen }}"
               k8s_control_host: "{{ experiment_pcap_k8s_control_host }}"
               targets: "{{ experiment_pcap_targets }}"
+            csi:
+              enabled: "{{ experiment_collect_csi | bool }}"
+              fetch_full: "{{ experiment_csi_fetch_full | bool }}"
+              window_types: "{{ experiment_csi_window_types }}"
+              ran_host: "{{ groups['ran_node'][0] | default('') }}"
             split_by_windows:
               enabled: "{{ experiment_split_prometheus_by_timeline | bool }}"
               window_types: "{{ experiment_split_window_types }}"

@@ -62,3 +62,4 @@ ansible-playbook playbooks/deploy.yml -e oai_csi_logging_enabled=true -e ran=oai
 - Output directory /data/csi must have write permissions
 - CSV grows ~1-2MB per minute depending on bandwidth
 - Currently supports RB range filtering only (antenna/source filtering not yet implemented)
+

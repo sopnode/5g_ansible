@@ -1,0 +1,29 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Live host side: copies the CSI log of {{ csi_ran_host }} into a local file read by the viewer.
+# This copy is only for the live view (it restarts from "now" after a reconnection or beyond
+# {{ csi_live_max_mb }} MB); the reference data stays {{ csi_output_dir }}/{{ csi_file_name }} on the RAN node.
+OUT={{ (csi_live_dir + '/' + csi_file_name) | quote }}
+MAX=$(( {{ csi_live_max_mb | int }} * 1024 * 1024 ))
+SSH=(ssh -T -i {{ (csi_live_dir + '/id_csi_live') | quote }} -o BatchMode=yes -o IdentitiesOnly=yes
+     -o UserKnownHostsFile={{ (csi_live_dir + '/known_hosts') | quote }} -o StrictHostKeyChecking=accept-new
+     -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3
+     {{ (csi_live_ran_user + '@' + csi_live_ran_address) | quote }})
+
+while true; do
+  : > "$OUT"                     # the viewer sees the size drop and restarts its window
+  "${SSH[@]}" >> "$OUT" &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 5
+    if [ "$(stat -c %s "$OUT")" -gt "$MAX" ]; then
+      echo "$(date -u +%FT%TZ) local copy larger than {{ csi_live_max_mb }} MB, restarting" >&2
+      kill "$pid" 2>/dev/null
+      break
+    fi
+  done
+  wait "$pid"
+  rc=$?
+  echo "$(date -u +%FT%TZ) stream ended (rc=$rc), reconnecting in 5 s" >&2
+  sleep 5
+done
