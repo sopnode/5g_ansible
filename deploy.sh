@@ -580,6 +580,12 @@ init_defaults_and_banner() {
     DEFAULT_LIST_PHONE_UE=()
 
     PROFILE_5G="${PROFILE_5G:-$DEFAULT_PROFILE_5G}"
+
+    # -e dont_force_qmi=true keeps the MBIM mode for UEs on a slice with SD
+    DONT_FORCE_QMI=false
+    for ev in "${EXTRA_VARS_ARRAY[@]:-}"; do
+	[[ "$ev" =~ (^|[[:space:]])dont_force_qmi=([Tt]rue|yes|1)($|[[:space:]]) ]] && DONT_FORCE_QMI=true
+    done
   
     START_SCENARIO="${START_SCENARIO:-true}"
 
@@ -1516,7 +1522,39 @@ get_fit_info() {
     esac
 }
 
+# Return 0 if the UE's slice in the active 5G profile has an SD (not missing/empty/"EMPTY"),
+# 1 if not, 3 if the profile cannot be parsed (python3/PyYAML missing or bad file).
+ue_slice_has_sd() {
+    python3 - "group_vars/all/5g_profile_${PROFILE_5G}.yaml" "$1" <<'PY'
+import sys
+try:
+    import yaml
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+except Exception:
+    sys.exit(3)
+ue = (data.get("ues") or {}).get(sys.argv[2]) or {}
+sl = next((s for s in (data.get("slices") or []) if s.get("name") == ue.get("slice")), None)
+sd = str((sl or {}).get("sd", "EMPTY")).strip().upper()
+sys.exit(0 if sl and sd not in ("", "EMPTY") else 1)
+PY
+}
 
+# Default inventory mode for a UE: sliced UEs (SD set) are forced to QMI, because in
+# MBIM some modems (seen on qhat03) auto-activate the S-NSSAI context and reject
+# start.sh's connect. Disabled with -e dont_force_qmi=true.
+ue_mode_for() {  # $1=ue $2=default mode
+    local ue="$1" mode="$2" rc=0
+    [[ "$DONT_FORCE_QMI" == true || "$mode" == qmi ]] && { echo "$mode"; return; }
+    ue_slice_has_sd "$ue" || rc=$?
+    case "$rc" in
+        0) echo "INFO: $ue is on a slice with SD -> mode=qmi (use -e dont_force_qmi=true to keep $mode)" >&2
+           echo qmi ;;
+	3|127) echo "WARNING: cannot parse 5G profile ${PROFILE_5G} (python3/PyYAML), keeping mode=$mode for $ue" >&2
+           echo "$mode" ;;
+        *) echo "$mode" ;;
+    esac
+}
 
 ############################
 # INVENTORY GENERATION
@@ -1590,6 +1628,7 @@ EOF
 	else
 	  mode="mbim"
 	fi
+	mode=$(ue_mode_for "$ue" "$mode")
         echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=${mode}" >> "$INVENTORY"
       done
     fi
@@ -1602,8 +1641,9 @@ EOF
     fi
     if [[ "$platform" == "r2lab" ]]; then
       for ue in "${R2LAB_QFIT_UES[@]}" ; do
-	[[ -n "$ue" ]] || continue
-        echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=mbim" >> "$INVENTORY"
+        [[ -n "$ue" ]] || continue
+	mode=$(ue_mode_for "$ue" mbim)
+        echo "$ue ansible_host=$ue ansible_user=root ansible_ssh_common_args='-o ProxyJump=$R2LAB_USERNAME@faraday.inria.fr' mode=${mode}" >> "$INVENTORY" 
       done
     fi
 
