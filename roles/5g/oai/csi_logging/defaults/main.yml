@@ -46,14 +46,17 @@ csi_live_action: start
 csi_live_host: "{{ (groups['monitor_node'] | default([]) + [''])[0] }}"
 csi_live_connection: ssh
 csi_live_dir: /root/csi_live
-# RAN node as reached over ssh FROM the live host (inventory address by default)
-csi_live_ran_address: "{{ hostvars[csi_ran_host].ansible_host | default(csi_ran_host) }}"
+# RAN node as reached over ssh FROM the live host: "ip" written by deploy.sh in hosts.ini
+# (the node names do not resolve on the sopnode nodes), else the inventory address
+csi_live_ran_address: "{{ hostvars[csi_ran_host].ip | default(hostvars[csi_ran_host].ansible_host | default(csi_ran_host)) }}"
 csi_live_ran_user: "{{ hostvars[csi_ran_host].ansible_user | default('root') }}"
 # Forced command of the live key on the RAN node
 csi_live_source_script: /usr/local/bin/csi_live_source.sh
 csi_live_key_comment: "csi-live@{{ csi_live_host }}"
 # Streamlit, bound to 127.0.0.1 on the live host (reach it with an ssh tunnel)
 csi_live_port: 8501
+# Name of the controller in the ~/.ssh/config of your laptop (only used in the printed tunnel command)
+csi_live_tunnel_via: duckburg
 csi_live_window_s: 120        # sliding window shown by the viewer
 csi_live_refresh_s: 10
 # The local copy on the live host is restarted from "now" beyond this size

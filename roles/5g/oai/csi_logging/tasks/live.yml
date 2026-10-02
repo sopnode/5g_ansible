@@ -11,9 +11,11 @@
       - csi_live_action in ['start', 'stop', 'status']
       - csi_live_host | length > 0
       - csi_live_host != csi_ran_host
+      - csi_live_ran_address | length > 0
     fail_msg: >-
-      csi_live_action must be start|stop|status and csi_live_host must be set (no [monitor_node]
-      in the inventory: use -e csi_live_host=<node>) and differ from the RAN node {{ csi_ran_host }}.
+      csi_live_action must be start|stop|status, csi_live_host must be set (no [monitor_node]
+      in the inventory: use -e csi_live_host=<node>) and differ from the RAN node {{ csi_ran_host }},
+      and csi_live_ran_address (RAN node address as seen from the live host) must not be empty.
 
 - name: CSI live - paths
   ansible.builtin.set_fact:
@@ -208,12 +210,18 @@
       vars:
         ansible_connection: "{{ csi_live_connection }}"
 
-    # The forced command never returns: a timeout (rc 124) means the connection works
+    # The forced command never returns: a timeout (rc 124) means the connection works.
+    # stdin from /dev/null: Ansible runs commands on a pty (ssh -tt) and "timeout" puts ssh in a
+    # background process group, so ssh reading the pty would be stopped (SIGTTIN) and never exit.
     - name: CSI live - check ssh from the live host to the RAN node
       ansible.builtin.shell: >-
-        timeout 8 ssh -i {{ (csi_live_dir + '/id_csi_live') | quote }} -o BatchMode=yes -o IdentitiesOnly=yes
+        timeout -k 2 8 ssh -T -i {{ (csi_live_dir + '/id_csi_live') | quote }} -o BatchMode=yes -o IdentitiesOnly=yes
         -o UserKnownHostsFile={{ (csi_live_dir + '/known_hosts') | quote }} -o StrictHostKeyChecking=accept-new
-        -o ConnectTimeout=5 {{ (csi_live_ran_user + '@' + csi_live_ran_address) | quote }} > /dev/null
+        -o ConnectTimeout=5 {{ (csi_live_ran_user + '@' + csi_live_ran_address) | quote }}
+        < /dev/null > /dev/null 2> {{ (csi_live_dir + '/ssh_check.err') | quote }};
+        rc=$?; tail -n 3 {{ (csi_live_dir + '/ssh_check.err') | quote }} >&2; exit $rc
+      args:
+        executable: /bin/bash
       delegate_to: "{{ csi_live_host }}"
       vars:
         ansible_connection: "{{ csi_live_connection }}"
@@ -251,9 +259,7 @@
       ansible.builtin.debug:
         msg:
           - "Live CSI view running on {{ csi_live_host }} (127.0.0.1:{{ csi_live_port }}), source {{ csi_ran_host }}:{{ csi_output_dir }}/{{ csi_file_name }}"
-          - "On your laptop, if your key is accepted by {{ csi_live_host }}:"
-          - "  ssh -N -L {{ csi_live_port }}:127.0.0.1:{{ csi_live_port }} -J {{ lookup('pipe', 'id -un') }}@{{ lookup('pipe', 'hostname -f') }} {{ hostvars[csi_live_host].ansible_user | default('root') }}@{{ hostvars[csi_live_host].ansible_host | default(csi_live_host) }}"
-          - "otherwise, through the controller's key:"
-          - "  ssh -t -L {{ csi_live_port }}:127.0.0.1:{{ csi_live_port }} {{ lookup('pipe', 'id -un') }}@{{ lookup('pipe', 'hostname -f') }} ssh -N -L {{ csi_live_port }}:127.0.0.1:{{ csi_live_port }} {{ hostvars[csi_live_host].ansible_user | default('root') }}@{{ hostvars[csi_live_host].ansible_host | default(csi_live_host) }}"
+          - "On your laptop (tunnel through the controller, '{{ csi_live_tunnel_via }}' as named in your ~/.ssh/config):"
+          - "  ssh -t -L {{ csi_live_port }}:127.0.0.1:{{ csi_live_port }} {{ csi_live_tunnel_via }} ssh -N -L {{ csi_live_port }}:127.0.0.1:{{ csi_live_port }} {{ hostvars[csi_live_host].ansible_user | default('root') }}@{{ hostvars[csi_live_host].ansible_host | default(csi_live_host) }}"
           - "then open http://localhost:{{ csi_live_port }}"
           - "Stop: ansible-playbook -i <inventory> playbooks/csi_live.yml -e csi_live_action=stop"
