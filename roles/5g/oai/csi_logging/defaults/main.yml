@@ -1,0 +1,76 @@
+---
+# OAI CSI log (csi_per_rb.csv written by the CSI logger of the gNB/DU).
+# The gNB always runs on the RAN node and writes the hostPath file csi_output_dir/csi_file_name
+# there, so the CSI timestamps and the RAN node clock are the same clock.
+
+# RAN node reached from the controller play (hosts: localhost)
+csi_ran_host: "{{ groups['ran_node'][0] }}"
+csi_ran_connection: ssh
+csi_output_dir: /data/csi
+csi_file_name: csi_per_rb.csv
+
+# gNB (monolithic) or DU (cudu / cucpup) pod, used only to record provenance metadata
+# (pod, image, CSI_* variables, "Init: N_RB_DL ... ofdm_symbol_size" line of the gNB log)
+csi_k8s_namespace: "{{ core | default('oai') }}"
+csi_gnb_split: "{{ (oai_gnb_mode | default('')) in ['cudu', 'cucpup'] }}"
+csi_pod_selector: >-
+  {{ 'app.kubernetes.io/name=oai-du,app.kubernetes.io/instance=oai-du' if csi_gnb_split
+     else 'app.kubernetes.io/name=oai-gnb,app.kubernetes.io/instance=oai-gnb' }}
+csi_container: "{{ 'du' if csi_gnb_split else 'gnb' }}"
+csi_kubeconfig: ""            # empty = kubectl default on the RAN node
+
+# ---------------------------------------------------------------- collection (collect.yml)
+# Results on the controller (set by the caller)
+csi_dest_dir: ""
+csi_fetch_full: true          # fetch the whole CSV (gzip -1)
+
+# Optional split by timeline windows (generic experiment runner): path on the controller
+# of a timeline_summary.json whose windows carry ran_start_epoch / ran_end_epoch
+csi_windows_json: ""
+csi_window_types: section     # comma list; campaign is ~ the full file
+csi_split_padding_seconds: 0
+
+csi_cleanup_remote: true
+
+# The file is read on the RAN node, next to a real-time gNB: lowest CPU and I/O priority,
+# and optionally restricted to given housekeeping CPUs (e.g. "1-4"); never give CPUs of the
+# isolated range (isolcpus) used by the gNB threads.
+csi_cpu_list: ""
+csi_low_prio: >-
+  nice -n 19 ionice -c 3{{ (' taskset -c ' + csi_cpu_list) if (csi_cpu_list | length > 0) else '' }}
+
+# ---------------------------------------------------------------- live view (live.yml)
+# start | stop | status
+csi_live_action: start
+# Host running the streamer and Streamlit (never the RAN node)
+csi_live_host: "{{ (groups['monitor_node'] | default([]) + [''])[0] }}"
+csi_live_connection: ssh
+csi_live_dir: /root/csi_live
+# RAN node as reached over ssh FROM the live host: "ip" written by deploy.sh in hosts.ini
+# (the node names do not resolve on the sopnode nodes), else the inventory address
+csi_live_ran_address: "{{ hostvars[csi_ran_host].ip | default(hostvars[csi_ran_host].ansible_host | default(csi_ran_host)) }}"
+csi_live_ran_user: "{{ hostvars[csi_ran_host].ansible_user | default('root') }}"
+# Forced command of the live key on the RAN node
+csi_live_source_script: /usr/local/bin/csi_live_source.sh
+csi_live_key_comment: "csi-live@{{ csi_live_host }}"
+# Streamlit, bound to 127.0.0.1 on the live host (reach it with an ssh tunnel)
+csi_live_port: 8501
+# Name of the controller in the ~/.ssh/config of your laptop (only used in the printed tunnel command)
+csi_live_tunnel_via: duckburg
+csi_live_window_s: 120        # sliding window shown by the viewer
+csi_live_refresh_s: 10
+# The local copy on the live host is restarted from "now" beyond this size
+csi_live_max_mb: 1024
+# Visualizer: a local file on the controller, else downloaded from the oai-csi-logging repository
+csi_live_visualizer_src: ""
+csi_live_visualizer_ref: main
+csi_live_visualizer_url: >-
+  https://raw.githubusercontent.com/turletti/oai-csi-logging/{{ csi_live_visualizer_ref }}/visualizer/streamlit_csi_visualizer_v8.8.py
+csi_live_pip_packages:
+  - streamlit>=1.40
+  - pandas>=2.0
+  - numpy>=1.26
+  - matplotlib>=3.8
+  - scipy>=1.11
+# stop: also remove the local copy on the live host
+csi_live_cleanup: true

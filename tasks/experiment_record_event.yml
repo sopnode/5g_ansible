@@ -1,4 +1,18 @@
 ---
+# CSI windows must be on the clock of the gNB (RAN node), which is not synchronized with the
+# controller: read it on the RAN node for every event when CSI collection is enabled.
+- name: Capture RAN node clock for CSI windows
+  ansible.builtin.command: date +%s.%N
+  delegate_to: "{{ groups['ran_node'][0] }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection | default('ssh') }}"
+  register: experiment_ran_clock
+  changed_when: false
+  failed_when: false
+  when:
+    - experiment_collect_csi | default(false) | bool
+    - groups['ran_node'] | default([]) | length > 0
+
 - name: Capture experiment timeline event timestamp
   ansible.builtin.set_fact:
     experiment_timeline_epoch: "{{ lookup('pipe', 'date +%s') }}"
@@ -8,7 +22,7 @@
 - name: Append experiment timeline event
   ansible.builtin.lineinfile:
     path: "{{ experiment_results_dir | default(paper_results_dir) }}/timeline_events.jsonl"
-    line: "{{ experiment_timeline_event | combine(experiment_timeline_timestamp) | to_json }}"
+    line: "{{ experiment_timeline_event | combine(experiment_timeline_timestamp) | combine(experiment_ran_timestamp) | to_json }}"
     create: true
     insertafter: EOF
     mode: "0644"
@@ -19,4 +33,7 @@
       utc_time: "{{ experiment_timeline_utc }}"
       local_time: "{{ experiment_timeline_local }}"
       timezone: "{{ experiment_local_timezone | default(paper_local_timezone | default('Europe/Paris')) }}"
+    experiment_ran_timestamp: >-
+      {{ {'ran_epoch': experiment_ran_clock.stdout | float, 'ran_host': groups['ran_node'][0]}
+         if (experiment_ran_clock.rc | default(1)) == 0 else {} }}
   delegate_to: localhost

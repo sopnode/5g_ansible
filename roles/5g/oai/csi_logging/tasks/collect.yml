@@ -1,0 +1,231 @@
+---
+# Collect csi_per_rb.csv from the RAN node. Runs from a controller play (hosts: localhost);
+# every command runs on the RAN node (csi_ran_host), results are fetched to csi_dest_dir.
+# The gNB always runs on the RAN node and writes the hostPath file /data/csi/csi_per_rb.csv:
+# the file is read there, once, at low priority (no copy, no kubectl exec).
+
+- name: CSI - check destination directory
+  ansible.builtin.assert:
+    that: csi_dest_dir | length > 0
+    fail_msg: "csi_dest_dir (controller directory for the results) must be set"
+
+- name: CSI - set run identifiers
+  ansible.builtin.set_fact:
+    csi_run_id: "{{ csi_run_id | default(lookup('pipe', 'date +%Y%m%d_%H%M%S')) }}"
+    csi_kubectl: "kubectl{{ (' --kubeconfig ' + csi_kubeconfig) if (csi_kubeconfig | length > 0) else '' }}"
+
+- name: CSI - set remote work directory
+  ansible.builtin.set_fact:
+    csi_workdir: "/tmp/csi_collect_{{ csi_run_id }}"
+
+- name: CSI - create local result directory
+  ansible.builtin.file:
+    path: "{{ csi_dest_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+
+- name: CSI - create work directory on the RAN node
+  ansible.builtin.file:
+    path: "{{ csi_workdir }}"
+    state: directory
+    mode: "0755"
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+
+- name: CSI - copy helper script to the RAN node
+  ansible.builtin.copy:
+    src: csi_tools.py
+    dest: "{{ csi_workdir }}/csi_tools.py"
+    mode: "0755"
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+
+# Metadata only (provenance): failures are tolerated, the file is read from the hostPath anyway
+- name: CSI - probe gNB pod (name, node, image, CSI_* env, FFT line of the gNB log)
+  ansible.builtin.shell: |
+    set -u
+    export POD="" NODE="" IMAGE="" PHASE="" CSI_ENV="" INIT_LINE=""
+    POD=$({{ csi_kubectl }} -n {{ csi_k8s_namespace }} get pods -l '{{ csi_pod_selector }}' \
+          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    if [ -n "$POD" ]; then
+      NODE=$({{ csi_kubectl }} -n {{ csi_k8s_namespace }} get pod "$POD" -o jsonpath='{.spec.nodeName}' 2>/dev/null || true)
+      PHASE=$({{ csi_kubectl }} -n {{ csi_k8s_namespace }} get pod "$POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+      IMAGE=$({{ csi_kubectl }} -n {{ csi_k8s_namespace }} get pod "$POD" \
+              -o jsonpath="{.spec.containers[?(@.name=='{{ csi_container }}')].image}" 2>/dev/null || true)
+      CSI_ENV=$({{ csi_kubectl }} -n {{ csi_k8s_namespace }} exec "$POD" -c {{ csi_container }} -- printenv 2>/dev/null | grep '^CSI_' || true)
+      INIT_LINE=$({{ csi_kubectl }} -n {{ csi_k8s_namespace }} logs "$POD" -c {{ csi_container }} 2>/dev/null | grep -m1 'Init: N_RB_DL' || true)
+    fi
+    export POD NODE IMAGE PHASE CSI_ENV INIT_LINE
+    export RAN_NODENAME="$(uname -n)" RAN_EPOCH="$(date +%s.%N)"
+    python3 - <<'EOF'
+    import json, os
+    env = dict(l.split("=", 1) for l in os.environ.get("CSI_ENV", "").splitlines() if "=" in l)
+    print(json.dumps({"pod": os.environ["POD"], "pod_node": os.environ["NODE"], "pod_phase": os.environ["PHASE"],
+                      "image": os.environ["IMAGE"], "csi_env": env, "gnb_init_line": os.environ["INIT_LINE"],
+                      "ran_nodename": os.environ["RAN_NODENAME"], "ran_epoch": float(os.environ["RAN_EPOCH"])}))
+    EOF
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+  register: csi_probe_raw
+  changed_when: false
+
+- name: CSI - parse probe
+  ansible.builtin.set_fact:
+    csi_probe: "{{ csi_probe_raw.stdout | from_json }}"
+
+- name: CSI - source file
+  ansible.builtin.set_fact:
+    csi_src_file: "{{ csi_output_dir }}/{{ csi_file_name }}"
+
+- name: CSI - look for the CSI file on the RAN node
+  ansible.builtin.stat:
+    path: "{{ csi_src_file }}"
+    get_checksum: false
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+  register: csi_host_file
+
+- name: CSI - stop when there is nothing to collect
+  ansible.builtin.fail:
+    msg: "No {{ csi_src_file }} on {{ csi_ran_host }} (was the gNB deployed with -e csi_logger_enabled=true?)"
+  when: not csi_host_file.stat.exists
+
+- name: CSI - warn when the gNB pod does not run on the RAN node
+  ansible.builtin.debug:
+    msg: >-
+      gNB pod {{ csi_probe.pod }} runs on {{ csi_probe.pod_node }}, not on {{ csi_probe.ran_nodename }}:
+      {{ csi_src_file }} on {{ csi_ran_host }} is not the file of this pod.
+  when:
+    - csi_probe.pod | length > 0
+    - csi_probe.pod_node.split('.')[0] != csi_probe.ran_nodename.split('.')[0]
+
+- name: CSI - warn when no gNB pod is running (file of the last run)
+  ansible.builtin.debug:
+    msg: "No running gNB pod: collecting {{ csi_src_file }} left by the last gNB run on {{ csi_ran_host }}."
+  when: csi_probe.pod | length == 0
+
+- name: CSI - copy timeline windows to the RAN node
+  ansible.builtin.copy:
+    src: "{{ csi_windows_json }}"
+    dest: "{{ csi_workdir }}/windows.json"
+    mode: "0644"
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+  when: csi_windows_json | length > 0
+
+# Single read of the source file: full .gz, per-window .gz and summary in one pass
+- name: CSI - read, compress and split the CSI file (one pass, lowest priority)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd '{{ csi_workdir }}'
+    {{ csi_low_prio }} python3 csi_tools.py collect --src {{ csi_src_file | quote }} --out-dir out {{ csi_collect_args }}
+    if [ -d out/by_window ]; then tar -cf by_window.tar -C out by_window; fi
+  args:
+    executable: /bin/bash
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+    csi_collect_args: >-
+      {{ '--full' if (csi_fetch_full | bool) else '' }}
+      {{ ('--windows-json windows.json --window-types ' + (csi_window_types | quote)
+          + ' --padding-seconds ' + (csi_split_padding_seconds | string))
+         if (csi_windows_json | length > 0) else '' }}
+  register: csi_collect_out
+  changed_when: true
+
+- name: CSI - parse summary
+  ansible.builtin.set_fact:
+    csi_summary: "{{ csi_collect_out.stdout | from_json }}"
+
+- name: CSI - fetch the full file
+  ansible.builtin.fetch:
+    src: "{{ csi_workdir }}/out/{{ csi_file_name }}.gz"
+    dest: "{{ csi_dest_dir }}/{{ csi_file_name }}.gz"
+    flat: true
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+  when: csi_fetch_full | bool
+
+- name: CSI - fetch the per-window files
+  ansible.builtin.fetch:
+    src: "{{ csi_workdir }}/by_window.tar"
+    dest: "{{ csi_dest_dir }}/by_window.tar"
+    flat: true
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+  when: csi_windows_json | length > 0
+
+- name: CSI - unpack the per-window files
+  ansible.builtin.unarchive:
+    src: "{{ csi_dest_dir }}/by_window.tar"
+    dest: "{{ csi_dest_dir }}"
+    remote_src: true
+  delegate_to: localhost
+  when: csi_windows_json | length > 0
+
+- name: CSI - remove the per-window archive
+  ansible.builtin.file:
+    path: "{{ csi_dest_dir }}/by_window.tar"
+    state: absent
+  delegate_to: localhost
+  when: csi_windows_json | length > 0
+
+- name: CSI - write collection metadata
+  ansible.builtin.copy:
+    dest: "{{ csi_dest_dir }}/csi_collection.json"
+    mode: "0644"
+    content: |
+      {{
+        {
+          "run_id": csi_run_id,
+          "ran_host": csi_ran_host,
+          "source_file": csi_src_file,
+          "probe": csi_probe,
+          "summary": csi_summary,
+          "fetched_full": csi_fetch_full | bool,
+          "windows_json": csi_windows_json,
+          "window_types": csi_window_types,
+          "split_padding_seconds": csi_split_padding_seconds,
+          "controller_epoch_at_collection": lookup('pipe', 'date +%s'),
+          "note": "CSI timestamps and windows are on the RAN node clock; the controller clock is not used."
+        } | to_nice_json
+      }}
+  delegate_to: localhost
+
+- name: CSI - remove the RAN node work directory
+  ansible.builtin.file:
+    path: "{{ csi_workdir }}"
+    state: absent
+  become: true
+  delegate_to: "{{ csi_ran_host }}"
+  vars:
+    ansible_connection: "{{ csi_ran_connection }}"
+  when: csi_cleanup_remote | bool
+
+- name: CSI - summary
+  ansible.builtin.debug:
+    msg:
+      - "CSI format {{ csi_summary.format_version }}: {{ csi_summary.rows }} rows, {{ csi_summary.markers }} flush markers, {{ csi_summary.dropped_rows }} dropped rows"
+      - "Read from {{ csi_ran_host }}:{{ csi_src_file }} (pod: {{ csi_probe.pod | default('-', true) }}, image: {{ csi_probe.image | default('-', true) }})"
+      - "gNB FFT line: {{ csi_probe.gnb_init_line | default('not found', true) }}"
+      - "Windows ({{ csi_window_types }}): {{ csi_summary.windows_written | default('-') }} written, {{ csi_summary.windows_empty | default('-') }} without data"
+      - "Results on the controller: {{ csi_dest_dir }}"
+      - "Copy to your laptop: scp -r {{ lookup('env', 'USER') }}@<controller>:{{ csi_dest_dir }} ."
+      - "Analysis: oai-csi-logging/visualizer (streamlit), after gunzip of the .csv.gz files"

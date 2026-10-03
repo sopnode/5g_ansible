@@ -70,6 +70,21 @@
   changed_when: true
   failed_when: false
 
+- name: Collect OAI CSI log and split it by timeline windows (RAN node clock)
+  ansible.builtin.include_role:
+    name: 5g/oai/csi_logging
+    tasks_from: collect.yml
+  vars:
+    csi_run_id: "{{ experiment_run_id }}"
+    csi_dest_dir: "{{ experiment_results_dir }}/csi"
+    csi_fetch_full: "{{ experiment_csi_fetch_full | default(true) }}"
+    csi_windows_json: "{{ experiment_results_dir }}/timeline_summary.json"
+    csi_window_types: "{{ experiment_csi_window_types | default('section') }}"
+    csi_split_padding_seconds: "{{ experiment_split_padding_seconds }}"
+  when:
+    - experiment_collect_csi | default(false) | bool
+    - ran | default('oai') == 'oai'
+
 - name: Split experiment Prometheus CSV by timeline windows
   ansible.builtin.command:
     argv: "{{ [
@@ -120,12 +135,14 @@
       - `pod_logs.tgz`: Kubernetes pod inventory, events, descriptions, and logs when enabled.
       - `pcaps/<section_or_window>/`: tcpdump pcaps and tcpdump logs when pcap collection is enabled.
       - `pcaps/pcap_summary.json`: machine-readable pcap capture status summary when pcaps are enabled.
+      - `csi/csi_per_rb.csv.gz`, `csi/by_window/<window_type>/<window>/csi_per_rb.csv.gz`: OAI CSI log, full and per window (RAN node clock, ~5 s batch granularity), when CSI collection is enabled; `csi/csi_collection.json` for provenance.
 
       Collection flags:
       - Prometheus: {{ experiment_collect_prometheus }}
       - Split by windows: {{ experiment_split_prometheus_by_timeline }}
       - Pod logs: {{ experiment_collect_pod_logs }}
       - Pcaps: {{ experiment_collect_pcaps }}
+      - CSI: {{ experiment_collect_csi | default(false) }}
 
       Prometheus query file:
       `{{ experiment_prometheus_queries_json_effective | default(experiment_prometheus_queries_json) }}`
@@ -145,3 +162,4 @@
       - "Per-window metrics: {{ experiment_results_dir }}/by_window"
       - "Pod logs: {{ experiment_results_dir }}/pod_logs.tgz"
       - "Pcaps: {{ experiment_results_dir }}/pcaps"
+      - "CSI: {{ experiment_results_dir }}/csi"

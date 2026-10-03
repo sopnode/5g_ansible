@@ -1,0 +1,18 @@
+---
+# Collect the OAI CSI log (csi_per_rb.csv) after a run.
+# Everything runs on the RAN node; results land on the controller in results/csi-oai-<run_id>/.
+#
+#   ansible-playbook -i inventory/<name>/hosts.ini playbooks/collect_csi_oai.yml
+#   ... -e csi_fetch_full=false            # metadata/summary only
+- name: Collect OAI CSI log
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    csi_run_id: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+    csi_dest_dir: "{{ playbook_dir }}/../results/csi-oai-{{ csi_run_id }}"
+  tasks:
+    - name: Collect csi_per_rb.csv from the OAI gNB/DU
+      ansible.builtin.include_role:
+        name: 5g/oai/csi_logging
+        tasks_from: collect.yml

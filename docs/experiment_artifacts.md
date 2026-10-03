@@ -457,6 +457,36 @@ pcap:
 If a configured pcap target cannot start, the section fails before the workload
 continues.
 
+## OAI CSI Logs
+
+With an OAI gNB built with the CSI logger (`-e csi_logger_enabled=true`), the
+per-RB SRS channel estimates (`csi_per_rb.csv`) can be collected and cut by window:
+
+```yaml
+collect:
+  csi:
+    enabled: true
+    fetch_full: true
+    window_types: section   # default
+```
+
+Every timeline event then also reads the RAN node clock (`ran_epoch`, one extra SSH
+command per event), because the gNB clock is not synchronized with the controller.
+After the run, the CSV is read once on the RAN node (lowest priority), compressed and
+split in the same pass, and the results are fetched to:
+
+```text
+results/experiment-<run_id>/csi/csi_per_rb.csv.gz
+results/experiment-<run_id>/csi/by_window/<window_type>/<window>/csi_per_rb.csv.gz
+results/experiment-<run_id>/csi/csi_collection.json
+```
+
+Windows are cut per logger flush batch (~5 s): a batch belongs to every window its
+acquisition interval overlaps, so consecutive windows can share one batch. See
+`roles/5g/oai/csi_logging/README.md`; standalone collection:
+`playbooks/collect_csi_oai.yml`; optional live view on the monitor node:
+`playbooks/csi_live.yml`.
+
 ## Existing TCP Scenario Playbook
 
 The TCP scenario playbook uses the same generic timeline event recorder and

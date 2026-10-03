@@ -1,0 +1,15 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Forced command of the csi-live ssh key (RAN node side): streams the CSI log to the live
+# viewer on {{ csi_live_host }}. Lowest CPU/IO priority{{ ', CPUs ' + csi_cpu_list if csi_cpu_list | length > 0 else '' }}; nothing else can be run with that key.
+F={{ (csi_output_dir + '/' + csi_file_name) | quote }}
+renice -n 19 -p $$ >/dev/null 2>&1
+ionice -c 3 -p $$ >/dev/null 2>&1
+{% if csi_cpu_list | length > 0 %}
+taskset -a -cp {{ csi_cpu_list | quote }} $$ >/dev/null 2>&1
+{% endif %}
+# JSON metadata and column line (written once, at the top of the file by logger v3.1)
+head -c 1048576 "$F" 2>/dev/null | grep -m1 '^# {'
+head -c 1048576 "$F" 2>/dev/null | grep -m1 '^frame'
+# then only what is written from now on; follows truncation / re-creation (gNB restart)
+exec tail -c 0 -F "$F" 2>/dev/null

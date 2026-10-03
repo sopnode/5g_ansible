@@ -57,6 +57,8 @@ WINDOW_FIELDS = [
     "scenario_index",
     "step_index",
     "name",
+    "ran_start_epoch",
+    "ran_end_epoch",
 ]
 
 
@@ -192,6 +194,9 @@ def make_window(start: dict, end: dict, tz_name: str) -> dict:
         "scenario_index": to_int(start.get("scenario_index"), -1),
         "step_index": to_int(start.get("step_index"), -1),
         "name": name,
+        # RAN node clock (only when CSI collection records it), used to split CSI logs
+        "ran_start_epoch": start.get("ran_epoch", ""),
+        "ran_end_epoch": end.get("ran_epoch", ""),
     }
 
 
