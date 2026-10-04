@@ -79,14 +79,56 @@
   until: ping_results.rc == 0
   loop: "{{ all_ues }}"
 
-- name: Build reachable UEs
+- name: List QHATs that did not answer ping
+  # Only qhats are power-cycled here; qfits use a different power command
   set_fact:
-    reachable_ues: >-
+    qhats_to_recycle: >-
       {{
         ping_results.results
         | selectattr('rc', 'defined')
+        | rejectattr('rc', 'equalto', 0)
+        | map(attribute='item')
+        | select('in', groups['qhats'] | default([]))
+        | list
+      }}
+
+- name: Power-cycle QHATs that did not answer ping
+  # Manual off/on has always recovered a stuck qhat: replay it once.
+  # rc is the one of 'pdu on' ('pdu off' may return 1 with "already OFF").
+  shell: rhubarbe pdu off "{{ item }}"; sleep 5; rhubarbe pdu on "{{ item }}"
+  delegate_to: faraday.inria.fr
+  failed_when: false
+  loop: "{{ qhats_to_recycle }}"
+
+- name: Ping power-cycled QHATs again
+  shell: "ping -c1 -W1 {{ item }}"
+  delegate_to: faraday.inria.fr
+  register: ping_retry_results
+  ignore_errors: true
+  changed_when: false
+  retries: 12
+  delay: 10
+  until: ping_retry_results.rc == 0
+  loop: "{{ qhats_to_recycle }}"
+
+- name: Report QHAT power-cycle retry outcome
+  # Kept visible on purpose, to measure how often qhats fail to boot
+  debug:
+    msg: >-
+      QHATs power-cycled again: {{ qhats_to_recycle }} /
+      recovered: {{ ping_retry_results.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'equalto', 0) | map(attribute='item') | list }}
+  when: qhats_to_recycle | length > 0
+
+- name: Build reachable UEs
+  # Merge first ping pass and post-power-cycle retry
+  set_fact:
+    reachable_ues: >-
+      {{
+        (ping_results.results + (ping_retry_results.results | default([])))
+        | selectattr('rc', 'defined')
         | selectattr('rc', 'equalto', 0)
         | map(attribute='item')
+        | unique
         | list
       }}
 
