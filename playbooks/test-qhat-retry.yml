@@ -1,0 +1,83 @@
+# Validation of the qhat power-cycle retry logic added to r2lab/ue/setup
+# qhat02 is powered off right before the ping to simulate a qhat that failed to boot
+- name: Test qhat retry logic
+  hosts: faraday.inria.fr
+  gather_facts: false
+  tasks:
+    - name: Build UE list (qhats only for this test)
+      set_fact:
+        all_ues: "{{ groups['qhats'] }}"
+
+    - name: Power ON QHAT UEs
+      shell: rhubarbe pdu on "{{ item }}"
+      delegate_to: faraday.inria.fr
+      loop: "{{ groups['qhats'] }}"
+
+    - name: Simulate a qhat02 that failed to boot (test only)
+      shell: rhubarbe pdu off qhat02
+      delegate_to: faraday.inria.fr
+
+    # --- Same tasks as in roles/r2lab/ue/setup/tasks/main.yml ---
+
+    - name: Ping UEs
+      shell: "ping -c1 -W1 {{ item }}"
+      delegate_to: faraday.inria.fr
+      register: ping_results
+      ignore_errors: true
+      changed_when: false
+      retries: 12
+      delay: 10
+      until: ping_results.rc == 0
+      loop: "{{ all_ues }}"
+
+    - name: List QHATs that did not answer ping
+      set_fact:
+        qhats_to_recycle: >-
+          {{
+            ping_results.results
+            | selectattr('rc', 'defined')
+            | rejectattr('rc', 'equalto', 0)
+            | map(attribute='item')
+            | select('in', groups['qhats'] | default([]))
+            | list
+          }}
+
+    - name: Power-cycle QHATs that did not answer ping
+      shell: rhubarbe pdu off "{{ item }}"; sleep 5; rhubarbe pdu on "{{ item }}"
+      delegate_to: faraday.inria.fr
+      failed_when: false
+      loop: "{{ qhats_to_recycle }}"
+
+    - name: Ping power-cycled QHATs again
+      shell: "ping -c1 -W1 {{ item }}"
+      delegate_to: faraday.inria.fr
+      register: ping_retry_results
+      ignore_errors: true
+      changed_when: false
+      retries: 12
+      delay: 10
+      until: ping_retry_results.rc == 0
+      loop: "{{ qhats_to_recycle }}"
+
+    - name: Report QHAT power-cycle retry outcome
+      debug:
+        msg: >-
+          QHATs power-cycled again: {{ qhats_to_recycle }} /
+          recovered: {{ ping_retry_results.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'equalto', 0) | map(attribute='item') | list }}
+      when: qhats_to_recycle | length > 0
+
+    - name: Build reachable UEs
+      set_fact:
+        reachable_ues: >-
+          {{
+            (ping_results.results + (ping_retry_results.results | default([])))
+            | selectattr('rc', 'defined')
+            | selectattr('rc', 'equalto', 0)
+            | map(attribute='item')
+            | unique
+            | list
+          }}
+
+    - name: Show final reachable UEs
+      debug:
+        var: reachable_ues
