@@ -132,6 +132,18 @@
       .namespace = "{{ ran_ns }}"
     ' "{{ values_file }}"
 
+# CSI logger of the OCUDU gNB images (ocudu-csi-logging): values csi.* -> CSI_* env + hostPath /data/csi
+# of the chart (srsran-helm, branch ocudu). Same switch as for OAI: -e csi_logger_enabled=true.
+- name: Configure the CSI logger (csi.* chart values)
+  ansible.builtin.shell: >
+    {{ yq_bin_path }} eval -i '
+      .csi.enabled = {{ csi_logger_enabled | default(false) | bool | lower }} |
+      .csi.hostPath = "/data/csi" |
+      .csi.granularity = "{{ csi_granularity | default('rb') }}" |
+      .csi.subcarrierSampling = {{ csi_subcarrier_sampling | default(1) | int }} |
+      .csi.flushCore = "{{ csi_flush_core | default('') }}"
+    ' "{{ values_file }}"
+
 - name: Fix device_args for rfsim GNU Radio single-channel multi-UE
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '

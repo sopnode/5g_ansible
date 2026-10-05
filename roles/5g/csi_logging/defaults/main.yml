@@ -1,5 +1,6 @@
 ---
-# OAI CSI log (csi_per_rb.csv written by the CSI logger of the gNB/DU).
+# CSI log (csi_per_rb.csv, CSI CSV format v3.1) written by the CSI logger of the OAI gNB/DU or of the OCUDU gNB
+# (ran: srsRAN, images of ocudu-csi-logging).
 # The gNB always runs on the RAN node and writes the hostPath file csi_output_dir/csi_file_name
 # there, so the CSI timestamps and the RAN node clock are the same clock.
 
@@ -12,11 +13,13 @@ csi_file_name: csi_per_rb.csv
 # gNB (monolithic) or DU (cudu / cucpup) pod, used only to record provenance metadata
 # (pod, image, CSI_* variables, "Init: N_RB_DL ... ofdm_symbol_size" line of the gNB log)
 csi_k8s_namespace: "{{ core | default('oai') }}"
+csi_srsran: "{{ (ran | default('oai')) == 'srsRAN' }}"
 csi_gnb_split: "{{ (oai_gnb_mode | default('')) in ['cudu', 'cucpup'] }}"
 csi_pod_selector: >-
-  {{ 'app.kubernetes.io/name=oai-du,app.kubernetes.io/instance=oai-du' if csi_gnb_split
-     else 'app.kubernetes.io/name=oai-gnb,app.kubernetes.io/instance=oai-gnb' }}
-csi_container: "{{ 'du' if csi_gnb_split else 'gnb' }}"
+  {{ 'app=srsran,component=gnb' if csi_srsran
+     else ('app.kubernetes.io/name=oai-du,app.kubernetes.io/instance=oai-du' if csi_gnb_split
+           else 'app.kubernetes.io/name=oai-gnb,app.kubernetes.io/instance=oai-gnb') }}
+csi_container: "{{ 'gnb' if csi_srsran else ('du' if csi_gnb_split else 'gnb') }}"
 csi_kubeconfig: ""            # empty = kubectl default on the RAN node
 
 # ---------------------------------------------------------------- collection (collect.yml)
@@ -63,7 +66,7 @@ csi_live_refresh_s: 10
 csi_live_max_mb: 1024
 # Visualizer: a local file on the controller, else downloaded from the oai-csi-logging repository
 csi_live_visualizer_src: ""
-csi_live_visualizer_ref: main
+csi_live_visualizer_ref: csi-v3.1     # the visualizer v8.8 is not on main yet
 csi_live_visualizer_url: >-
   https://raw.githubusercontent.com/turletti/oai-csi-logging/{{ csi_live_visualizer_ref }}/visualizer/streamlit_csi_visualizer_v8.8.py
 csi_live_pip_packages:

@@ -464,10 +464,8 @@
       when: ran == 'srsRAN'
     - role: 5g/srsRAN/deploy
       when: ran == 'srsRAN'
-    - role: 5g/srsRAN/csi
-      when: 
-        - ran == 'srsRAN'
-        - csi_logger_enabled | default(false)
+    # CSI: nothing to run at deploy time (the gNB writes /data/csi/csi_per_rb.csv on the RAN node);
+    # collect after the run with playbooks/collect_csi.yml or run_experiment.yml (collect: csi)
 
 - name: Deploy ueransim for oai core
   hosts: ran_node

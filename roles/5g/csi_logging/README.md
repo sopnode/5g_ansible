@@ -1,13 +1,23 @@
-# OAI CSI collection and live view
+# CSI collection and live view (OAI and OCUDU gNB)
 
-`csi_per_rb.csv` holds the SRS channel estimates written by the CSI logger of the
-`oai-gnb-csi` / `oai-gnb-aw2s-csi` images (sources, format and visualizer:
-[oai-csi-logging](https://github.com/turletti/oai-csi-logging)).
+`csi_per_rb.csv` (CSI CSV format v3.1) holds the SRS channel estimates written by the CSI logger of the
+`oai-gnb-csi` / `oai-gnb-aw2s-csi` images (`ran: oai`; sources, format and visualizer:
+[oai-csi-logging](https://github.com/turletti/oai-csi-logging)) or of the `ocudu-gnb-csi` images (`ran: srsRAN`;
+[ocudu-csi-logging](https://github.com/turletti/ocudu-csi-logging)). The role only reads that file on the RAN
+node; `ran` only selects the gNB pod recorded in the metadata.
 
 ## Enabling the logger
 
 `-e csi_logger_enabled=true` at deploy time selects the `-csi` gNB images and forces
-`do_SRS: periodic` / `do_CSIRS: 1` (see `roles/5g/oai/setup`). The gNB runs on the RAN node
+`do_SRS: periodic` / `do_CSIRS: 1` (see `roles/5g/oai/setup`).
+
+With `ran: srsRAN`, the gNB is OCUDU (images `r2labuser/ocudu-gnb-csi`, logger from
+[ocudu-csi-logging](https://github.com/turletti/ocudu-csi-logging), chart `srsran-helm` branch `ocudu`,
+periodic SRS in the values files). The same `-e csi_logger_enabled=true` sets the chart values `csi.*`
+(`roles/5g/srsRAN/config`); options: `-e csi_granularity=rb|subcarrier`, `-e csi_subcarrier_sampling=N`,
+`-e csi_flush_core=<housekeeping CPU>`. Only single-port SRS is logged (UEs reporting 2 SRS ports are
+skipped, see `[CSI]` lines in the gNB log). Collection and live view below are the same; the pod is
+selected with `app=srsran,component=gnb`. The gNB runs on the RAN node
 (`[ran_node]`) and the logger writes the hostPath file `/data/csi/csi_per_rb.csv` there; the
 file is truncated when the gNB starts.
 
@@ -21,10 +31,10 @@ in that single pass. The controller clock is never used for CSI timing.
 Standalone:
 
 ```bash
-ansible-playbook -i inventory/<name>/hosts.ini playbooks/collect_csi_oai.yml
+ansible-playbook -i inventory/<name>/hosts.ini playbooks/collect_csi.yml
 ```
 
-Results: `results/csi-oai-<run_id>/` with `csi_per_rb.csv.gz` and `csi_collection.json`
+Results: `results/csi-<ran>-<run_id>/` (`csi-oai-...`, `csi-srsran-...`) with `csi_per_rb.csv.gz` and `csi_collection.json`
 (pod, image, `CSI_*` variables, gNB `Init: N_RB_DL ... ofdm_symbol_size ...` line, format
 version, rows, flush markers, dropped rows).
 
@@ -77,7 +87,7 @@ ansible-playbook -i inventory/<name>/hosts.ini playbooks/csi_live.yml -e csi_liv
 | `csi_ran_host` | first `[ran_node]` | Node running the gNB |
 | `csi_output_dir`, `csi_file_name` | `/data/csi`, `csi_per_rb.csv` | File on the RAN node |
 | `csi_k8s_namespace` | `{{ core }}` | Namespace of the gNB pod (metadata only) |
-| `csi_pod_selector`, `csi_container` | oai-gnb / `gnb` (oai-du / `du` in cudu mode) | Pod and container (metadata only) |
+| `csi_pod_selector`, `csi_container` | oai-gnb / `gnb` (oai-du / `du` in cudu mode); `app=srsran,component=gnb` / `gnb` with `ran: srsRAN` | Pod and container (metadata only) |
 | `csi_fetch_full` | `true` | Fetch the full file (gzip -1) |
 | `csi_window_types` | `section` | Window levels used to cut the file |
 | `csi_cpu_list` | `""` | Optional housekeeping CPUs for the RAN node side (never isolated CPUs) |

@@ -1,6 +1,6 @@
 ---
 repo_url: "https://github.com/turletti/srsran-helm.git"
-version: csi # benetel #main
+version: ocudu # OCUDU gNB images with the CSI logger (ocudu-csi-logging); csi = srsRAN fork, benetel, main
 
 ran_ns: "{{ core }}"
 repo_dest: "~/srsran-helm"
