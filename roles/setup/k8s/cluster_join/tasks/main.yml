@@ -124,7 +124,7 @@
     dest: ./admin.conf
     flat: yes
   delegate_to: "{{ groups['core_node'][0] }}"
-  when: inventory_hostname == groups['k8s_workers'][0]
+  when: inventory_hostname == (groups['k8s_workers'] | difference([core_node_name]) | first)
 
 - name: Copy admin.conf to worker node
   ansible.builtin.copy:
