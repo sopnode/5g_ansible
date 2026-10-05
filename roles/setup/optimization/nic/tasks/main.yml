@@ -57,15 +57,19 @@
       changed_when: false
       become: true
 
-    - name: Apply IRQ affinity for ens15f0np0 (cores 14-31)
+    # Housekeeping CPUs must match the kernel cmdline of the RT image
+    # (irqaffinity=0-5, isolcpus=managed_irq,6-63) and kubelet reservedSystemCPUs.
+    # Pinning NIC IRQs on 14-31 put NET_RX softirq on isolated cores that the
+    # static CPU manager hands to the gNB pod.
+    - name: Apply IRQ affinity for ens15f0np0 (housekeeping cores)
       ansible.builtin.shell: |
-        echo 14-31 > /proc/irq/{{ item }}/smp_affinity_list
+        echo {{ ran_housekeeping_cpus | default('0-5') }} > /proc/irq/{{ item }}/smp_affinity_list
       loop: "{{ ovs_irq_list.stdout_lines }}"
       become: true
 
-    - name: Apply IRQ affinity for ens15f1np1 SRIOV PF (cores 14-31)
+    - name: Apply IRQ affinity for ens15f1np1 SRIOV PF (housekeeping cores)
       ansible.builtin.shell: |
-        echo 14-31 > /proc/irq/{{ item }}/smp_affinity_list
+        echo {{ ran_housekeeping_cpus | default('0-5') }} > /proc/irq/{{ item }}/smp_affinity_list
       loop: "{{ sriov_pf_irq_list.stdout_lines }}"
       become: true
       when: sriov_pf_irq_list.stdout_lines | length > 0
@@ -79,10 +83,10 @@
           After=network-online.target
           [Service]
           Type=oneshot
-          # Le script recalcule les IRQs à chaque démarrage du service
+          # The script recomputes IRQs each time a service starts
           ExecStart=/bin/bash -c 'for iface in ens15f0np0 ens15f1np1; do \
             for irq in $(grep $iface /proc/interrupts | cut -d: -f1); do \
-              echo 14-31 > /proc/irq/$irq/smp_affinity_list; \
+              echo {{ ran_housekeeping_cpus | default('0-5') }} > /proc/irq/$irq/smp_affinity_list; \
             done; \
           done'
           [Install]
