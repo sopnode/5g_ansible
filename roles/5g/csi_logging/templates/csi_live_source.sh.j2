@@ -12,4 +12,8 @@ taskset -a -cp {{ csi_cpu_list | quote }} $$ >/dev/null 2>&1
 head -c 1048576 "$F" 2>/dev/null | grep -m1 '^# {'
 head -c 1048576 "$F" 2>/dev/null | grep -m1 '^frame'
 # then only what is written from now on; follows truncation / re-creation (gNB restart)
-exec tail -c 0 -F "$F" 2>/dev/null
+# GNU tail: the uutils tail (rust-coreutils, default /usr/bin/tail on recent Ubuntu, GNU tail installed as gnutail)
+# does not follow the growing CSI file correctly with "-c 0 -F".
+TAIL=$(command -v gnutail || command -v tail)
+exec "$TAIL" -c 0 -F "$F" 2>/dev/null
+
