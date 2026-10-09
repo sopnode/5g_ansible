@@ -93,6 +93,17 @@
           mount --bind /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs \
                        /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs
 
+    # CSI logs: the OAI and OCUDU CSI loggers write /data/csi on the RAN node (hostPath). On a live system / is a
+    # tmpfs overlay: the file would be in RAM and charged to the gNB pod memory as shmem (OOM after ~2 min at
+    # ~7 MB/s, 2026-10-09). Keep it on the data disk, next to containerd. Survives redeploys (cluster_join and
+    # cluster_create only remove containerd's own subdirectories), not a reboot (like the containerd mount).
+    - name: Bind-mount a directory of the data disk onto /data/csi (RAN node)
+      ansible.builtin.shell: |
+        mkdir -p /var/lib/containerd/csi-data /data/csi
+        mountpoint -q /data/csi || mount --bind /var/lib/containerd/csi-data /data/csi
+      changed_when: false
+      when: inventory_hostname in groups['ran_node']
+
     # kubelet on tmpfs is acceptable — kubelet workdir does not need statfs capacity
     - name: Ensure /var/lib/kubelet directory exists
       ansible.builtin.file:

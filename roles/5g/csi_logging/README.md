@@ -14,9 +14,16 @@ node; `ran` only selects the gNB pod recorded in the metadata.
 With `ran: srsRAN`, the gNB is OCUDU (images `r2labuser/ocudu-gnb-csi`, logger from
 [ocudu-csi-logging](https://github.com/turletti/ocudu-csi-logging), chart `srsran-helm` branch `ocudu`,
 periodic SRS in the values files). The same `-e csi_logger_enabled=true` sets the chart values `csi.*`
-(`roles/5g/srsRAN/config`); options: `-e csi_granularity=rb|subcarrier`, `-e csi_subcarrier_sampling=N`,
-`-e csi_flush_core=<housekeeping CPU>`. Only single-port SRS is logged (UEs reporting 2 SRS ports are
-skipped, see `[CSI]` lines in the gNB log). Collection and live view below are the same; the pod is
+(`roles/5g/srsRAN/config`). srsRAN/OCUDU-only options: `-e srsran_csi_granularity=rb|subcarrier`,
+`-e srsran_csi_subcarrier_sampling=N`, `-e srsran_csi_flush_core=<housekeeping CPU>`,
+`-e srsran_srs_period_ms=<ms>` (SRS period, i.e. CSI time resolution; 40 in the values files, about 8-12 GB/h
+with 3 UEs, 2 SRS ports and 2 RX antennas) and `-e srsran_pusch_target_sinr=<dB>` (PUSCH closed-loop power
+control target; 15 in the Benetel and USRP values files, which enable the PUSCH closed loop; the playbook
+refuses this option with rfsim, where it would have no effect). Multi-port SRS (2 or 4 ports, from the UE capabilities) is
+logged per SRS port in `rb` granularity (`port_tx` column); in `subcarrier` granularity multi-port occasions are
+skipped (see the `[CSI]` lines in the gNB log). On a live RAN node `/data/csi` is bind-mounted from the data
+disk by `roles/setup/pre_k8s` (otherwise the file is in RAM and counted in the gNB pod memory). Collection and
+live view below are the same; the pod is
 selected with `app=srsran,component=gnb`. The gNB runs on the RAN node
 (`[ran_node]`) and the logger writes the hostPath file `/data/csi/csi_per_rb.csv` there; the
 file is truncated when the gNB starts.

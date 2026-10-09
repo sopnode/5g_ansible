@@ -134,15 +134,58 @@
 
 # CSI logger of the OCUDU gNB images (ocudu-csi-logging): values csi.* -> CSI_* env + hostPath /data/csi
 # of the chart (srsran-helm, branch ocudu). Same switch as for OAI: -e csi_logger_enabled=true.
+# srsRAN/OCUDU-only options are prefixed with srsran_.
 - name: Configure the CSI logger (csi.* chart values)
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '
       .csi.enabled = {{ csi_logger_enabled | default(false) | bool | lower }} |
       .csi.hostPath = "/data/csi" |
-      .csi.granularity = "{{ csi_granularity | default('rb') }}" |
-      .csi.subcarrierSampling = {{ csi_subcarrier_sampling | default(1) | int }} |
-      .csi.flushCore = "{{ csi_flush_core | default('') }}"
+      .csi.granularity = "{{ srsran_csi_granularity | default('rb') }}" |
+      .csi.subcarrierSampling = {{ srsran_csi_subcarrier_sampling | default(1) | int }} |
+      .csi.flushCore = "{{ srsran_csi_flush_core | default('') }}"
     ' "{{ values_file }}"
+
+# Optional overrides of the values file (srsRAN/OCUDU only):
+#   -e srsran_srs_period_ms=<ms>        periodic SRS period, i.e. CSI time resolution (values files: 40)
+#   -e srsran_pusch_target_sinr=<dB>    PUSCH closed-loop power control target (values files: 15 for Benetel and USRP)
+- name: Check the SRS period and PUSCH target SINR overrides
+  ansible.builtin.assert:
+    that:
+      - srsran_srs_period_ms is not defined or
+        (srsran_srs_period_ms | float) in [1, 2, 2.5, 4, 5, 8, 10, 16, 20, 32, 40, 64, 80, 160, 320, 640, 1280, 2560]
+      - srsran_pusch_target_sinr is not defined or
+        ((srsran_pusch_target_sinr | float) >= -5 and (srsran_pusch_target_sinr | float) <= 30)
+    fail_msg: >-
+      srsran_srs_period_ms must be an OCUDU SRS period (ms): 1 2 2.5 4 5 8 10 16 20 32 40 64 80 160 320 640 1280 2560;
+      srsran_pusch_target_sinr must be in [-5, 30] dB
+    quiet: true
+
+- name: Set the SRS period (srsran_srs_period_ms)
+  ansible.builtin.shell: >
+    {{ yq_bin_path }} eval -i '.gnbConfig.cell_cfg.srs.period_ms = {{ srsran_srs_period_ms }}' "{{ values_file }}"
+  when: srsran_srs_period_ms is defined
+
+# OCUDU uses target_sinr only with the PUSCH closed-loop power control (default off; on in the Benetel and USRP values files)
+- name: Read the PUSCH closed-loop power control flag of the values file
+  ansible.builtin.shell: >
+    {{ yq_bin_path }} eval '.gnbConfig.cell_cfg.pusch.enable_cl_loop_pw_control // false' "{{ values_file }}"
+  register: srsran_pusch_cl
+  changed_when: false
+  when: srsran_pusch_target_sinr is defined
+
+- name: Check that srsran_pusch_target_sinr has an effect
+  ansible.builtin.assert:
+    that: srsran_pusch_cl.stdout | trim | bool
+    fail_msg: >-
+      srsran_pusch_target_sinr has no effect with {{ values_filename }}: gnbConfig.cell_cfg.pusch.enable_cl_loop_pw_control
+      is not true (it is on in the Benetel and USRP n300/n320 values files)
+    quiet: true
+  when: srsran_pusch_target_sinr is defined
+
+- name: Set the PUSCH target SINR (srsran_pusch_target_sinr)
+  ansible.builtin.shell: >
+    {{ yq_bin_path }} eval -i '.gnbConfig.cell_cfg.pusch.target_sinr = {{ srsran_pusch_target_sinr }}' "{{ values_file }}"
+  when: srsran_pusch_target_sinr is defined
 
 - name: Fix device_args for rfsim GNU Radio single-channel multi-UE
   ansible.builtin.shell: >
