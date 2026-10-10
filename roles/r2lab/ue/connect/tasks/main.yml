@@ -263,7 +263,7 @@
             "ip -4 addr show wwan0 | grep -oP '(?<=inet\s)\d+(\.(\d+)){3}'"
           register: ue_ip_cmd
           until: ue_ip_cmd.stdout != ""
-          retries: "{{ 60 if ue_mode == 'qmi' else 5 }}"
+          retries: "{{ 20 if ue_mode == 'qmi' else 5 }}"
           delay: 2
           changed_when: false
           ignore_errors: true
