@@ -1,0 +1,63 @@
+# playbooks/test_qhat_power.yml
+# Replica of the r2lab/ue/setup power tasks, to reproduce qhat boot failures under Ansible
+- name: Test qhat power sequence
+  hosts: faraday.inria.fr
+  gather_facts: false
+  tasks:
+    - name: Power OFF R2Lab testbed (same as cleanup role)
+      shell: |
+        source ~/.bashrc
+        all-off
+      args:
+        executable: /bin/bash
+
+    - name: Power OFF QHAT UEs
+      shell: rhubarbe pdu off "{{ item }}"
+      delegate_to: faraday.inria.fr
+      async: 1800
+      poll: 0
+      failed_when: false
+      changed_when: false
+      loop: "{{ groups['qhats'] }}"
+      register: qhat_off_jobs
+
+    - name: Wait QHAT OFF completion
+      async_status:
+        jid: "{{ item.ansible_job_id }}"
+      register: qhat_off_status
+      until: qhat_off_status.finished
+      retries: 12
+      delay: 5
+      loop: "{{ qhat_off_jobs.results }}"
+      failed_when: false
+
+    - pause:
+        seconds: 20
+
+    - name: Power ON QHAT UEs
+      shell: rhubarbe pdu on "{{ item }}"
+      delegate_to: faraday.inria.fr
+      async: 1800
+      poll: 0
+      loop: "{{ groups['qhats'] }}"
+      register: qhat_on_jobs
+
+    - name: Wait QHAT ON completion
+      async_status:
+        jid: "{{ item.ansible_job_id }}"
+      register: qhat_on_status
+      until: qhat_on_status.finished
+      retries: 12
+      delay: 5
+      loop: "{{ qhat_on_jobs.results }}"
+
+    - name: Ping UEs
+      # No ignore_errors: a failure must stop the loop and leave the node untouched
+      shell: "ping -c1 -W1 {{ item }}"
+      delegate_to: faraday.inria.fr
+      register: ping_results
+      changed_when: false
+      retries: 12
+      delay: 10
+      until: ping_results.rc == 0
+      loop: "{{ groups['qhats'] }}"
