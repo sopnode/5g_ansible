@@ -43,10 +43,12 @@
 - name: Apply NIC IRQ pinning only on RAN nodes
   when: inventory_hostname == "sopnode-f3"
   block:
-    # FIX: pin IRQs for BOTH ens15f0np0 (management) AND ens15f1np1 (DPDK/SRIOV PF)
-    # Unpinned PF IRQs can fire on RT cores causing jitter and potential livelock.
-    - name: Find IRQs for ens15f0np0
-      ansible.builtin.shell: "grep -i 'ens15f0np0' /proc/interrupts | awk '{print $1}' | tr -d ':'"
+    # Pin the IRQs of the whole E810 card: the 4 PFs (ens15f0np0 management, ens15f1np1 DPDK/SRIOV PF,
+    # ens15f2np2 PTP, ens15f3np3) and the ice ctrl/misc vectors. An unpinned PF IRQ on a gNB core is
+    # starved by DPDK busy polling: Tx timeout, ice reset blocked in synchronize_irq() holding rtnl,
+    # node unreachable. vfio-msix IRQs of the DPDK VFs are not matched.
+    - name: Find IRQs of the E810 card (all PFs, ctrl and misc)
+      ansible.builtin.shell: "grep -E 'ice-|ens15f[0-3]np[0-3]' /proc/interrupts | awk '{print $1}' | tr -d ':'"
       register: ovs_irq_list
       changed_when: false
       become: true
@@ -61,7 +63,7 @@
     # (irqaffinity=0-5, isolcpus=managed_irq,6-63) and kubelet reservedSystemCPUs.
     # Pinning NIC IRQs on 14-31 put NET_RX softirq on isolated cores that the
     # static CPU manager hands to the gNB pod.
-    - name: Apply IRQ affinity for ens15f0np0 (housekeeping cores)
+    - name: Apply IRQ affinity for the E810 card (housekeeping cores)
       ansible.builtin.shell: |
         echo {{ ran_housekeeping_cpus | default('0-5') }} > /proc/irq/{{ item }}/smp_affinity_list
       loop: "{{ ovs_irq_list.stdout_lines }}"
@@ -79,15 +81,13 @@
         dest: /etc/systemd/system/irq-affinity-ens15f0np0.service
         content: |
           [Unit]
-          Description=Pin IRQs for ens15f0np0 and ens15f1np1
+          Description=Pin IRQs of the E810 card (all PFs) on housekeeping cores
           After=network-online.target
           [Service]
           Type=oneshot
-          # The script recomputes IRQs each time a service starts
-          ExecStart=/bin/bash -c 'for iface in ens15f0np0 ens15f1np1; do \
-            for irq in $(grep $iface /proc/interrupts | cut -d: -f1); do \
-              echo {{ ran_housekeeping_cpus | default('0-5') }} > /proc/irq/$irq/smp_affinity_list; \
-            done; \
+          # The script recomputes IRQs each time a service starts ($$ = literal $ for systemd)
+          ExecStart=/bin/bash -c 'for irq in $$(grep -E "ice-|ens15f[0-3]np[0-3]" /proc/interrupts | cut -d: -f1); do \
+            echo {{ ran_housekeeping_cpus | default('0-5') }} > /proc/irq/$$irq/smp_affinity_list; \
           done'
           [Install]
           WantedBy=multi-user.target
