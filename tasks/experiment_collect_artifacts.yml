@@ -70,9 +70,9 @@
   changed_when: true
   failed_when: false
 
-- name: Collect OAI CSI log and split it by timeline windows (RAN node clock)
+- name: Collect CSI log (OAI or OCUDU gNB) and split it by timeline windows (RAN node clock)
   ansible.builtin.include_role:
-    name: 5g/oai/csi_logging
+    name: 5g/csi_logging
     tasks_from: collect.yml
   vars:
     csi_run_id: "{{ experiment_run_id }}"
@@ -83,7 +83,7 @@
     csi_split_padding_seconds: "{{ experiment_split_padding_seconds }}"
   when:
     - experiment_collect_csi | default(false) | bool
-    - ran | default('oai') == 'oai'
+    - ran | default('oai') in ['oai', 'srsRAN']
 
 - name: Split experiment Prometheus CSV by timeline windows
   ansible.builtin.command:
@@ -135,7 +135,7 @@
       - `pod_logs.tgz`: Kubernetes pod inventory, events, descriptions, and logs when enabled.
       - `pcaps/<section_or_window>/`: tcpdump pcaps and tcpdump logs when pcap collection is enabled.
       - `pcaps/pcap_summary.json`: machine-readable pcap capture status summary when pcaps are enabled.
-      - `csi/csi_per_rb.csv.gz`, `csi/by_window/<window_type>/<window>/csi_per_rb.csv.gz`: OAI CSI log, full and per window (RAN node clock, ~5 s batch granularity), when CSI collection is enabled; `csi/csi_collection.json` for provenance.
+      - `csi/csi_per_rb.csv.gz`, `csi/by_window/<window_type>/<window>/csi_per_rb.csv.gz`: CSI log of the OAI or OCUDU gNB, full and per window (RAN node clock, ~5 s batch granularity), when CSI collection is enabled; `csi/csi_collection.json` for provenance.
 
       Collection flags:
       - Prometheus: {{ experiment_collect_prometheus }}

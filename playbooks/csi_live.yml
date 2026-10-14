@@ -1,5 +1,5 @@
 ---
-# Live view of the OAI CSI log (optional; the end-of-run collection stays collect_csi_oai.yml
+# Live view of the CSI log of the OAI or OCUDU gNB (optional; the end-of-run collection stays collect_csi.yml
 # or run_experiment.yml). Streamer + Streamlit run on the monitor node (or -e csi_live_host=...),
 # never on the RAN node; open the view from your laptop through an ssh tunnel (printed at start).
 #
@@ -7,12 +7,12 @@
 #   ansible-playbook -i inventory/<name>/hosts.ini playbooks/csi_live.yml -e csi_live_action=status
 #   ansible-playbook -i inventory/<name>/hosts.ini playbooks/csi_live.yml -e csi_live_action=stop
 #   ... -e csi_live_visualizer_src=/path/to/streamlit_csi_visualizer_v8.8.py   # instead of downloading it
-- name: OAI CSI live view
+- name: CSI live view
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
     - name: Live CSI view ({{ csi_live_action | default('start') }})
       ansible.builtin.include_role:
-        name: 5g/oai/csi_logging
+        name: 5g/csi_logging
         tasks_from: live.yml

@@ -457,10 +457,11 @@ pcap:
 If a configured pcap target cannot start, the section fails before the workload
 continues.
 
-## OAI CSI Logs
+## CSI Logs (OAI and OCUDU gNB)
 
-With an OAI gNB built with the CSI logger (`-e csi_logger_enabled=true`), the
-per-RB SRS channel estimates (`csi_per_rb.csv`) can be collected and cut by window:
+With an OAI gNB built with the CSI logger, or an OCUDU gNB (`ran: srsRAN`, images
+`r2labuser/ocudu-gnb-csi`) (`-e csi_logger_enabled=true`), the per-RB SRS channel
+estimates (`csi_per_rb.csv`) can be collected and cut by window:
 
 ```yaml
 collect:
@@ -483,8 +484,8 @@ results/experiment-<run_id>/csi/csi_collection.json
 
 Windows are cut per logger flush batch (~5 s): a batch belongs to every window its
 acquisition interval overlaps, so consecutive windows can share one batch. See
-`roles/5g/oai/csi_logging/README.md`; standalone collection:
-`playbooks/collect_csi_oai.yml`; optional live view on the monitor node:
+`roles/5g/csi_logging/README.md`; standalone collection:
+`playbooks/collect_csi.yml`; optional live view on the monitor node:
 `playbooks/csi_live.yml`.
 
 ## Existing TCP Scenario Playbook
