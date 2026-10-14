@@ -13,9 +13,8 @@ csi_file_name: csi_per_rb.csv
 # (pod, image, CSI_* variables, "Init: N_RB_DL ... ofdm_symbol_size" line of the gNB log)
 csi_k8s_namespace: "{{ core | default('oai') }}"
 csi_gnb_split: "{{ (oai_gnb_mode | default('')) in ['cudu', 'cucpup'] }}"
-csi_pod_selector: >-
-  {{ 'app.kubernetes.io/name=oai-du,app.kubernetes.io/instance=oai-du' if csi_gnb_split
-     else 'app.kubernetes.io/name=oai-gnb,app.kubernetes.io/instance=oai-gnb' }}
+# Helm release only: the chart name differs with the RU (oai-gnb, oai-gnb-fhi72 for Benetel RUs)
+csi_pod_selector: "app.kubernetes.io/instance={{ 'oai-du' if csi_gnb_split else 'oai-gnb' }}"
 csi_container: "{{ 'du' if csi_gnb_split else 'gnb' }}"
 csi_kubeconfig: ""            # empty = kubectl default on the RAN node
 

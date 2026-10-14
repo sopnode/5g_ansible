@@ -1,7 +1,7 @@
 # OAI CSI collection and live view
 
 `csi_per_rb.csv` holds the SRS channel estimates written by the CSI logger of the
-`oai-gnb-csi` / `oai-gnb-aw2s-csi` images (sources, format and visualizer:
+`oai-gnb-csi` / `oai-gnb-aw2s-csi` / `oai-gnb-fhi72-csi` images (sources, format and visualizer:
 [oai-csi-logging](https://github.com/turletti/oai-csi-logging)).
 
 ## Enabling the logger
@@ -77,7 +77,7 @@ ansible-playbook -i inventory/<name>/hosts.ini playbooks/csi_live.yml -e csi_liv
 | `csi_ran_host` | first `[ran_node]` | Node running the gNB |
 | `csi_output_dir`, `csi_file_name` | `/data/csi`, `csi_per_rb.csv` | File on the RAN node |
 | `csi_k8s_namespace` | `{{ core }}` | Namespace of the gNB pod (metadata only) |
-| `csi_pod_selector`, `csi_container` | oai-gnb / `gnb` (oai-du / `du` in cudu mode) | Pod and container (metadata only) |
+| `csi_pod_selector`, `csi_container` | release oai-gnb / `gnb` (oai-du / `du` in cudu mode) | Pod and container (metadata only) |
 | `csi_fetch_full` | `true` | Fetch the full file (gzip -1) |
 | `csi_window_types` | `section` | Window levels used to cut the file |
 | `csi_cpu_list` | `""` | Optional housekeeping CPUs for the RAN node side (never isolated CPUs) |
