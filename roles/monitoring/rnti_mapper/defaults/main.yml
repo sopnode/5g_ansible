@@ -7,13 +7,16 @@ rnti_mapper_port: 9101
 rnti_mapper_period: 10
 # Static kubectl of the control-plane node, mounted in the pod (avoids pulling a kubectl image)
 rnti_mapper_kubectl_path: /usr/bin/kubectl
-# RAN side, read from a sidecar sharing the gNB log volume:
+# RAN side, "container:file" sources tried in order (first existing file wins):
 #  OAI:   nrRRC_stats.log from metrics-parser (CU UE ID = RAN UE NGAP id, rnti in hex)
-#  OCUDU: gNB log from gnb-logs, cu/rrc/ngap at info (set by the srsRAN config role, rnti in decimal)
+#  OCUDU: gNB log, cu/rrc/ngap at info (srsRAN config role), rnti in decimal. /var/log/gnb.log
+#         (benetel, rfsim, liteon values) is read from the gnb-logs sidecar, /tmp/gnb.log (n300/n320)
+#         from the gnb container.
 rnti_mapper_ran_type: "{{ 'ocudu' if (ran | default('oai')) == 'srsRAN' else 'oai' }}"
 rnti_mapper_ran_deploy: "{{ 'srsran-gnb' if rnti_mapper_ran_type == 'ocudu' else 'oai-gnb' }}"
-rnti_mapper_ran_container: "{{ 'gnb-logs' if rnti_mapper_ran_type == 'ocudu' else 'metrics-parser' }}"
-rnti_mapper_ran_file: "{{ '/var/log/gnb.log' if rnti_mapper_ran_type == 'ocudu' else '/oai-gnb-logs/nrRRC_stats.log' }}"
+rnti_mapper_ran_sources: >-
+  {{ 'gnb-logs:/var/log/gnb.log gnb:/tmp/gnb.log' if rnti_mapper_ran_type == 'ocudu'
+     else 'metrics-parser:/oai-gnb-logs/nrRRC_stats.log' }}
 rnti_mapper_ran_pattern: "{{ 'c-rnti=0x|ran_ue=' if rnti_mapper_ran_type == 'ocudu' else '^UE [0-9]+ CU UE ID' }}"
 # Core side: OAI AMF "UEs' Information" table, or Open5GS AMF attach lines
 rnti_mapper_core_type: "{{ core | default('oai') }}"
