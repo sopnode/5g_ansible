@@ -47,34 +47,30 @@
     # ens15f2np2 PTP, ens15f3np3) and the ice ctrl/misc vectors. An unpinned PF IRQ on a gNB core is
     # starved by DPDK busy polling: Tx timeout, ice reset blocked in synchronize_irq() holding rtnl,
     # node unreachable. vfio-msix IRQs of the DPDK VFs are not matched.
-    - name: Find IRQs of the E810 card (all PFs, ctrl and misc)
-      ansible.builtin.shell: "grep -E 'ice-|ens15f[0-3]np[0-3]' /proc/interrupts | awk '{print $1}' | tr -d ':'"
-      register: ovs_irq_list
-      changed_when: false
-      become: true
-
-    - name: Find IRQs for ens15f1np1 (SRIOV PF)
-      ansible.builtin.shell: "grep -i 'ens15f1np1' /proc/interrupts | awk '{print $1}' | tr -d ':'"
-      register: sriov_pf_irq_list
-      changed_when: false
-      become: true
-
     # Housekeeping CPUs must match the kernel cmdline of the RT image
     # (irqaffinity=0-5, isolcpus=managed_irq,6-63) and kubelet reservedSystemCPUs.
     # Pinning NIC IRQs on 14-31 put NET_RX softirq on isolated cores that the
     # static CPU manager hands to the gNB pod.
+    # One task for all IRQs for more efficiency
+    # The pattern also covers ens15f1np1 (DPDK/SRIOV PF).
     - name: Apply IRQ affinity for the E810 card (housekeeping cores)
       ansible.builtin.shell: |
-        echo {{ ran_housekeeping_cpus | default('0-5') }} > /proc/irq/{{ item }}/smp_affinity_list
-      loop: "{{ ovs_irq_list.stdout_lines }}"
+        n=0; failed=""
+        for irq in $(grep -E 'ice-|ens15f[0-3]np[0-3]' /proc/interrupts | cut -d: -f1); do
+          if { echo {{ ran_housekeeping_cpus | default('0-5') }} > /proc/irq/$irq/smp_affinity_list; } 2>/dev/null; then
+            n=$((n+1))
+          else
+            failed="$failed $irq"
+          fi
+        done
+        echo "pinned $n IRQs on {{ ran_housekeeping_cpus | default('0-5') }}"
+        [ -z "$failed" ] || echo "failed IRQs:$failed" >&2
+        [ "$n" -gt 0 ]
+      args:
+        executable: /bin/bash
+      register: e810_irq_pin
+      changed_when: e810_irq_pin.rc == 0
       become: true
-
-    - name: Apply IRQ affinity for ens15f1np1 SRIOV PF (housekeeping cores)
-      ansible.builtin.shell: |
-        echo {{ ran_housekeeping_cpus | default('0-5') }} > /proc/irq/{{ item }}/smp_affinity_list
-      loop: "{{ sriov_pf_irq_list.stdout_lines }}"
-      become: true
-      when: sriov_pf_irq_list.stdout_lines | length > 0
 
     - name: Make IRQ pinning persistent on reboot
       ansible.builtin.copy:
