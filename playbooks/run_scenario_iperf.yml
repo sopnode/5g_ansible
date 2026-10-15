@@ -95,6 +95,13 @@
     - name: Keep the logs of this run
       set_fact:
         recent_logs: "{{ iperf_files.files }}"
+
+    # Port of each UE: 5201 + its index in valid_ue_list (ue-to-target_server, set on faraday)
+    - name: Map iperf ports to UEs
+      set_fact:
+        ue_by_port: "{{ dict(range(5201, 5201 + _ues | length) | map('string') | zip(_ues)) }}"
+      vars:
+        _ues: "{{ hostvars[groups['faraday'][0]].valid_ue_list | default([]) }}"
     
     - name: Read logs content
       slurp:
@@ -105,11 +112,12 @@
     - name: 🚀 DISPLAY LOGS
       debug:
         msg: |
+          UE: {{ ue_by_port.get((item.item.path | basename).split('_')[1], '?') }
           FILE: {{ item.item.path }}
           {{ item.content | b64decode | regex_replace('\x00', '') }}
       loop: "{{ log_contents.results }}"
       loop_control:
-        label: "{{ item.item.path }}"
+        label: "{{ ue_by_port.get((item.item.path | basename).split('_')[1], '?') }} {{ item.item.path }}
     
     - name: "📌 NOTE Location of all iperf results"
       debug:
