@@ -1,0 +1,113 @@
+# ue-mapper: exports ran_ue_info{rnti,ran_ue_id,imsi,ue_name} 1 for Grafana joins on rnti.
+# Separate pod, nothing runs in the gNB container. kubectl comes from the node (hostPath).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ue-mapper
+  namespace: {{ ue_mapper_namespace }}
+data:
+  # IMSI -> UE name, generated from the 'ues' of the 5G profile. Unknown IMSIs are shown as the IMSI.
+  ue_names: |
+    # IMSI            name
+{% for name, ue in (fiveg.ues | default({})).items() %}
+    {{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}{{ ue.imsi_suffix }}   {{ name }}
+{% endfor %}
+  join.awk: |
+{{ lookup('ansible.builtin.file', 'join.awk') | indent(4, true) }}
+  run.sh: |
+{{ lookup('ansible.builtin.file', 'run.sh') | indent(4, true) }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ue-mapper
+  namespace: {{ ue_mapper_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ue-mapper
+  namespace: {{ ue_mapper_namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ue-mapper
+  namespace: {{ ue_mapper_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ue-mapper
+subjects:
+  - kind: ServiceAccount
+    name: ue-mapper
+    namespace: {{ ue_mapper_namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ue-mapper
+  namespace: {{ ue_mapper_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ue-mapper
+  template:
+    metadata:
+      labels:
+        app: ue-mapper
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "{{ ue_mapper_port }}"
+    spec:
+      serviceAccountName: ue-mapper
+      # the control-plane node has a static kubectl at the hostPath below (and is not the RAN node)
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      containers:
+        - name: ue-mapper
+          image: {{ ue_mapper_image }}
+          command: ["/bin/sh", "/uemap/run.sh"]
+          env:
+            - {name: PORT, value: "{{ ue_mapper_port }}"}
+            - {name: PERIOD, value: "{{ ue_mapper_period }}"}
+            - {name: NS, value: "{{ ue_mapper_namespace }}"}
+            # RRC stats are read from the metrics-parser sidecar (same volume as the gNB)
+            - {name: RAN_DEPLOY, value: "{{ ue_mapper_ran_deploy }}"}
+            - {name: RAN_CONTAINER, value: "{{ ue_mapper_ran_container }}"}
+            - {name: RAN_FILE, value: "{{ ue_mapper_ran_file }}"}
+            - {name: CORE_NS, value: "{{ ue_mapper_core_namespace }}"}
+            - {name: AMF_DEPLOY, value: "{{ ue_mapper_amf_deploy }}"}
+            - {name: AMF_CONTAINER, value: "{{ ue_mapper_amf_container }}"}
+            - {name: AMF_TAIL, value: "{{ ue_mapper_amf_tail }}"}
+          ports:
+            - {containerPort: {{ ue_mapper_port }}, name: metrics}
+          volumeMounts:
+            - {name: uemap, mountPath: /uemap}
+            - {name: kubectl, mountPath: /bin/kubectl, readOnly: true}
+          resources:
+            requests: {cpu: "50m", memory: "32Mi"}
+            limits: {cpu: "200m", memory: "64Mi"}
+      volumes:
+        - name: uemap
+          configMap:
+            name: ue-mapper
+        - name: kubectl
+          hostPath:
+            path: {{ ue_mapper_kubectl_path }}
+            type: File

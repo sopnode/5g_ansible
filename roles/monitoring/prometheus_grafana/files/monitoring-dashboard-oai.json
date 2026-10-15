@@ -928,11 +928,11 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "oai_gnb_mac_dl_goodput_mbps * 1e6 > 0",
+          "expr": "(oai_gnb_mac_dl_goodput_mbps * 1e6 > 0) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_dl_goodput_mbps * 1e6 > 0)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "",
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1026,10 +1026,10 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "oai_gnb_mac_ul_goodput_mbps * 1e6 > 0",
+          "expr": "(oai_gnb_mac_ul_goodput_mbps * 1e6 > 0) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_ul_goodput_mbps * 1e6 > 0)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1075,8 +1075,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "oai_gnb_mac_ph{rnti!=\"\"}",
-          "legendFormat": "ue_rnti={{rnti}}",
+          "expr": "(oai_gnb_mac_ph{rnti!=\"\"}) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_ph{rnti!=\"\"})",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A"
         }
@@ -1140,11 +1140,11 @@
           "disableTextWrap": false,
           "editorMode": "code",
           "exemplar": false,
-          "expr": "oai_gnb_mac_nprb * on(rnti) group_left oai_gnb_mac_lcid_active{lcid=\"4\"} / scalar(oai_gnb_l1_total_prbs) * 100 > 0",
+          "expr": "(oai_gnb_mac_nprb * on(rnti) group_left oai_gnb_mac_lcid_active{lcid=\"4\"} / scalar(oai_gnb_l1_total_prbs) * 100 > 0) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_nprb * on(rnti) group_left oai_gnb_mac_lcid_active{lcid=\"4\"} / scalar(oai_gnb_l1_total_prbs) * 100 > 0)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": false,
           "refId": "A",
           "useBackend": false
@@ -1306,10 +1306,10 @@
         {
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "oai_gnb_mac_dl_bler",
+          "expr": "(oai_gnb_mac_dl_bler) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_dl_bler)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1407,11 +1407,11 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "oai_gnb_mac_ul_bler",
+          "expr": "(oai_gnb_mac_ul_bler) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_ul_bler)",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "B",
           "useBackend": false
@@ -1602,10 +1602,10 @@
         {
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "oai_gnb_mac_dl_mcs",
+          "expr": "(oai_gnb_mac_dl_mcs) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_dl_mcs)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1702,11 +1702,11 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "oai_gnb_mac_ul_mcs",
+          "expr": "(oai_gnb_mac_ul_mcs) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_ul_mcs)",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "B",
           "useBackend": false
@@ -1803,9 +1803,9 @@
             "uid": "monitoring-prometheus"
           },
           "editorMode": "code",
-          "expr": "oai_gnb_mac_cqi",
+          "expr": "(oai_gnb_mac_cqi) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_cqi)",
           "instant": false,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A"
         }
@@ -1897,10 +1897,10 @@
         {
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "oai_gnb_mac_dlsch_errors",
+          "expr": "(oai_gnb_mac_dlsch_errors) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_dlsch_errors)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1997,12 +1997,12 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "oai_gnb_mac_ulsch_errors",
+          "expr": "(oai_gnb_mac_ulsch_errors) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (oai_gnb_mac_ulsch_errors)",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "B",
           "useBackend": false

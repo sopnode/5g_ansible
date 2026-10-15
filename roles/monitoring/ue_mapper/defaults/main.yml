@@ -1,0 +1,18 @@
+---
+# ue-mapper: exports ran_ue_info{rnti,ran_ue_id,imsi,ue_name} 1 so that Grafana panels keyed
+# by rnti can show the UE name. IMSI -> name comes from the 'ues' of the 5G profile.
+ue_mapper_namespace: "{{ ran_ns | default(core | default('oai')) }}"
+ue_mapper_image: "docker.io/library/busybox:1.36"
+ue_mapper_port: 9101
+ue_mapper_period: 10
+# Static kubectl of the control-plane node, mounted in the pod (avoids pulling a kubectl image)
+ue_mapper_kubectl_path: /usr/bin/kubectl
+# RAN side: OAI RRC stats read from the metrics-parser sidecar (same volume as the gNB)
+ue_mapper_ran_deploy: oai-gnb
+ue_mapper_ran_container: metrics-parser
+ue_mapper_ran_file: /oai-gnb-logs/nrRRC_stats.log
+# Core side: OAI AMF "UEs' Information" table
+ue_mapper_core_namespace: "{{ core | default('oai') }}"
+ue_mapper_amf_deploy: oai-amf
+ue_mapper_amf_container: amf
+ue_mapper_amf_tail: 3000
