@@ -44,7 +44,10 @@
         dest: /root/sriov-network-operator
         clone: yes
         version: master
+        depth: 1
       become: yes
+      async: 900 # sometimes only 70kbps goodput to retrieve the clone...
+      poll: 10
 
     - name: Install python3-venv, python3-pip, setuptools and wheel
       ansible.builtin.apt:
