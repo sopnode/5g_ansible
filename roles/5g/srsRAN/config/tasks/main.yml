@@ -187,6 +187,22 @@
     {{ yq_bin_path }} eval -i '.gnbConfig.cell_cfg.pusch.target_sinr = {{ srsran_pusch_target_sinr }}' "{{ values_file }}"
   when: srsran_pusch_target_sinr is defined
 
+# rnti-mapper (monitoring): it needs the CU-CP/RRC "ue=N c-rnti=0x..." and NGAP "ue=N ran_ue=M" lines,
+# written at info level only (a few lines per attach, nothing per slot), in the log file shared
+# with the gnb-logs sidecar (/var/log, the values files for n300/n320 use /tmp/gnb.log)
+- name: Set the procedure log levels and the shared log file for the rnti-mapper
+  ansible.builtin.shell: >
+    {{ yq_bin_path }} eval -i '
+      .gnbConfig.log.filename = "/var/log/gnb.log" |
+      .gnbConfig.log.cu_level = "info" |
+      .gnbConfig.log.du_level = "info" |
+      .gnbConfig.log.rrc_level = "info" |
+      .gnbConfig.log.ngap_level = "info"
+    ' "{{ values_file }}"
+  when:
+    - monitoring_enabled | default(false) | bool
+    - monitoring_components.rnti_mapper | default(true) | bool
+
 - name: Fix device_args for rfsim GNU Radio single-channel multi-UE
   ansible.builtin.shell: >
     {{ yq_bin_path }} eval -i '

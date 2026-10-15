@@ -1,0 +1,11 @@
+---
+- name: Render rnti-mapper manifest
+  ansible.builtin.template:
+    src: rnti-mapper.yaml.j2
+    dest: /tmp/rnti-mapper.yaml
+    mode: "0644"
+
+- name: Apply rnti-mapper manifest
+  ansible.builtin.command: kubectl apply -f /tmp/rnti-mapper.yaml
+  register: rnti_mapper_apply
+  changed_when: "'created' in rnti_mapper_apply.stdout or 'configured' in rnti_mapper_apply.stdout"

@@ -757,11 +757,11 @@
         {
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "ue_dl_brate",
+          "expr": "(ue_dl_brate) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_dl_brate)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "interval": "",
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -855,10 +855,10 @@
         {
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "ue_ul_brate",
+          "expr": "(ue_ul_brate) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_ul_brate)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1138,10 +1138,10 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "100 * (ue_dl_nof_nok) / clamp_min((ue_dl_nof_ok + ue_dl_nof_nok), 1)",
+          "expr": "(100 * (ue_dl_nof_nok) / clamp_min((ue_dl_nof_ok + ue_dl_nof_nok), 1)) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (100 * (ue_dl_nof_nok) / clamp_min((ue_dl_nof_ok + ue_dl_nof_nok), 1))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1235,10 +1235,10 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "100 * (ue_ul_nof_nok) / clamp_min((ue_ul_nof_ok + ue_ul_nof_nok), 1)",
+          "expr": "(100 * (ue_ul_nof_nok) / clamp_min((ue_ul_nof_ok + ue_ul_nof_nok), 1)) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (100 * (ue_ul_nof_nok) / clamp_min((ue_ul_nof_ok + ue_ul_nof_nok), 1))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1331,10 +1331,10 @@
         {
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "ue_dl_mcs",
+          "expr": "(ue_dl_mcs) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_dl_mcs)",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1431,11 +1431,11 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "ue_ul_mcs",
+          "expr": "(ue_ul_mcs) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_ul_mcs)",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "B",
           "useBackend": false
@@ -1527,8 +1527,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "ue_dl_ri",
-          "legendFormat": "ue_rnti={{rnti}}",
+          "expr": "(ue_dl_ri) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_dl_ri)",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A"
         }
@@ -1619,8 +1619,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "ue_ul_ri",
-          "legendFormat": "ue_rnti={{rnti}}",
+          "expr": "(ue_ul_ri) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_ul_ri)",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A"
         }
@@ -1712,8 +1712,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "ue_cqi",
-          "legendFormat": "ue_rnti={{rnti}}",
+          "expr": "(ue_cqi) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_cqi)",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A"
         }
@@ -1878,9 +1878,9 @@
             "uid": "monitoring-prometheus"
           },
           "editorMode": "code",
-          "expr": "ue_pucch_snr_db",
+          "expr": "(ue_pucch_snr_db) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_pucch_snr_db)",
           "instant": false,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A"
         }
@@ -1976,9 +1976,9 @@
             "uid": "monitoring-prometheus"
           },
           "editorMode": "code",
-          "expr": "ue_dl_bs",
+          "expr": "(ue_dl_bs) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_dl_bs)",
           "instant": false,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A"
         }
@@ -2074,9 +2074,9 @@
             "uid": "monitoring-prometheus"
           },
           "editorMode": "code",
-          "expr": "ue_pusch_snr_db",
+          "expr": "(ue_pusch_snr_db) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_pusch_snr_db)",
           "instant": false,
-          "legendFormat": "ue_rnti={{rnti}}",
+          "legendFormat": "{{ue_name}} ({{rnti}})",
           "range": true,
           "refId": "A"
         }

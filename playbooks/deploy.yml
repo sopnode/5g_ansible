@@ -505,7 +505,7 @@
         - core != 'oai'
 
 
-- name: Deploy ue-mapper (RNTI -> UE name for Grafana)
+- name: Deploy rnti-mapper (RNTI -> UE name for Grafana)
   hosts: "{{ (groups['monitor_node'] | default([]) | length > 0) | ternary('monitor_node', 'core_node') }}"
   gather_facts: false
   pre_tasks:
@@ -514,13 +514,13 @@
         file: "{{ playbook_dir }}/../group_vars/all/5g_profile_{{ fiveg_profile | default('default') }}.yaml"
         name: fiveg
   roles:
-    - role: monitoring/ue_mapper
-      # OAI RAN + OAI core only for now (OCUDU readers to be added)
+    - role: monitoring/rnti_mapper
+      # OAI or OCUDU (ran: srsRAN) RAN, OAI or Open5GS core
       when:
         - monitoring_enabled | bool
-        - monitoring_components.ue_mapper | default(true) | bool
-        - ran == 'oai'
-        - core == 'oai'
+        - monitoring_components.rnti_mapper | default(true) | bool
+        - ran in ['oai', 'srsRAN']
+        - core in ['oai', 'open5gs']
 
 - name: Deploy monitoring KPI calculators
   hosts: "{{ (groups['monitor_node'] | default([]) | length > 0) | ternary('monitor_node', 'core_node') }}"
