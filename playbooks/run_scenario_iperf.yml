@@ -78,25 +78,23 @@
     - role: scenarios/iperf/ue-to-target_server
       when: rru != "rfsim"
 
-- name: "📊 FINAL SUMMARY (-- show most recent iperf results (300s max))"
+- name: "📊 FINAL SUMMARY (iperf results of this run)"
   hosts: "{{ hostvars['localhost'].get('target_server_host', groups['iperf_server_node'][0]) }}"
   become: true
   gather_facts: false
-  vars:
-    max_age_seconds: 300  # only logs modified in the last 300 seconds
   tasks:
-    - name: Find iperf logs
+    # Select the logs of this run by the timestamp registered by scenarios/iperf_server on this host.
+    # An mtime window is not reliable: pkill iperf3 at the start of a run appends to the previous logs
+    # (refreshing their mtime), and ansible_date_time is the fact gathered at the start of the playbook.
+    - name: Find iperf logs of this run
       find:
         paths: "/root/IPERF"
-        patterns: "iperf_*.log"
+        patterns: "iperf_*_{{ iperf_timestamp.stdout }}.log"
       register: iperf_files
-    
-    - name: Filter logs modified in the last 300 seconds
+
+    - name: Keep the logs of this run
       set_fact:
-        recent_logs: >-
-          {{ iperf_files.files
-             | selectattr('mtime', '>=', (ansible_date_time.epoch | int) - max_age_seconds)
-             | list }}
+        recent_logs: "{{ iperf_files.files }}"
     
     - name: Read logs content
       slurp:

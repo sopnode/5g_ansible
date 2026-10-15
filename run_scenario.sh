@@ -16,6 +16,10 @@ NUTTCP_PLAYBOOK="playbooks/run_scenario_nuttcp.yml"
 SETUP_NUTTCP_PLAYBOOK="playbooks/setup_iperf.yml" # setup is the same as normal
 
 RUN_SETUP=true
+# The iperf, multi-UE, ping and nuttcp scenarios connect the UEs themselves (r2lab/ue/connect), so their setup
+# (setup_iperf.yml = the same UE connection) is only run with -s/--only-setup. The interference setup does more
+# (noise fit node, interference USRP, visualization) and always runs.
+SCENARIO_CONNECTS_UES=true
 RUN_SCENARIO=true
 SETUP_PLAYBOOK="${SETUP_IPERF_PLAYBOOK}"
 TARGET_PLAYBOOK="${IPERF_PLAYBOOK}"
@@ -44,7 +48,8 @@ usage() {
     echo "--ping                   Deploy the multi-UE ping scenario"
     echo "--nuttcp                 Deploy the multi-UE nuttcp scenario"
     echo "-n, --no-setup           Do not run the setup, use this option if R2lab devices already up and running"
-    echo "-s, --only-setup         Only run the setup"
+    echo "                         (-d/-m/--ping/--nuttcp: the scenario connects the UEs itself, setup only with -s)"
+    echo "-s, --only-setup         Only run the setup (connect the UEs without running a scenario)"
     echo "-e <vars>                Extra ansible vars, e.g., -e \"nb_ues=5\" -e \"duration=20\""
     echo "--inventory <name>       Use ./inventory/<name>/hosts.ini inventory instead of the default one"
     echo "--dry-run                Only print ansible commands"
@@ -86,6 +91,7 @@ while [[ $# -gt 0 ]]; do
         -i)
             SETUP_PLAYBOOK="${SETUP_INTERFERENCE_PLAYBOOK}"
             TARGET_PLAYBOOK="${INTERFERENCE_PLAYBOOK}"
+	    SCENARIO_CONNECTS_UES=false
             shift
             ;;
         -m)
@@ -134,6 +140,11 @@ ANSIBLE_EXTRA_ARGS=("-e" "fiveg_profile=${PROFILE_5G}")
 for ev in "${EXTRA_VARS_ARRAY[@]}"; do
     ANSIBLE_EXTRA_ARGS+=($ev)
 done
+
+if [[ "$RUN_SETUP" == true && "$RUN_SCENARIO" == true && "$SCENARIO_CONNECTS_UES" == true ]]; then
+    echo "Skipping setup ${SETUP_PLAYBOOK}: ${TARGET_PLAYBOOK} connects the UEs itself (use -s to run the setup alone)"
+    RUN_SETUP=false
+fi
 
 if [[ "$RUN_SETUP" == true ]]; then
     run_cmd ansible-playbook -i "$INVENTORY" \
