@@ -116,3 +116,36 @@
           debug:
             msg: "{{ idle_info_after.stdout_lines }}"
       when: inventory_hostname == "sopnode-f3"
+
+    # sopnode-f3 has no tuned profile (throughput-performance sets the governor on the other nodes):
+    # set the performance governor here, for all RAN scenarios (USRP/UHD reports RF late with
+    # ondemand/powersave), now and at boot (cpufrequtils)
+    - block:
+        - name: Set the CPU frequency governor to performance
+          ansible.builtin.shell: |
+            n=0
+            for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+              [ "$(cat $g)" = performance ] && continue
+              echo performance > $g && n=$((n+1))
+            done
+            echo "changed=$n"
+            cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor | sort | uniq -c
+          args:
+            executable: /bin/bash
+          register: cpu_governor
+          changed_when: "'changed=0' not in cpu_governor.stdout"
+
+        - name: Keep the performance governor at boot
+          ansible.builtin.copy:
+            dest: /etc/default/cpufrequtils
+            content: |
+              GOVERNOR="performance"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: Display the CPU frequency governors
+          ansible.builtin.debug:
+            msg: "{{ cpu_governor.stdout_lines }}"
+      become: true
+      when: inventory_hostname == "sopnode-f3"
