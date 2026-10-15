@@ -89,12 +89,8 @@
     - name: Find iperf logs of this run
       find:
         paths: "/root/IPERF"
-        patterns: "iperf_*_{{ iperf_timestamp.stdout }}.log"
+        patterns: "iperf_[0-9]*_{{ iperf_timestamp.stdout }}.log"
       register: iperf_files
-
-    - name: Keep the logs of this run
-      set_fact:
-        recent_logs: "{{ iperf_files.files }}"
 
     # Port of each UE: 5201 + its index in valid_ue_list (ue-to-target_server, set on faraday)
     - name: Map iperf ports to UEs
@@ -102,22 +98,57 @@
         ue_by_port: "{{ dict(range(5201, 5201 + _ues | length) | map('string') | zip(_ues)) }}"
       vars:
         _ues: "{{ hostvars[groups['faraday'][0]].valid_ue_list | default([]) }}"
-    
+
     - name: Read logs content
+    # One iperf3 server per port logs all the tests of its UE: write one file per test,
+    # iperf_<ue>_<ul|dl>_<timestamp>.log. Direction from the server side summary: the server is the
+    # receiver for UL and the sender for DL (client -R); a repeated test gets a _2, _3... suffix.
+    - name: Split the logs of this run per UE and direction
+      shell: |
+        python3 - <<'PYEOF'
+        import json, os, re, sys
+        ts = "{{ iperf_timestamp.stdout }}"
+        ue_by_port = json.loads('{{ ue_by_port | to_json }}')
+        seen = {}
+        for path in {{ iperf_files.files | map(attribute='path') | sort | list | to_json }}:
+            port = os.path.basename(path).split("_")[1]
+            ue = ue_by_port.get(port, "port" + port)
+            text = open(path, errors="replace").read().replace("\x00", "")
+            for sec in text.split("Accepted connection")[1:]:
+                sec = "Accepted connection" + sec.split("\n-----------------------------------------------------------\nServer listening")[0]
+                d = "dl" if re.search(r"\ssender\s*$", sec, re.M) else "ul"
+                k = seen[(ue, d)] = seen.get((ue, d), 0) + 1
+                out = "/root/IPERF/iperf_%s_%s_%s%s.log" % (ue, d, ts, "" if k == 1 else "_%d" % k)
+                open(out, "w").write(sec.rstrip() + "\n")
+                print(out)
+        for ue in ue_by_port.values():
+            for d in ("ul", "dl"):
+                if (ue, d) not in seen:
+                    print("%s: no %s test reached the iperf server" % (ue, d.upper()), file=sys.stderr)
+        PYEOF
+      register: iperf_split
+      changed_when: iperf_split.stdout_lines | length > 0
+
+    - name: Missing iperf tests
+      debug:
+        msg: "{{ iperf_split.stderr_lines }}"
+      when: iperf_split.stderr_lines | length > 0
+
+    - name: Read the per UE and direction logs
       slurp:
-        src: "{{ item.path }}"
-      loop: "{{ recent_logs | sort(attribute='mtime', reverse=true) }}"
+        src: "{{ item }}"
+      loop: "{{ iperf_split.stdout_lines }}"
       register: log_contents
-    
+
     - name: 🚀 DISPLAY LOGS
       debug:
         msg: |
-          UE: {{ ue_by_port.get((item.item.path | basename).split('_')[1], '?') }
-          FILE: {{ item.item.path }}
-          {{ item.content | b64decode | regex_replace('\x00', '') }}
+          FILE: {{ item.item }}
+          {{ item.content | b64decode }}
       loop: "{{ log_contents.results }}"
       loop_control:
-        label: "{{ ue_by_port.get((item.item.path | basename).split('_')[1], '?') }} {{ item.item.path }}
+        label: "{{ item.item | basename }}"
+
     
     - name: "📌 NOTE Location of all iperf results"
       debug:
