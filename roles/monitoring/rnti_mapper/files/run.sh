@@ -20,11 +20,19 @@ while true; do
   done
   kubectl -n "${CORE_NS}" logs "deploy/${AMF_DEPLOY}" -c "${AMF_CONTAINER}" --tail="${AMF_TAIL}" \
     > "$D/core.log" 2> "$D/core.err" || cat "$D/core.err"
+  # Open5GS: UPF "UE F-SEID[...]" and SMF "UE SUPI[...]" session lines (UP SEID <-> UE IP <-> IMSI)
+  : > "$D/sessions.log"
+  if [ "${CORE_TYPE}" = open5gs ]; then
+    for d in $(kubectl -n "${CORE_NS}" get deploy -o name 2> /dev/null | grep -E 'upf|smf'); do
+      kubectl -n "${CORE_NS}" logs "$d" --all-containers 2> /dev/null | grep -E 'UE F-SEID\[|UE SUPI\[' >> "$D/sessions.log"
+    done
+  fi
   # exact RAN UE NGAP id <-> IMSI from the slice-awareness captures, when deployed
   : > "$D/inventory.json"
   [ -n "${INVENTORY_URL}" ] && wget -q -T 5 -O "$D/inventory.json" "${INVENTORY_URL}" 2> /dev/null
-  awk -v ran="${RAN_TYPE}" -v core="${CORE_TYPE}" -v plmn="${PLMN}" -f /rnti-mapper/join.awk /rnti-mapper/ue_names \
-    "$D/core.log" "$D/inventory.json" "$D/ran.txt" > /www/metrics.tmp \
+  awk -v ran="${RAN_TYPE}" -v core="${CORE_TYPE}" -v plmn="${PLMN}" -v dnn_snssai="${DNN_SNSSAI}" \
+    -f /rnti-mapper/join.awk /rnti-mapper/ue_names \
+    "$D/core.log" "$D/inventory.json" "$D/sessions.log" "$D/ran.txt" > /www/metrics.tmp \
     && mv /www/metrics.tmp /www/metrics
   sleep "${PERIOD}"
 done

@@ -128,6 +128,9 @@ spec:
             - {name: CORE_NS, value: "{{ rnti_mapper_core_namespace }}"}
             - {name: CORE_TYPE, value: "{{ rnti_mapper_core_type }}"}
             - {name: PLMN, value: "{{ fiveg.plmn.mcc }}{{ fiveg.plmn.mnc }}"}
+            # DNN -> snssai label of slice_throughput (sst, or sst-sd when the slice has an SD)
+            - name: DNN_SNSSAI
+              value: "{% for sl in fiveg.slices | default([]) %}{{ sl.dnn }}={{ sl.sst | int }}{% if (sl.sd | default('EMPTY') | string | upper) not in ['EMPTY', '', 'FFFFFF'] %}-{{ sl.sd }}{% endif %} {% endfor %}"
             - {name: INVENTORY_URL, value: "{{ rnti_mapper_inventory_url | trim }}"}
             - {name: AMF_DEPLOY, value: "{{ rnti_mapper_amf_deploy }}"}
             - {name: AMF_CONTAINER, value: "{{ rnti_mapper_amf_container }}"}
