@@ -138,7 +138,7 @@ done
 if [[ "$RUN_SETUP" == true ]]; then
     run_cmd ansible-playbook -i "$INVENTORY" \
         "${ANSIBLE_EXTRA_ARGS[@]}" \
-        "$SETUP_PLAYBOOK"
+        "$SETUP_PLAYBOOK" 2>&1 | tee ${DIR_LOGS}/logs-setup-scenario.txt
 fi
 
 if [[ "$RUN_SCENARIO" == true ]]; then
