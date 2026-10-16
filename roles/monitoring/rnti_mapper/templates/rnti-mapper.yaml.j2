@@ -121,8 +121,9 @@ spec:
             - {name: PERIOD, value: "{{ rnti_mapper_period }}"}
             - {name: NS, value: "{{ rnti_mapper_namespace }}"}
             # RAN file read from a sidecar sharing the gNB log volume (see defaults)
-            - {name: RAN_DEPLOY, value: "{{ rnti_mapper_ran_deploy }}"}
-            - {name: RAN_SOURCES, value: "{{ rnti_mapper_ran_sources | trim }}"}
+            - {name: RAN_SELECTORS, value: "{{ rnti_mapper_ran_selectors | trim }}"}
+            - {name: RAN_FILES, value: "{{ rnti_mapper_ran_files | trim }}"}
+            - {name: RAN_SIDECARS, value: "{{ rnti_mapper_ran_sidecars }}"}
             - {name: RAN_PATTERN, value: "{{ rnti_mapper_ran_pattern }}"}
             - {name: RAN_TYPE, value: "{{ rnti_mapper_ran_type }}"}
             - {name: CORE_NS, value: "{{ rnti_mapper_core_namespace }}"}

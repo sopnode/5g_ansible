@@ -1,23 +1,49 @@
 #!/bin/sh
-# Periodically rebuild /www/metrics (ran_ue_info) and serve it with busybox httpd.
-# The RAN file is read with a niced grep: from a sidecar sharing the gNB log volume when there is
-# one (OAI metrics-parser, OCUDU gnb-logs for /var/log/gnb.log), else in the gNB container (OCUDU n300/n320,
-# /tmp/gnb.log).
+# Periodically rebuild /www/metrics (ran_ue_info, ran_session_info) and serve it with busybox httpd.
+#
+# RAN side: the gNB pod (or the CU / CU-CP pod in split mode, where the RRC runs) is found with the
+# first RAN_SELECTORS label selector matching a running pod; its containers are listed at run time,
+# the RAN_SIDECARS ones (sharing the gNB log volume: OAI metrics-parser, OCUDU gnb-logs) first, and
+# the first readable file of RAN_FILES is grepped (nice 19, a few ms every PERIOD). The winning
+# pod/container/file is tried first on the next cycles.
 set -u
 D=/tmp/rnti-mapper
 mkdir -p /www "$D"
 : > /www/metrics
 httpd -p "${PORT}" -h /www
+last=""
+# $1 pod, $2 container, $3 file: 0 = file read (matches or not), else not readable / no such container
+read_ran() {
+  kubectl -n "${NS}" exec "$1" -c "$2" -- sh -c '[ -r "$1" ] || exit 3
+    if nice -n 19 true 2> /dev/null; then nice -n 19 grep -E "$0" "$1"; else grep -E "$0" "$1"; fi; exit 0' \
+    "${RAN_PATTERN}" "$3" > "$D/ran.txt" 2>> "$D/ran.err"
+}
 while true; do
-  # RAN_SOURCES: "container:file ...", the first existing file wins (grep: 0 match, 1 no match, 2 error).
-  # The grep runs at nice 19; it is a few ms every PERIOD on a file of a few hundred kB.
-  : > "$D/ran.txt"
-  for src in ${RAN_SOURCES}; do
-    kubectl -n "${NS}" exec "deploy/${RAN_DEPLOY}" -c "${src%%:*}" -- \
-      sh -c 'nice -n 19 true 2> /dev/null && exec nice -n 19 grep -E "$0" "$1"; exec grep -E "$0" "$1"' \
-      "${RAN_PATTERN}" "${src#*:}" > "$D/ran.txt" 2> "$D/ran.err"
-    [ $? -le 1 ] && break
+  : > "$D/ran.txt"; : > "$D/ran.err"
+  pod=""
+  for sel in ${RAN_SELECTORS}; do
+    pod=$(kubectl -n "${NS}" get pod -l "$sel" --field-selector=status.phase=Running -o name 2> /dev/null | head -1)
+    [ -n "$pod" ] && break
   done
+  ok=0
+  if [ -z "$pod" ]; then
+    echo "no running gNB/CU pod for: ${RAN_SELECTORS} (namespace ${NS})"
+  else
+    set -- ${last}
+    if [ $# -eq 3 ] && [ "$1" = "$pod" ] && read_ran "$1" "$2" "$3"; then
+      ok=1
+    else
+      ctrs=$(kubectl -n "${NS}" get "$pod" -o jsonpath='{.spec.containers[*].name}' 2>> "$D/ran.err")
+      ordered=""
+      for c in $ctrs; do case " ${RAN_SIDECARS} " in *" $c "*) ordered="$c $ordered";; *) ordered="$ordered $c";; esac; done
+      for c in $ordered; do
+        for f in ${RAN_FILES}; do
+          if read_ran "$pod" "$c" "$f"; then ok=1; last="$pod $c $f"; echo "RAN source: $pod $c $f"; break 2; fi
+        done
+      done
+    fi
+    [ $ok = 1 ] || { echo "no readable RAN file (${RAN_FILES}) in $pod"; cat "$D/ran.err"; }
+  fi
   kubectl -n "${CORE_NS}" logs "deploy/${AMF_DEPLOY}" -c "${AMF_CONTAINER}" --tail="${AMF_TAIL}" \
     > "$D/core.log" 2> "$D/core.err" || cat "$D/core.err"
   # Open5GS: UPF "UE F-SEID[...]" and SMF "UE SUPI[...]" session lines (UP SEID <-> UE IP <-> IMSI)

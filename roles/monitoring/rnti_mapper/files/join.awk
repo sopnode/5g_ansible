@@ -34,7 +34,7 @@ FILENAME == ARGV[2] {
   # OAI AMF "UEs' Information" table. Only the last table is kept.
   if (index($0, "UEs' Information")) { split("", imsi_of); split("", reg); next }
   n = split($0, f, "|")
-  if (n >= 9 && f[3] ~ /5GMM/) {
+  if (n >= 9 && trim(f[2]) ~ /^[0-9]+$/ && f[3] ~ /5GMM/) {     # data rows only (not the header)
     id = todec(f[6]); st = trim(f[3])
     # a registered UE wins over a stale (deregistered) entry with the same RAN UE NGAP id
     if (!(id in imsi_of) || (st == "5GMM-REGISTERED" && !reg[id])) {
