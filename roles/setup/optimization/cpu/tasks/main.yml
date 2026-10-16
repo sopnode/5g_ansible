@@ -117,6 +117,27 @@
             msg: "{{ idle_info_after.stdout_lines }}"
       when: inventory_hostname == "sopnode-f3"
 
+    # PREEMPT_RT: a SCHED_FIFO busy-poll thread (e.g. the xran fh_rx_bbdev/fh_main_poll threads of
+    # the fhi72 gNB, prio 98) can preempt the per-CPU RCU kthread rcuc/N inside an RCU read-side
+    # section. With the default RCU priority (rcutree.kthread_prio=1), neither rcuc/N nor its rcub/N
+    # boost can run again on that CPU: the grace period never ends and every synchronize_rcu()
+    # caller hangs in D state (umount in containerd CreateContainer, runc, iptables, systemd), so
+    # the node goes NotReady. Run rcuc/N and rcub/N above the pollers, as rcutree.kthread_prio=99
+    # would do at boot (no-op on kernels without these threads).
+    - name: Raise the RCU kthreads priority above the RAN busy-poll threads
+      ansible.builtin.shell: |
+        n=0
+        for p in $(pgrep '^rcu[cb]/'); do
+          [ "$(chrt -p $p | awk -F': ' '/priority/ {print $2}')" = 99 ] && continue
+          chrt -f -p 99 $p && n=$((n+1))
+        done
+        echo "changed=$n total=$(pgrep -c '^rcu[cb]/')"
+      args:
+        executable: /bin/bash
+      register: rcu_kthread_prio
+      changed_when: "'changed=0 ' not in rcu_kthread_prio.stdout"
+      become: true
+
     # sopnode-f3 has no tuned profile (throughput-performance sets the governor on the other nodes):
     # set the performance governor here, for all RAN scenarios (USRP/UHD reports RF late with
     # ondemand/powersave), now and at boot (cpufrequtils)
