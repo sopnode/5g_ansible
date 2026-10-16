@@ -114,6 +114,15 @@
     replace: 'sandbox_image = "registry.k8s.io/pause:3.10"'
   become: true
 
+# ---- Debug socket: if containerd hangs (CRI DeadlineExceeded, PLEG not healthy), dump its goroutines with
+#      'ctr pprof -d /run/containerd/debug.sock goroutines' before restarting it (root-only unix socket)
+- name: Enable the containerd debug socket
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: "(^\\[debug\\]\\n\\s*address = )''"
+    replace: "\\1'/run/containerd/debug.sock'"
+  become: true
+
 # ---- Create containerd registry and Docker Hub authentication for containerd
 #- name: Create containerd registry config directory for docker.io
 #  ansible.builtin.file:
