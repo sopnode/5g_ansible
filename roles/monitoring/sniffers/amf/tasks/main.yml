@@ -134,7 +134,9 @@
     existing_ephemeral_names: "{{ existing_ephemeral | map(attribute='name') | list }}"
     amf_ephemeral_container:
       name: amf-sniffer
-      image: r2labuser/amf-sniffer:2026w10
+      #image: r2labuser/amf-sniffer:2026w10
+      image: r2labuser/amf-sniffer:2026w40-tmsi-correlation
+
       imagePullPolicy: IfNotPresent
       env:
         - name: amf_sniffer_iface
