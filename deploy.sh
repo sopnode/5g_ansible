@@ -1968,6 +1968,13 @@ reserve_r2lab() {
 
 deploy() {
 
+    local main_deploy_status=0
+    local monitoring_deploy_status=0
+    local ran_deploy_status=0
+    local r2lab_deploy_status=0
+    local r2lab_deploy_pid=""
+    local ue_setup_status=0
+
     ANSIBLE_EXTRA_ARGS=(-e "fiveg_profile=${PROFILE_5G}")
     if [[ -n "$REQUESTED_MONITORING_PROFILE" ]]; then
       local monitoring_profile_file="$REQUESTED_MONITORING_PROFILE"
@@ -1994,17 +2001,59 @@ deploy() {
     run_cmd ansible-galaxy install -r collections/requirements.yml
 
     if [[ "$platform" == "r2lab" ]]; then
-      echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[@]} playbooks/deploy_r2lab.yml &"
-      run_cmd ansible-playbook -i "$INVENTORY" \
+      echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[*]} -e r2lab_setup_ues=false playbooks/deploy_r2lab.yml &"
+      run_logged_cmd "${DIR_LOGS}/logs-r2lab.txt" \
+        ansible-playbook -i "$INVENTORY" \
         "${ANSIBLE_EXTRA_ARGS[@]}" \
-        playbooks/deploy_r2lab.yml 2>&1 | tee ${DIR_LOGS}/logs-r2lab.txt &
+        -e r2lab_setup_ues=false \
+        playbooks/deploy_r2lab.yml &
+      r2lab_deploy_pid=$!
     fi
 
-    echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[@]} playbooks/deploy.yml"
-
-    run_cmd ansible-playbook -i "$INVENTORY" \
+    echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[*]} playbooks/deploy.yml --skip-tags ran_stage"
+    run_logged_cmd "${DIR_LOGS}/logs.txt" \
+      ansible-playbook -i "$INVENTORY" \
       "${ANSIBLE_EXTRA_ARGS[@]}" \
-      playbooks/deploy.yml 2>&1 | tee ${DIR_LOGS}/logs.txt
+      playbooks/deploy.yml --skip-tags ran_stage || main_deploy_status=$?
+
+    if [[ -n "$r2lab_deploy_pid" ]]; then
+      wait "$r2lab_deploy_pid" || r2lab_deploy_status=$?
+    fi
+
+    if [[ "$main_deploy_status" -eq 0 && "$r2lab_deploy_status" -eq 0 && "${monitoring_enabled:-false}" == true ]]; then
+      echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[*]} playbooks/deploy_monitoring.yml"
+      run_logged_cmd "${DIR_LOGS}/logs-monitoring.txt" \
+        ansible-playbook -i "$INVENTORY" \
+        "${ANSIBLE_EXTRA_ARGS[@]}" \
+        playbooks/deploy_monitoring.yml || monitoring_deploy_status=$?
+    fi
+
+    if [[ "$main_deploy_status" -ne 0 || "$r2lab_deploy_status" -ne 0 || "$monitoring_deploy_status" -ne 0 ]]; then
+      echo "Deployment failed: main=${main_deploy_status} r2lab=${r2lab_deploy_status} monitoring=${monitoring_deploy_status}" >&2
+      return 1
+    fi
+
+    if [[ "$platform" == "r2lab" ]]; then
+      echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[*]} playbooks/deploy_r2lab_ues.yml"
+      run_logged_cmd "${DIR_LOGS}/logs-r2lab-ues.txt" \
+        ansible-playbook -i "$INVENTORY" \
+        "${ANSIBLE_EXTRA_ARGS[@]}" \
+        playbooks/deploy_r2lab_ues.yml || ue_setup_status=$?
+      if [[ "$ue_setup_status" -ne 0 ]]; then
+        echo "UE setup failed with exit code ${ue_setup_status}" >&2
+        return "$ue_setup_status"
+      fi
+    fi
+
+    echo "ansible-playbook -i $INVENTORY ${ANSIBLE_EXTRA_ARGS[*]} playbooks/deploy.yml --tags ran_stage"
+    run_logged_cmd "${DIR_LOGS}/logs-ran.txt" \
+      ansible-playbook -i "$INVENTORY" \
+      "${ANSIBLE_EXTRA_ARGS[@]}" \
+      playbooks/deploy.yml --tags ran_stage || ran_deploy_status=$?
+    if [[ "$ran_deploy_status" -ne 0 ]]; then
+      echo "RAN deployment failed with exit code ${ran_deploy_status}" >&2
+      return "$ran_deploy_status"
+    fi
 
 
     echo ""
@@ -2292,7 +2341,10 @@ else
   if [[ "$SCENARIO_ONLY" == true ]]; then
     echo "Scenario-only mode selected: skipping reservation and deployment."
   else
-    deploy
+    if ! deploy; then
+      echo "❌ Deployment did not complete successfully; the scenario will not be started." >&2
+      exit 1
+    fi
   fi
 fi
 SCENARIO_STATUS=0

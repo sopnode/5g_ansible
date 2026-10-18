@@ -370,6 +370,16 @@ ues:
 
 Monitoring has two layers. The **5G metrics stack** deploys Prometheus, Grafana, Loki/Promtail by default, and KPI calculators that expose derived core/RAN metrics such as slice throughput. The **latency pipeline** adds AMF and SMF sniffers, Redis and the UE mapper, the Kopf controller, and eBPF latency probes. The sniffers provide UE/session context to the mapper; the controller reads the resulting TEIDs and manages probes on matching gNB pods. Prometheus scrapes the metrics produced by these components, and Grafana displays them. Prometheus/Grafana alone do not measure per-UE latency.
 
+The infrastructure and 5G workloads are defined in `playbooks/deploy.yml`; monitoring is defined separately in `playbooks/deploy_monitoring.yml`. `./deploy.sh` runs cluster and core setup first, then monitoring and the AMF/SMF sniffers when enabled, prepares R2Lab UEs with `qhat-init`, and deploys the RAN. The selected scenario connects UEs afterward. With monitoring disabled, only the monitoring stage is skipped. To redeploy only monitoring against an existing 5G deployment, run:
+
+```bash
+ansible-playbook -i ./inventory/default/hosts.ini \
+  -e fiveg_profile=default \
+  -e monitoring_enabled=true \
+  -e @configs/monitoring/profiles/full.yml \
+  playbooks/deploy_monitoring.yml
+```
+
 When monitoring is enabled, `./deploy.sh` defaults to both layers. To choose a profile, use `--monitoring-profile` with a profile name or YAML path:
 
 ```bash
@@ -389,6 +399,20 @@ monitoring_components:
 `configs/monitoring/profiles/full.yml` enables both; `configs/monitoring/profiles/5g_only.yml` keeps 5G metrics without the latency pipeline. `monitoring_enabled` remains the master switch: when it is false, neither layer is deployed. If a key is omitted, it defaults to true for compatibility with existing deployments. The playbook rejects `latency: true` with `stack: false`, because probe metrics would have no Prometheus collector. **Loki is part of the stack by default**, not a third profile switch: use `--no-loki` to omit log collection while keeping Prometheus, Grafana, and 5G KPIs; `--with-loki` explicitly enables it. Experiment artifact collection uses its own profile.
 
 Setting a layer to `false` **skips it during that deployment**; it does not uninstall resources left by an earlier run. Also, enabling a layer does not guarantee every panel has data: the relevant UEs, core/RAN pods, mapping, and exporters must be active.
+
+---
+
+## Restarting R2Lab UEs
+
+To reconnect R2Lab modem UEs without redeploying the network, run `playbooks/restart_r2lab_ues.yml` from the repository root with the same inventory and 5G profile used for deployment. Set `ue_targets` to a single UE, a comma-separated list, or `all` (all qhats/qfits in that inventory). For example:
+
+```bash
+ansible-playbook -i ./inventory/default/hosts.ini -e fiveg_profile=default -e ue_targets=qhat02 playbooks/restart_r2lab_ues.yml
+ansible-playbook -i ./inventory/default/hosts.ini -e fiveg_profile=default -e ue_targets=qhat01,qhat03 playbooks/restart_r2lab_ues.yml
+ansible-playbook -i ./inventory/default/hosts.ini -e fiveg_profile=default -e ue_targets=all playbooks/restart_r2lab_ues.yml
+```
+
+Each UE is disconnected, reconnected, and checked against its slice UPF before the next UE starts. MBIM modems use `stop.sh`/`start.sh`; QMI modems use their existing QMI reconnect procedure. Phones are excluded because they reconnect through airplane mode.
 
 ---
 

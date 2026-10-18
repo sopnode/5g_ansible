@@ -1,0 +1,5 @@
+---
+- name: Prepare R2Lab UEs before RAN deployment
+  hosts: faraday
+  roles:
+    - role: r2lab/ue/setup

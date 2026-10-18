@@ -2083,6 +2083,65 @@
       ],
       "title": "PUSCH SNR per RNTI",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "monitoring-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "unit": "dB"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 88
+      },
+      "id": 44,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "monitoring-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(ue_last_phr) * on(rnti) group_left(ue_name) max by (rnti, ue_name) (ran_ue_info) or on(rnti) (ue_last_phr)",
+          "instant": false,
+          "legendFormat": "{{ue_name}} ({{rnti}})",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Power Headroom (PHR) per UE",
+      "type": "timeseries"
     }
   ],
   "preload": false,
