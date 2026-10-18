@@ -104,11 +104,13 @@
   no_log: true
 
 - name: Build AMF pod list
+  # Match the deployment part of the name only (<deployment>-<rs hash>-<suffix>): a bare
+  # substring also matches random suffixes such as open5gs-nrf-54fd78c4dc-7rsmf
   set_fact:
     amf_pod_list: >-
       {{
         amf_pods.resources
-        | selectattr('metadata.name', 'search', 'amf')
+        | selectattr('metadata.name', 'search', '(^|-)amf[0-9]*-[a-z0-9]+-[a-z0-9]+$')
         | list
       }}
   no_log: true

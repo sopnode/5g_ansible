@@ -91,11 +91,13 @@
   no_log: true
 
 - name: Build SMF pod list
+  # Match the deployment part of the name only (<deployment>-<rs hash>-<suffix>): a bare
+  # substring also matches random suffixes such as open5gs-nrf-54fd78c4dc-7rsmf
   set_fact:
     smf_pod_list: >-
       {{
         core_pods.resources
-        | selectattr('metadata.name', 'search', 'smf')
+        | selectattr('metadata.name', 'search', '(^|-)smf[0-9]*-[a-z0-9]+-[a-z0-9]+$')
         | list
       }}
   no_log: true
