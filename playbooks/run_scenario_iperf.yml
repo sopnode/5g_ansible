@@ -100,8 +100,10 @@
         _ues: "{{ hostvars[groups['faraday'][0]].valid_ue_list | default([]) }}"
 
     # One iperf3 server per port logs all the tests of its UE: write one file per test,
-    # iperf_<ue>_<ul|dl>_<timestamp>.log. Direction from the server side summary: the server is the
-    # receiver for UL and the sender for DL (client -R); a repeated test gets a _2, _3... suffix.
+    # iperf_<ue>_<ul|dl>_<timestamp>.log; a repeated test gets a _2, _3... suffix. Direction from the
+    # interval header: as TCP sender (DL, client -R) the server prints "Retr  Cwnd" columns, as
+    # receiver (UL) it does not. The final "sender"/"receiver" summary cannot be used: it is missing
+    # when the client is killed (timeout) before the end of the test, e.g. after a radio link loss.
     - name: Split the logs of this run per UE and direction
       shell: |
         python3 - <<'PYEOF'
@@ -115,7 +117,9 @@
             text = open(path, errors="replace").read().replace("\x00", "")
             for sec in text.split("Accepted connection")[1:]:
                 sec = "Accepted connection" + sec.split("\n-----------------------------------------------------------\nServer listening")[0]
-                d = "dl" if re.search(r"\ssender\s*$", sec, re.M) else "ul"
+                d = "dl" if re.search(r"Bitrate\s+Retr\s+Cwnd", sec) else "ul"
+                if not re.search(r"\s(sender|receiver)\s*$", sec, re.M):
+                    print("%s %s: test without final summary (client stopped before the end)" % (ue, d.upper()), 
                 k = seen[(ue, d)] = seen.get((ue, d), 0) + 1
                 out = "/root/IPERF/iperf_%s_%s_%s%s.log" % (ue, d, ts, "" if k == 1 else "_%d" % k)
                 open(out, "w").write(sec.rstrip() + "\n")
