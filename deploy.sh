@@ -1587,17 +1587,17 @@ generate_inventory() {
 localhost ansible_connection=local
 
 [core_node]
-${core_node} ansible_user=root nic_interface=$(get_nic "${core_node}") ip=172.28.2.$(get_ip_suffix "${core_node}") storage=$(get_storage "${core_node}")
+${core_node} ansible_user=root nic_interface=$(get_nic "${core_node}") ip=172.28.2.$(get_ip_suffix "${core_node}") storage=$(get_storage "${core_node}") ansible_host=172.28.2.$(get_ip_suffix "${core_node}") ansible_ssh_common_args='-o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null  -W %h:%p proxy@bastion1.theblueprintfactory.org -p 22"'
 
 [ran_node]
-${ran_node} ansible_user=root nic_interface=$(get_nic "${ran_node}") ip=172.28.2.$(get_ip_suffix "${ran_node}") storage=$(get_storage "${ran_node}") boot_mode=live
+${ran_node} ansible_user=root nic_interface=$(get_nic "${ran_node}") ip=172.28.2.$(get_ip_suffix "${ran_node}") storage=$(get_storage "${ran_node}") ansible_host=172.28.2.$(get_ip_suffix "${ran_node}") ansible_ssh_common_args='-o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null  -W %h:%p proxy@bastion1.theblueprintfactory.org -p 22"' boot_mode=live
 
 [monitor_node]
 EOF
 
     if [[ "${monitoring_enabled}" == true && -n "${monitor_node}" ]]; then
       cat >> "$INVENTORY" <<EOF
-${monitor_node} ansible_user=root nic_interface=$(get_nic "${monitor_node}") ip=172.28.2.$(get_ip_suffix "${monitor_node}") storage=$(get_storage "${monitor_node}")
+${monitor_node} ansible_user=root nic_interface=$(get_nic "${monitor_node}") ip=172.28.2.$(get_ip_suffix "${monitor_node}") storage=$(get_storage "${monitor_node}") ansible_host=172.28.2.$(get_ip_suffix "${monitor_node}") ansible_ssh_common_args='-o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null  -W %h:%p proxy@bastion1.theblueprintfactory.org -p 22"'
 EOF
     fi
 
@@ -1605,7 +1605,7 @@ EOF
       cat >> "$INVENTORY" <<EOF
 
 [iperf_server_node]
-${iperf_server_node} ansible_user=root nic_interface=$(get_nic "${iperf_server_node}") ip=172.28.2.$(get_ip_suffix "${iperf_server_node}") storage=$(get_storage "${iperf_server_node}")
+${iperf_server_node} ansible_user=root nic_interface=$(get_nic "${iperf_server_node}") ip=172.28.2.$(get_ip_suffix "${iperf_server_node}") storage=$(get_storage "${iperf_server_node}") ansible_host=172.28.2.$(get_ip_suffix "${iperf_server_node}") ansible_ssh_common_args='-o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null  -W %h:%p proxy@bastion1.theblueprintfactory.org -p 22"'
 EOF
     fi
 
