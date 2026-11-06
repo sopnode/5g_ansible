@@ -1852,7 +1852,7 @@ reserve_nodes() {
 
     # ========== Reserve Nodes on SLICES ==========
     # Create a calendar entry for the required nodes with the command: 
-    # pos calendar create -d <duration in minutes> -s "now" <node/nodes separated by space>
+    # slices pos calendar create -d <duration in minutes> -s "now" <node/nodes separated by space>
     # Keep the outputed reservation ID to delete it later if needed.
     # Try to reserve for 2 hours (120 minutes) by default, if it fails, try with 1 hour (60 minutes)
     # If it still fails, ask the user if they want to ignore and continue (not recommended) or exit the script.
@@ -1873,14 +1873,14 @@ reserve_nodes() {
 
     # Try to reserve 
     echo "Trying to reserve nodes: ${nodes_to_reserve[*]} for $duration_minutes minutes..."
-    reservation_output=$(pos calendar create -d "${duration_minutes}" -s "now" "${nodes_to_reserve[@]}" 2>&1)
+    reservation_output=$(slices pos calendar create -d "${duration_minutes}" -s "now" "${nodes_to_reserve[@]}" 2>&1)
     reservation_exit_code=$?
 
     if [[ $reservation_exit_code -ne 0 || "$reservation_output" == "-1" || -z "${reservation_output}" ]]; then
       # If it fails, try with 60 minutes
       echo "❌ Reservation for ${duration_minutes} minutes failed. Trying to reserve for 60 minutes..."
       duration_minutes=60
-      reservation_output=$(pos calendar create -d "$duration_minutes" -s "now" "${nodes_to_reserve[@]}" 2>&1)
+      reservation_output=$(slices pos calendar create -d "$duration_minutes" -s "now" "${nodes_to_reserve[@]}" 2>&1)
       reservation_exit_code=$?
 
       if [[ $reservation_exit_code -ne 0 || "$reservation_output" == "-1" || -z "${reservation_output}" ]]; then
@@ -1941,9 +1941,9 @@ reserve_r2lab() {
         read -rp "Do you want to ignore the R2Lab reservation failure and continue? [y/N]: " ignore_r2lab_choice
         if [[ ! "$ignore_r2lab_choice" =~ ^[Yy]$ ]]; then
           # If R2Lab reservation fails and the user does not want to ignore, exit the script and delete the slices reservation
-          # Using the command: pos calendar delete --id <reservation_id> <node/nodes separated by space>
+          # Using the command: slices pos calendar delete --id <reservation_id> <node/nodes separated by space>
           echo "Deleting sopnodes reservation with ID: $reservation_id ..."
-          delete_output=$(pos calendar delete --id "$reservation_id" "${nodes_to_reserve[@]}" 2>&1)
+          delete_output=$(slices pos calendar delete --id "$reservation_id" "${nodes_to_reserve[@]}" 2>&1)
           if [[ $? -ne 0 ]]; then
             echo "❌ Failed to delete sopnodes reservation."
             echo "Error details: $delete_output"
