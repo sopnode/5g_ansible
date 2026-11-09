@@ -121,14 +121,14 @@
 - name: Fetch admin.conf from master to control machine
   ansible.builtin.fetch:
     src: /etc/kubernetes/admin.conf
-    dest: ./admin.conf
+    dest: {{ playbook_dir }}/admin.conf
     flat: yes
   delegate_to: "{{ groups['core_node'][0] }}"
-  when: inventory_hostname == (groups['k8s_workers'] | difference([core_node_name]) | first)
+  #when: inventory_hostname == (groups['k8s_workers'] | difference([core_node_name]) | first)
 
 - name: Copy admin.conf to worker node
   ansible.builtin.copy:
-    src: ./admin.conf
+    src: {{ playbook_dir }}/admin.conf
     dest: /root/.kube/config
     mode: '0644'
   become: true
