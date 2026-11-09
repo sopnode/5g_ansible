@@ -103,12 +103,12 @@
   shell: slices pos nodes reset "{{ node }}"
   when: should_boot
 
-- name: (POS) Wait for SSH to be available on {{ node }}
-  wait_for:
-    host: "{{ node }}"
-    port: 22
-    timeout: 300
-  when: should_boot
+#- name: (POS) Wait for SSH to be available on {{ node }}
+#  wait_for:
+#    host: "{{ node }}"
+#    port: 22
+#    timeout: 300
+#  when: should_boot
 
 - name: Bootstrap {{ node }} if boot on disk
   shell: slices pos node bootstrap {{ node }}
