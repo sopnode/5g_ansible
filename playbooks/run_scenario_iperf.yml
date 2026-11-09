@@ -92,12 +92,14 @@
         patterns: "iperf_[0-9]*_{{ iperf_timestamp.stdout }}.log"
       register: iperf_files
 
-    # Port of each UE: 5201 + its index in valid_ue_list (ue-to-target_server, set on faraday)
+    # Port of each UE: 5201 + its index in valid_ue_list (ue-to-target_server, set on faraday).
+    # No faraday group (rfsim, no R2Lab UEs): empty map, the logs are named after their port.
     - name: Map iperf ports to UEs
       set_fact:
         ue_by_port: "{{ dict(range(5201, 5201 + _ues | length) | map('string') | zip(_ues)) }}"
       vars:
-        _ues: "{{ hostvars[groups['faraday'][0]].valid_ue_list | default([]) }}"
+        _faraday: "{{ groups['faraday'] | default([]) }}"
+        _ues: "{{ (hostvars[_faraday[0]].valid_ue_list | default([])) if (_faraday | length > 0) else [] }}"
 
     # One iperf3 server per port logs all the tests of its UE: write one file per test,
     # iperf_<ue>_<ul|dl>_<timestamp>.log; a repeated test gets a _2, _3... suffix. Direction from the
