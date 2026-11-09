@@ -41,7 +41,8 @@
       - kubeadm=1.32.9-1.1
       - kubectl=1.32.9-1.1
     state: present
-    update_cache: no
+    allow_downgrade: true
+    update_cache: false
   become: true
   register: k8s_install
   retries: 5
